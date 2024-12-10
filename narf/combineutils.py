@@ -48,38 +48,9 @@ class FitInputData:
             self.systsnoconstraint = f['hsystsnoconstraint'][...]
             self.systgroups = f['hsystgroups'][...]
             self.systgroupidxs = f['hsystgroupidxs'][...]
-            self.chargegroups = f['hchargegroups'][...]
-            self.chargegroupidxs = f['hchargegroupidxs'][...]
-            self.polgroups = f['hpolgroups'][...]
-            self.polgroupidxs = f['hpolgroupidxs'][...]
-            self.helgroups = f['hhelgroups'][...]
-            self.helgroupidxs = f['hhelgroupidxs'][...]
-            self.sumgroups = f['hsumgroups'][...]
-            self.sumgroupsegmentids = f['hsumgroupsegmentids'][...]
-            self.sumgroupidxs = f['hsumgroupidxs'][...]
-            self.chargemetagroups = f['hchargemetagroups'][...]
-            self.chargemetagroupidxs = f['hchargemetagroupidxs'][...]
-            self.ratiometagroups = f['hratiometagroups'][...]
-            self.ratiometagroupidxs = f['hratiometagroupidxs'][...]
-            self.helmetagroups = f['hhelmetagroups'][...]
-            self.helmetagroupidxs = f['hhelmetagroupidxs'][...]
-            self.reggroups = f['hreggroups'][...]
-            self.reggroupidxs = f['hreggroupidxs'][...]
-            self.poly1dreggroups = f['hpoly1dreggroups'][...]
-            self.poly1dreggroupfirstorder = f['hpoly1dreggroupfirstorder'][...]
-            self.poly1dreggrouplastorder = f['hpoly1dreggrouplastorder'][...]
-            self.poly1dreggroupnames = f['hpoly1dreggroupnames'][...]
-            self.poly1dreggroupbincenters = f['hpoly1dreggroupbincenters'][...]
-            self.poly2dreggroups = f['hpoly2dreggroups'][...]
-            self.poly2dreggroupfirstorder = f['hpoly2dreggroupfirstorder'][...]
-            self.poly2dreggrouplastorder = f['hpoly2dreggrouplastorder'][...]
-            self.poly2dreggroupfullorder = f['hpoly2dreggroupfullorder'][...]
-            self.poly2dreggroupnames = f['hpoly2dreggroupnames'][...]
-            self.poly2dreggroupbincenters0 = f['hpoly2dreggroupbincenters0'][...]
-            self.poly2dreggroupbincenters1 = f['hpoly2dreggroupbincenters1'][...]
+
             self.noigroups = f['hnoigroups'][...]
             self.noigroupidxs = f['hnoigroupidxs'][...]
-            self.maskedchans = f['hmaskedchans'][...]
             if "hpseudodatanames" in f.keys():
                 self.pseudodatanames = f['hpseudodatanames'][...].astype(str)
             else:
@@ -89,43 +60,30 @@ class FitInputData:
             hconstraintweights = f['hconstraintweights']
             hdata_obs = f['hdata_obs']
 
-            if 'hdata_cov' in f.keys():
-                hdata_cov = f['hdata_cov']
-                self.data_cov = maketensor(hdata_cov)
+            if 'hdata_cov_inv' in f.keys():
+                hdata_cov_inv = f['hdata_cov_inv']
+                self.data_cov_inv = maketensor(hdata_cov_inv)
             else:
-                self.data_cov = None
+                self.data_cov_inv = None
 
             self.sparse = not 'hnorm' in f
 
             if self.sparse:
                 hnorm_sparse = f['hnorm_sparse']
                 hlogk_sparse = f['hlogk_sparse']
-                self.nbinsfull = hnorm_sparse.attrs['dense_shape'][0]
             else:
                 hnorm = f['hnorm']
                 hlogk = f['hlogk']
-                self.nbinsfull = hnorm.attrs['original_shape'][0]
 
             #infer some metadata from loaded information
             self.dtype = hdata_obs.dtype
             self.nbins = hdata_obs.shape[-1]
-            self.nbinsmasked = self.nbinsfull - self.nbins
             self.nproc = len(self.procs)
             self.nsyst = len(self.systs)
             self.nsystnoprofile = len(self.systsnoprofile)
             self.nsystnoconstraint = len(self.systsnoconstraint)
             self.nsignals = len(self.signals)
             self.nsystgroups = len(self.systgroups)
-            self.nchargegroups = len(self.chargegroups)
-            self.npolgroups = len(self.polgroups)
-            self.nhelgroups = len(self.helgroups)
-            self.nsumgroups = len(self.sumgroups)
-            self.nchargemetagroups = len(self.chargemetagroups)
-            self.nratiometagroups = len(self.ratiometagroups)
-            self.nhelmetagroups = len(self.helmetagroups)
-            self.nreggroups = len(self.reggroups)
-            self.npoly1dreggroups = len(self.poly1dreggroups)
-            self.npoly2dreggroups = len(self.poly2dreggroups)
             self.nnoigroups = len(self.noigroups)
 
             # reference meta data if available
@@ -138,8 +96,6 @@ class FitInputData:
                 self.channel_info = {
                     "ch0":{"axes": [hist.axis.Integer(0, self.nbins, underflow=False, overflow=False, name="obs")]}
                 }
-                if self.nbinsmasked > 0:
-                    self.channel_info["ch1_masked"] = {"axes": [hist.axis.Integer(0, self.nbinsmasked, underflow=False, overflow=False, name="masked")]}
 
             # compute indices for channels
             ibin = 0
@@ -394,18 +350,18 @@ class Fitter:
 
         if self.chisqFit:
             if self.externalCovariance:
-                if self.indata.data_cov is None:
+                if self.indata.data_cov_inv is None:
                     raise RuntimeError("No external covariance found in input data.")
                 # provided covariance
-                self.data_cov = self.indata.data_cov
+                self.data_cov_inv = self.indata.data_cov_inv
             else:
                 # covariance from data stat
-                if any(self.nobs<=0):
+                if tf.math.reduce_any(self.nobs <= 0).numpy():
                     raise RuntimeError("Bins in 'nobs <= 0' encountered, chi^2 fit can not be performed.")
-                self.data_cov = tf.diag(self.nobs)
+                self.data_cov_inv = tf.reciprocal(tf.linalg.diag(self.nobs))
 
         # constraint minima for nuisance parameters
-        self.theta0 = tf.Variable(tf.zeros([self.indata.nsyst],dtype=self.indata.dtype), trainable=False, name="theta0")
+        self.theta0 = tf.Variable(tf.zeros([self.indata.nsyst], dtype=self.indata.dtype), trainable=False, name="theta0")
 
         # global observables for mc stat uncertainty
         self.beta0 = tf.ones_like(self.indata.data_obs)
@@ -440,52 +396,56 @@ class Fitter:
     def frequentistassign(self):
         self.theta0.assign(tf.random.normal(shape=self.theta0.shape, dtype=self.theta0.dtype))
 
-    def pulls_and_constraints(self, cov):
-        systs = list(self.indata.systs.astype(str))
-        axis_systs = hist.axis.StrCategory(systs, name="systs")
+    def parms_hist(self, cov, hist_name="parms"):
+        parms = list(self.parms.astype(str))
+        axis_parms = hist.axis.StrCategory(parms, name="parms")
 
-        pulls = self.x - self.theta0
+        values = self.x.numpy()
+        variances = tf.linalg.diag_part(cov)
 
-        h_pulls = hist.Hist(axis_systs, storage=hist.storage.Double(), name="pulls")
-        h_pulls.values()[...] = memoryview(pulls)
-        h_pulls = narf.ioutils.H5PickleProxy(h_pulls)
+        h = hist.Hist(axis_parms, storage=hist.storage.Weight(), name=hist_name)
+        h.values()[...] = memoryview(values)
+        h.variances()[...] = memoryview(variances)
+        h = narf.ioutils.H5PickleProxy(h)
 
-        constraints = tf.sqrt(tf.linalg.diag_part(cov))
+        return h
 
-        h_constraints = hist.Hist(axis_systs, storage=hist.storage.Double(), name="constraints")
-        h_constraints.values()[...] = memoryview(constraints)
-        h_constraints = narf.ioutils.H5PickleProxy(h_constraints)
+    def cov_hist(self, cov):
+        parms = list(self.parms.astype(str))
+        axis_parms_x = hist.axis.StrCategory(parms, name="parms_x")
+        axis_parms_y = hist.axis.StrCategory(parms, name="parms_y")
 
-        return h_pulls, h_constraints
+        h_cov = hist.Hist(axis_parms_x, axis_parms_y, storage=hist.storage.Double(), name="cov")
+        h_cov.values()[...] = memoryview(cov)
+        h_cov = narf.ioutils.H5PickleProxy(h_cov)
+
+        return h_cov
 
     @tf.function(reduce_retracing=True)
     def _compute_impact_group(self, cov, nstat, idxs):
         cov_reduced = tf.gather(cov, idxs, axis=0)
         cov_reduced = tf.gather(cov_reduced, idxs, axis=1)
-        v = tf.gather(cov[:nstat,:], idxs, axis=1)
-        invC_v = tf.linalg.solve(cov_reduced, tf.transpose(v)) 
-        v_invC_v = tf.reduce_sum(v * tf.transpose(invC_v), axis=1)
-        return tf.reshape(tf.sqrt(v_invC_v), (1,-1))
+        v = tf.gather(cov[:nstat], idxs, axis=1)
+        invC_v = tf.linalg.solve(cov_reduced, tf.transpose(v))
+        v_invC_v = tf.einsum('ij,ji->i', v, invC_v)
+        return tf.sqrt(v_invC_v)
 
     @tf.function
-    def _impacts_systs(self, nstat, cov, hess):
+    def _impacts_parms(self, nstat, cov, hess):
+        #impact for poi at index i in covariance matrix from nuisance with index j is C_ij/sqrt(C_jj) = <deltax deltatheta>/sqrt(<deltatheta^2>)
+        impacts = cov[:nstat]/tf.reshape(tf.sqrt(tf.linalg.diag_part(cov)),[1,-1])
 
-        impacts = cov[:nstat,:]
-
-        impacts_grouped = tf.concat([
-            self._compute_impact_group(cov, nstat, idxs)
-            for idxs in self.indata.systgroupidxs
-        ], axis=1)
+        impacts_grouped = tf.map_fn(
+            lambda idxs: self._compute_impact_group(cov, nstat, idxs), 
+            tf.ragged.constant(self.indata.systgroupidxs, dtype=tf.int32), 
+            fn_output_signature=tf.TensorSpec(shape=(impacts.shape[0],), dtype=tf.float64)
+        )
+        impacts_grouped = tf.transpose(impacts_grouped)
 
         # impact data stat
         hess_stat = hess[:nstat,:nstat]
         identity = tf.eye(nstat, dtype=hess_stat.dtype)
         inv_hess_stat = tf.linalg.solve(hess_stat, identity)  # Solves H * X = I
-        impacts_data_stat = tf.sqrt(tf.linalg.diag_part(inv_hess_stat))
-        impacts_data_stat = tf.reshape(impacts_data_stat, (1, -1))
-
-        impacts = tf.concat([impacts, impacts_data_stat], axis=1)
-        impacts_grouped = tf.concat([impacts_grouped, impacts_data_stat], axis=1)
 
         if self.binByBinStat:
             # impact bin-by-bin stat
@@ -493,46 +453,49 @@ class Fitter:
 
             hess_stat_no_bbb = hess_no_bbb[:nstat,:nstat]
             inv_hess_stat_no_bbb = tf.linalg.solve(hess_stat_no_bbb, identity)
-            impacts_bbb_sq = tf.linalg.diag_part(inv_hess_stat - inv_hess_stat_no_bbb)
-            impacts_bbb = tf.sqrt(tf.maximum(tf.zeros_like(impacts_bbb_sq), impacts_bbb_sq))
-            impacts_bbb = tf.reshape(impacts_bbb, (1, -1))
 
-            impacts = tf.concat([impacts, impacts_bbb], axis=1)
-            impacts_grouped = tf.concat([impacts_grouped, impacts_bbb], axis=1)
+            impacts_data_stat = tf.sqrt(tf.linalg.diag_part(inv_hess_stat_no_bbb))
+            impacts_data_stat = tf.reshape(impacts_data_stat, (-1, 1))
+
+            impacts_bbb_sq = tf.linalg.diag_part(inv_hess_stat - inv_hess_stat_no_bbb)
+            impacts_bbb = tf.sqrt(tf.nn.relu(impacts_bbb_sq)) # max(0,x)
+            impacts_bbb = tf.reshape(impacts_bbb, (-1, 1))
+            impacts_grouped = tf.concat([impacts_grouped, impacts_data_stat, impacts_bbb], axis=1)
+        else:
+            impacts_data_stat = tf.sqrt(tf.linalg.diag_part(inv_hess_stat))
+            impacts_data_stat = tf.reshape(impacts_data_stat, (-1, 1))
+            impacts_grouped = tf.concat([impacts_grouped, impacts_data_stat], axis=1)
 
         return impacts, impacts_grouped
 
-    def impacts_systs(self, cov, hess):
-
+    def impacts_hists(self, cov, hess):
         # store impacts for all POIs and unconstrained nuisances
         nstat = self.npoi + self.indata.nsystnoconstraint
 
-        systs = list(self.indata.systs.astype(str))[:nstat]
+        parms = list(self.parms.astype(str))[:nstat]
 
-        impact_names = list(self.indata.systs.astype(str))
+        impact_names = list(self.parms.astype(str))
         impact_names_grouped = list(self.indata.systgroups.astype(str))
 
-        impacts, impacts_grouped = self._impacts_systs(nstat, cov, hess)
+        impacts, impacts_grouped = self._impacts_parms(nstat, cov, hess)
 
-        impact_names.append("stat")
         impact_names_grouped.append("stat")
 
         if self.binByBinStat:
-            impact_names.append("binByBinStat")
             impact_names_grouped.append("binByBinStat")
 
         # write out histograms
-        axis_systs = hist.axis.StrCategory(systs, name="systs")
-        axis_impacts = hist.axis.StrCategory(impact_names, name="inpacts")
-        axis_impacts_grouped = hist.axis.StrCategory(impact_names_grouped, name="inpacts")
+        axis_parms = hist.axis.StrCategory(parms, name="parms")
+        axis_impacts = hist.axis.StrCategory(impact_names, name="impacts")
+        axis_impacts_grouped = hist.axis.StrCategory(impact_names_grouped, name="impacts")
 
-        h = hist.Hist(axis_systs, axis_impacts, storage=hist.storage.Double(), name="impacts")
+        h = hist.Hist(axis_parms, axis_impacts, storage=hist.storage.Double(), name="impacts")
         h.values()[...] = memoryview(impacts)
         h = narf.ioutils.H5PickleProxy(h)
 
-        h_grouped = hist.Hist(axis_systs, axis_impacts_grouped, storage=hist.storage.Double(), name="impacts_grouped")
+        h_grouped = hist.Hist(axis_parms, axis_impacts_grouped, storage=hist.storage.Double(), name="impacts_grouped")
         h_grouped.values()[...] = memoryview(impacts_grouped)
-        h_grouped = narf.ioutils.H5PickleProxy(h)
+        h_grouped = narf.ioutils.H5PickleProxy(h_grouped)
 
         return h, h_grouped
 
@@ -556,69 +519,68 @@ class Fitter:
         gathered = tf.gather(dxdtheta0, idxs, axis=-1)
         squared = tf.square(gathered)
         summed = tf.reduce_sum(squared, axis=-1)
-        return tf.reshape(tf.sqrt(summed), (1,-1))
+        return tf.sqrt(summed)
 
     @tf.function
-    def _global_impacts_systs(self, cov):
+    def _global_impacts_parms(self, cov):
 
         dxdtheta0, dxdnobs, dxdbeta0 = self._global_impacts(cov)
         
-        impacts_grouped = tf.concat([
-            self._compute_global_impact_group(dxdtheta0, idxs)
-            for idxs in self.indata.systgroupidxs
-        ], axis=1)
+        impacts_grouped = tf.map_fn(
+            lambda idxs: self._compute_global_impact_group(dxdtheta0, idxs), 
+            tf.ragged.constant(self.indata.systgroupidxs, dtype=tf.int32), 
+            fn_output_signature=tf.TensorSpec(shape=(dxdtheta0.shape[0],), dtype=tf.float64)
+        )
+        impacts_grouped = tf.transpose(impacts_grouped)
 
         # global impact data stat
         if self.externalCovariance:
-            data_stat = dxdnobs @ tf.matmul(self.data_cov, dxdnobs, transpose_b = True)
-            data_stat = tf.sqrt(data_stat)
+            data_cov = tf.linalg.inv(self.data_cov_inv)
+            data_stat = tf.einsum('ij,jk,ik->i', dxdnobs, data_cov, dxdnobs)
         else:
-            data_stat = tf.sqrt(tf.reduce_sum(tf.square(dxdnobs) * self.nobs, axis=-1))
-        impacts_data_stat = tf.reshape(data_stat, (1, -1))
-        impacts = tf.concat([dxdtheta0, impacts_data_stat], axis=1)
+            data_stat = tf.reduce_sum(tf.square(dxdnobs) * self.nobs, axis=-1)
+        data_stat = tf.sqrt(data_stat)
+        impacts_data_stat = tf.reshape(data_stat, (-1, 1))
         impacts_grouped = tf.concat([impacts_grouped, impacts_data_stat], axis=1)
 
         if self.binByBinStat:
             # global impact bin-by-bin stat
             impacts_bbb = tf.sqrt(tf.reduce_sum(tf.square(dxdbeta0) * tf.math.reciprocal(self.indata.kstat), axis=-1))
-            impacts_bbb = tf.reshape(impacts_bbb, (1, -1))
-            impacts = tf.concat([impacts, impacts_bbb], axis=1)
+            impacts_bbb = tf.reshape(impacts_bbb, (-1, 1))
             impacts_grouped = tf.concat([impacts_grouped, impacts_bbb], axis=1)
 
-        return impacts, impacts_grouped
+        return dxdtheta0, impacts_grouped
 
-    def global_impacts_systs(self, cov):
+    def global_impacts_hists(self, cov):
         # store impacts for all POIs and unconstrained nuisances
         nstat = self.npoi + self.indata.nsystnoconstraint
 
-        systs = list(self.indata.systs.astype(str))[:nstat]
+        parms = list(self.parms.astype(str))[:nstat]
 
-        impacts, impacts_grouped = self._global_impacts_systs(cov[:nstat,:])
+        impacts, impacts_grouped = self._global_impacts_parms(cov[:nstat])
 
         impact_names = list(self.indata.systs.astype(str))
         impact_names_grouped = list(self.indata.systgroups.astype(str))
 
         # global impact data stat
-        impact_names.append("stat")
         impact_names_grouped.append("stat")
 
         if self.binByBinStat:
             # global impact bin-by-bin stat
-            impact_names.append("binByBinStat")
             impact_names_grouped.append("binByBinStat")
 
         # write out histograms
-        axis_systs = hist.axis.StrCategory(systs, name="systs")
-        axis_impacts = hist.axis.StrCategory(impact_names, name="inpacts")
-        axis_impacts_grouped = hist.axis.StrCategory(impact_names_grouped, name="inpacts")
+        axis_parms = hist.axis.StrCategory(parms, name="parms")
+        axis_impacts = hist.axis.StrCategory(impact_names, name="impacts")
+        axis_impacts_grouped = hist.axis.StrCategory(impact_names_grouped, name="impacts")
 
-        h = hist.Hist(axis_systs, axis_impacts, storage=hist.storage.Double(), name="global_impacts")
+        h = hist.Hist(axis_parms, axis_impacts, storage=hist.storage.Double(), name="global_impacts")
         h.values()[...] = memoryview(impacts)
         h = narf.ioutils.H5PickleProxy(h)
 
-        h_grouped = hist.Hist(axis_systs, axis_impacts_grouped, storage=hist.storage.Double(), name="global_impacts_grouped")
+        h_grouped = hist.Hist(axis_parms, axis_impacts_grouped, storage=hist.storage.Double(), name="global_impacts_grouped")
         h_grouped.values()[...] = memoryview(impacts_grouped)
-        h_grouped = narf.ioutils.H5PickleProxy(h)
+        h_grouped = narf.ioutils.H5PickleProxy(h_grouped)
 
         return h, h_grouped
 
@@ -795,9 +757,9 @@ class Fitter:
             #logktheta = theta*logk
             #logsnorm = tf.reduce_sum(logktheta, axis=0)
 
-            mlogk = tf.reshape(self.indata.logk,[self.indata.nbinsfull*self.indata.nproc,2*self.indata.nsyst])
+            mlogk = tf.reshape(self.indata.logk,[self.indata.nbins*self.indata.nproc,2*self.indata.nsyst])
             logsnorm = tf.matmul(mlogk,mthetaalpha)
-            logsnorm = tf.reshape(logsnorm,[self.indata.nbinsfull,self.indata.nproc])
+            logsnorm = tf.reshape(logsnorm,[self.indata.nbins,self.indata.nproc])
 
             snorm = tf.exp(logsnorm)
 
@@ -811,10 +773,6 @@ class Fitter:
             snormnorm = snorm*self.indata.norm
             nexpfullcentral = tf.matmul(snormnorm, mrnorm)
             nexpfullcentral = tf.squeeze(nexpfullcentral,-1)
-
-            snormnormmasked = snormnorm[self.indata.nbins:]
-
-            normmasked = self.indata.norm[self.indata.nbins:]
 
             # if options.saveHists:
             normfullcentral = ernorm*snormnorm
@@ -890,33 +848,31 @@ class Fitter:
         hists = {}
 
         for channel, info in self.indata.channel_info.items():
-            if "masked" not in channel:
+            axes = info["axes"]
 
-                axes = info["axes"]
+            start = info["start"]
+            stop = info["stop"]
 
-                start = info["start"]
-                stop = info["stop"]
+            hist_axes = axes.copy()
 
-                hist_axes = axes.copy()
+            if not inclusive:
+                hist_axes.append(self.indata.axis_procs)
 
-                if not inclusive:
-                    hist_axes.append(self.indata.axis_procs)
+            if compute_variations:
+                axis_vars = hist.axis.StrCategory(self.parms, name="vars")
+                axis_downUpVar = hist.axis.Regular(2, -2., 2., underflow=False, overflow=False, name = "downUpVar")
 
-                if compute_variations:
-                    axis_vars = hist.axis.StrCategory(self.parms, name="vars")
-                    axis_downUpVar = hist.axis.Regular(2, -2., 2., underflow=False, overflow=False, name = "downUpVar")
+                hist_axes.extend([axis_vars, axis_downUpVar])
 
-                    hist_axes.extend([axis_vars, axis_downUpVar])
+            shape = tuple([len(a) for a in hist_axes])
 
-                shape = tuple([len(a) for a in hist_axes])
-
-                h = hist.Hist(*hist_axes, storage=hist.storage.Weight(), name=f"name_{channel}", label=label)
-                h.values()[...] = memoryview(tf.reshape(exp[start:stop], shape))
-                if compute_variance:
-                    h.variances()[...] = memoryview(tf.reshape(var[start:stop], shape))
-                else:
-                    h.variances()[...] = 0.
-                hists[channel] = narf.ioutils.H5PickleProxy(h)
+            h = hist.Hist(*hist_axes, storage=hist.storage.Weight(), name=f"name_{channel}", label=label)
+            h.values()[...] = memoryview(tf.reshape(exp[start:stop], shape))
+            if compute_variance:
+                h.variances()[...] = memoryview(tf.reshape(var[start:stop], shape))
+            else:
+                h.variances()[...] = 0.
+            hists[channel] = narf.ioutils.H5PickleProxy(h)
 
         if compute_chi2:
             def fun_residual():
@@ -1021,24 +977,22 @@ class Fitter:
         hists_nobs = {}
 
         for channel, info in self.indata.channel_info.items():
-            if "masked" not in channel:
+            axes = info["axes"]
 
-                axes = info["axes"]
+            start = info["start"]
+            stop = info["stop"]
 
-                start = info["start"]
-                stop = info["stop"]
+            shape = tuple([len(a) for a in axes])
 
-                shape = tuple([len(a) for a in axes])
+            hist_data_obs = hist.Hist(*axes, storage=hist.storage.Weight(), name = "data_obs", label="observed number of events in data")
+            hist_data_obs.values()[...] = memoryview(tf.reshape(self.indata.data_obs[start:stop], shape))
+            hist_data_obs.variances()[...] = hist_data_obs.values()
+            hists_data_obs[channel] = narf.ioutils.H5PickleProxy(hist_data_obs)
 
-                hist_data_obs = hist.Hist(*axes, storage=hist.storage.Weight(), name = "data_obs", label="observed number of events in data")
-                hist_data_obs.values()[...] = memoryview(tf.reshape(self.indata.data_obs[start:stop], shape))
-                hist_data_obs.variances()[...] = hist_data_obs.values()
-                hists_data_obs[channel] = narf.ioutils.H5PickleProxy(hist_data_obs)
-
-                hist_nobs = hist.Hist(*axes, storage=hist.storage.Weight(), name = "nobs", label = "observed number of events for fit")
-                hist_nobs.values()[...] = memoryview(tf.reshape(self.nobs.value()[start:stop], shape))
-                hist_nobs.variances()[...] = hist_nobs.values()
-                hists_nobs[channel] = narf.ioutils.H5PickleProxy(hist_nobs)
+            hist_nobs = hist.Hist(*axes, storage=hist.storage.Weight(), name = "nobs", label = "observed number of events for fit")
+            hist_nobs.values()[...] = memoryview(tf.reshape(self.nobs.value()[start:stop], shape))
+            hist_nobs.variances()[...] = hist_nobs.values()
+            hists_nobs[channel] = narf.ioutils.H5PickleProxy(hist_nobs)
 
         return hists_data_obs, hists_nobs
 
@@ -1081,8 +1035,7 @@ class Fitter:
         if self.chisqFit:
             residual = tf.reshape(self.nobs - nexp,[-1,1]) #chi2 residual
             # Solve the system without inverting
-            solved = tf.linalg.solve(self.data_cov, residual)
-            ln = lnfull = 0.5 * tf.reduce_sum(residual * solved)
+            ln = lnfull = 0.5 * tf.reduce_sum(tf.matmul(residual, tf.matmul(self.data_cov_inv, residual), transpose_a=True))
         else:
             nobsnull = tf.equal(self.nobs,tf.zeros_like(self.nobs))
 

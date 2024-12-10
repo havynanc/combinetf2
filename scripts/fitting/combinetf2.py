@@ -40,14 +40,10 @@ if args.toys == -1:
 
 cov_prefit = fitter.prefit_covariance()
 
-results = {}
-
-results["projections"] = []
-for projection in args.project:
-    channel = projection[0]
-    axes = projection[1:]
-
-    results["projections"].append({"channel" : channel, "axes" : axes})
+results = {
+    "parms_prefit": fitter.parms_hist(cov_prefit, hist_name="prefit"),
+    "projections": [{"channel": projection[0], "axes": projection[1:]} for projection in args.project],
+}
 
 if args.saveHists:
 
@@ -127,10 +123,19 @@ cov = tf.linalg.inv(hess)
 if args.externalPostfit is not None:
     # load results from external fit and set postfit value and covariance elements for common parameters
     with h5py.File(args.externalPostfit, "r") as fext:
-        parms_ext = fext["parms"][...]
+        if "x" in fext.keys():
+            # fitresult from combinetf 1
+            x_ext = fext["x"][...]
+            parms_ext = fext["parms"][...].astype(str)
+            cov_ext = fext["cov"][...]
+        else:
+            # fitresult from combinetf 2
+            h5results_ext = narf.ioutils.pickle_load_h5py(fext["results"])
+            h_parms_ext = h5results_ext["parms"].get()
 
-        x_ext = fext["x"][...]
-        cov_ext = fext["cov"][...]
+            x_ext = h_parms_ext.values()
+            parms_ext = np.array(h_parms_ext.axes["parms"])
+            cov_ext = h5results_ext["cov"].get().values()
 
     # FIXME do this without explicit loops and ideally in tensorflow directly
 
@@ -139,7 +144,8 @@ if args.externalPostfit is not None:
 
     parmmap = {}
 
-    for iparm, parm in enumerate(fitter.parms):
+    parms = fitter.parms.astype(str)
+    for iparm, parm in enumerate(parms):
         parmmap[parm] = iparm
 
     for iparm_ext, parmi_ext in enumerate(parms_ext):
@@ -175,22 +181,19 @@ results.update({
     "satnllvalfull" : satnllvalfull,
     "ndfsat" : ndfsat,
     "postfit_profile" : postfit_profile,
+    "cov": fitter.cov_hist(cov),
+    "parms": fitter.parms_hist(cov),
 })
 
 if args.doImpacts:
 
-    h_pulls, h_constraints = fitter.pulls_and_constraints(cov)
-    results["pulls"] = h_pulls
-    results["constraints"] = h_constraints
-
-    h, h_grouped = fitter.impacts_systs(cov, hess)
+    h, h_grouped = fitter.impacts_hists(cov, hess)
     results["impacts"] = h
     results["impacts_grouped"] = h_grouped
 
     if args.globalImpacts:
 
-        h, h_grouped = fitter.global_impacts_systs(cov)
-
+        h, h_grouped = fitter.global_impacts_hists(cov)
         results["global_impacts"] = h
         results["global_impacts_grouped"] = h_grouped
 
