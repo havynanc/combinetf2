@@ -2,11 +2,10 @@ import numpy as np
 import hist
 import h5py
 import tensorflow as tf
-import narf.combineutils
 import argparse
 import narf.ioutils
 
-import pdb
+from combinetf2 import fitinputdata, workspace, fitter
 
 
 parser =  argparse.ArgumentParser()
@@ -15,6 +14,7 @@ parser.add_argument("filename", help="filename of the main hdf5 input")
 parser.add_argument("-o","--output", default="fitresults",  help="output file name")
 parser.add_argument("--outputFormat", default="narf", choices=["narf", "h5py"],  help="output file name")
 parser.add_argument("-t","--toys", default=-1, type=int, help="run a given number of toys, 0 fits the data, and -1 fits the asimov toy (the default)")
+# parser.add_argument("-n","--nThreads", default=-1, type=int, help="Specify the number of threads when running on CPU")
 parser.add_argument("--expectSignal", default=1., type=float, help="rate multiplier for signal expectation (used for fit starting values and for toys)")
 parser.add_argument("--POIMode", default="mu", help="mode for POI's")
 parser.add_argument("--allowNegativePOI", default=False, action='store_true', help="allow signal strengths to be negative (otherwise constrained to be non-negative)")
@@ -35,9 +35,12 @@ parser.add_argument("--globalImpacts", default = False, action='store_true', hel
 
 args = parser.parse_args()
 
-indata = narf.combineutils.FitInputData(args.filename, args.pseudoData)
-workspace = narf.combineutils.Workspace(args.outputFormat)
-fitter = narf.combineutils.Fitter(indata, args, workspace)
+# print("Inter-op parallelism:", tf.config.threading.get_inter_op_parallelism_threads()) # Number of thread pools
+# print("Intra-op parallelism:", tf.config.threading.get_intra_op_parallelism_threads()) # Threads per pool
+
+indata = fitinputdata.FitInputData(args.filename, args.pseudoData)
+ws = workspace.Workspace(args.outputFormat)
+fitter = fitter.Fitter(indata, ws, args)
 
 if args.toys == -1:
     fitter.nobs.assign(fitter.expected_events(profile=False))
