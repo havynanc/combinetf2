@@ -10,7 +10,9 @@ import tensorflow as tf
 def hist_boost(name, axes, values, variances=None, label=None):
     if not isinstance(axes, (list, tuple, np.ndarray)):
         axes = [axes]
-    storage_type = hist.storage.Weight() if variances is not None else hist.storage.Double()
+    storage_type = (
+        hist.storage.Weight() if variances is not None else hist.storage.Double()
+    )
     h = hist.Hist(*axes, storage=storage_type, name=name, label=label)
     h.values()[...] = memoryview(tf.reshape(values, h.shape))
     if variances is not None:
@@ -35,14 +37,16 @@ class Workspace:
             self.pack = narf.ioutils.H5PickleProxy
             self.unpack = load_H5PickleProxy
             self.dump = narf.ioutils.pickle_dump_h5py
-            self.extension="hdf5"
+            self.extension = "hdf5"
         elif output_format == "h5py":
             self.hist = hist_boost
             self.pack = lambda x: x
             self.unpack = lambda x: x
             self.dump = lambda name, obj, fout: fout.create_dataset(name, obj)
-            self.extension="h5"
-            raise NotImplementedError(f"Writing to vanilla h5py is under development and not yet supported")
+            self.extension = "h5"
+            raise NotImplementedError(
+                f"Writing to vanilla h5py is under development and not yet supported"
+            )
         else:
             raise ValueError(f"Unknown output format {output_format}")
 
@@ -57,7 +61,7 @@ class Workspace:
                 print(f"Creating output folder {outfolder}")
                 os.makedirs(outfolder)
 
-        if '.' not in output and output.split('.')[-1]:
+        if "." not in output and output.split(".")[-1]:
             output += f".{self.extension}"
 
         print(f"Write output file {output}")
@@ -65,4 +69,3 @@ class Workspace:
         with h5py.File(output, "w") as fout:
             self.dump("results", results, fout)
             self.dump("meta", meta, fout)
-

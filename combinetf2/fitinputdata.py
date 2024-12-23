@@ -1,4 +1,3 @@
-
 import h5py
 import hist
 import numpy as np
@@ -7,13 +6,13 @@ import tensorflow_io as tfio
 
 
 def maketensor(h5dset):
-    if 'original_shape' in h5dset.attrs:
-        shape = h5dset.attrs['original_shape']
+    if "original_shape" in h5dset.attrs:
+        shape = h5dset.attrs["original_shape"]
     else:
         shape = h5dset.shape
 
     if h5dset.size == 0:
-        return tf.zeros(shape,h5dset.dtype)
+        return tf.zeros(shape, h5dset.dtype)
 
     filename = h5dset.file.filename
     dsetpath = h5dset.name
@@ -25,54 +24,56 @@ def maketensor(h5dset):
 
 
 def makesparsetensor(h5group):
-    indices = maketensor(h5group['indices'])
-    values = maketensor(h5group['values'])
-    dense_shape = h5group.attrs['dense_shape']
+    indices = maketensor(h5group["indices"])
+    values = maketensor(h5group["values"])
+    dense_shape = h5group.attrs["dense_shape"]
 
     return tf.sparse.SparseTensor(indices, values, dense_shape)
 
 
 class FitInputData:
     def __init__(self, filename, pseudodata=None, normalize=False):
-        with h5py.File(filename, mode='r') as f:
+        with h5py.File(filename, mode="r") as f:
 
-            #load text arrays from file
-            self.procs = f['hprocs'][...]
-            self.signals = f['hsignals'][...]
-            self.systs = f['hsysts'][...]
-            self.systsnoprofile = f['hsystsnoprofile'][...]
-            self.systsnoconstraint = f['hsystsnoconstraint'][...]
-            self.systgroups = f['hsystgroups'][...]
-            self.systgroupidxs = f['hsystgroupidxs'][...]
+            # load text arrays from file
+            self.procs = f["hprocs"][...]
+            self.signals = f["hsignals"][...]
+            self.systs = f["hsysts"][...]
+            self.systsnoprofile = f["hsystsnoprofile"][...]
+            self.systsnoconstraint = f["hsystsnoconstraint"][...]
+            self.systgroups = f["hsystgroups"][...]
+            self.systgroupidxs = f["hsystgroupidxs"][...]
 
-            self.noigroups = f['hnoigroups'][...]
-            self.noigroupidxs = f['hnoigroupidxs'][...]
+            self.noigroups = f["hnoigroups"][...]
+            self.noigroupidxs = f["hnoigroupidxs"][...]
             if "hpseudodatanames" in f.keys():
-                self.pseudodatanames = f['hpseudodatanames'][...].astype(str)
+                self.pseudodatanames = f["hpseudodatanames"][...].astype(str)
             else:
                 self.pseudodatanames = []
 
-            #load arrays from file
-            hconstraintweights = f['hconstraintweights']
-            hdata_obs = f['hdata_obs']
+            # load arrays from file
+            hconstraintweights = f["hconstraintweights"]
+            hdata_obs = f["hdata_obs"]
 
-            if 'hdata_cov_inv' in f.keys():
-                hdata_cov_inv = f['hdata_cov_inv']
+            if "hdata_cov_inv" in f.keys():
+                hdata_cov_inv = f["hdata_cov_inv"]
                 self.data_cov_inv = maketensor(hdata_cov_inv)
             else:
                 self.data_cov_inv = None
 
-            self.sparse = not 'hnorm' in f
+            self.sparse = not "hnorm" in f
 
             if self.sparse:
-                print("WARNING: The sparse tensor implementation is experimental and probably slower than with a dense tensor!")
-                hnorm_sparse = f['hnorm_sparse']
-                hlogk_sparse = f['hlogk_sparse']
+                print(
+                    "WARNING: The sparse tensor implementation is experimental and probably slower than with a dense tensor!"
+                )
+                hnorm_sparse = f["hnorm_sparse"]
+                hlogk_sparse = f["hlogk_sparse"]
             else:
-                hnorm = f['hnorm']
-                hlogk = f['hlogk']
+                hnorm = f["hnorm"]
+                hlogk = f["hlogk"]
 
-            #infer some metadata from loaded information
+            # infer some metadata from loaded information
             self.dtype = hdata_obs.dtype
             self.nbins = hdata_obs.shape[-1]
             self.nproc = len(self.procs)
@@ -87,11 +88,22 @@ class FitInputData:
             self.metadata = {}
             if "meta" in f.keys():
                 from narf.ioutils import pickle_load_h5py
+
                 self.metadata = pickle_load_h5py(f["meta"])
                 self.channel_info = self.metadata["channel_info"]
             else:
                 self.channel_info = {
-                    "ch0":{"axes": [hist.axis.Integer(0, self.nbins, underflow=False, overflow=False, name="obs")]}
+                    "ch0": {
+                        "axes": [
+                            hist.axis.Integer(
+                                0,
+                                self.nbins,
+                                underflow=False,
+                                overflow=False,
+                                name="obs",
+                            )
+                        ]
+                    }
                 }
 
             # compute indices for channels
@@ -112,29 +124,32 @@ class FitInputData:
             for channel, info in self.channel_info.items():
                 print(channel, info)
 
-            self.axis_procs = hist.axis.StrCategory(self.procs, name="processes")                
+            self.axis_procs = hist.axis.StrCategory(self.procs, name="processes")
 
-            #build tensorflow graph for likelihood calculation
+            # build tensorflow graph for likelihood calculation
 
-            #start by creating tensors which read in the hdf5 arrays (optimized for memory consumption)
+            # start by creating tensors which read in the hdf5 arrays (optimized for memory consumption)
             self.constraintweights = maketensor(hconstraintweights)
 
-            #load data/pseudodata
+            # load data/pseudodata
             if pseudodata is not None:
                 if pseudodata in self.pseudodatanames:
                     pseudodata_idx = np.where(self.pseudodatanames == pseudodata)[0][0]
                 else:
-                    raise Exception("Pseudodata %s not found, available pseudodata sets are %s" % (pseudodata, self.pseudodatanames))
+                    raise Exception(
+                        "Pseudodata %s not found, available pseudodata sets are %s"
+                        % (pseudodata, self.pseudodatanames)
+                    )
                 print("Run pseudodata fit for index %i: " % (pseudodata_idx))
                 print(self.pseudodatanames[pseudodata_idx])
-                hdata_obs = f['hpseudodata']
+                hdata_obs = f["hpseudodata"]
 
                 data_obs = maketensor(hdata_obs)
                 self.data_obs = data_obs[:, pseudodata_idx]
             else:
                 self.data_obs = maketensor(hdata_obs)
 
-            hkstat = f['hkstat']
+            hkstat = f["hkstat"]
             self.kstat = maketensor(hkstat)
 
             if self.sparse:
@@ -157,11 +172,15 @@ class FitInputData:
                 logkhalfdiff = self.logk[..., 1, :]
 
                 logkdown = logkavg - logkhalfdiff
-                logdown_sum = tf.math.log(tf.reduce_sum(tf.exp(-logkdown) * self.norm[..., None], axis=(0,1)))[None, None, ...]
+                logdown_sum = tf.math.log(
+                    tf.reduce_sum(tf.exp(-logkdown) * self.norm[..., None], axis=(0, 1))
+                )[None, None, ...]
                 logkdown = logkdown + logdown_sum - lognorm_sum
 
                 logkup = logkavg + logkhalfdiff
-                logup_sum = tf.math.log(tf.reduce_sum(tf.exp(logkup) * self.norm[..., None], axis=(0,1)))[None, None, ...]
+                logup_sum = tf.math.log(
+                    tf.reduce_sum(tf.exp(logkup) * self.norm[..., None], axis=(0, 1))
+                )[None, None, ...]
                 logkup = logkup - logup_sum + lognorm_sum
 
                 # Compute new logkavg and logkhalfdiff
@@ -174,13 +193,13 @@ class FitInputData:
                 # Finally, set self.logk to the new computed logk_array
                 self.logk = logk_array
                 self.norm = self.norm * (data_sum / norm_sum)[None, None, ...]
-    
+
     def getImpactsAxes(self):
         impact_names = list(self.signals.astype(str)) + list(self.systs.astype(str))
         return hist.axis.StrCategory(impact_names, name="impacts")
 
     def getGlobalImpactsAxes(self):
-        impact_names = list(self.systs.astype(str)[self.nsystnoconstraint:])
+        impact_names = list(self.systs.astype(str)[self.nsystnoconstraint :])
         return hist.axis.StrCategory(impact_names, name="impacts")
 
     def getImpactsAxesGrouped(self, bin_by_bin_stat=False):
@@ -191,4 +210,3 @@ class FitInputData:
             # impact bin-by-bin stat
             impact_names_grouped.append("binByBinStat")
         return hist.axis.StrCategory(impact_names_grouped, name="impacts")
-
