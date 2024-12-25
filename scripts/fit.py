@@ -5,7 +5,7 @@ import narf.ioutils
 import numpy as np
 import tensorflow as tf
 
-from combinetf2 import fitinputdata, fitter, workspace
+from combinetf2 import fitter, inputdata, workspace
 
 parser = argparse.ArgumentParser()
 
@@ -21,7 +21,6 @@ parser.add_argument(
     type=int,
     help="run a given number of toys, 0 fits the data, and -1 fits the asimov toy (the default)",
 )
-# parser.add_argument("-n","--nThreads", default=-1, type=int, help="Specify the number of threads when running on CPU")
 parser.add_argument(
     "--expectSignal",
     default=1.0,
@@ -114,13 +113,22 @@ parser.add_argument(
     action="store_true",
     help="compute impacts in terms of variations of global observables (as opposed to nuisance parameters directly)",
 )
+parser.add_argument(
+    "--chisqFit",
+    default=False,
+    action="store_true",
+    help="Perform chi-square fit instead of likelihood fit",
+)
+parser.add_argument(
+    "--externalCovariance",
+    default=False,
+    action="store_true",
+    help="Using an external covariance matrix for the observations in the chi-square fit",
+)
 
 args = parser.parse_args()
 
-# print("Inter-op parallelism:", tf.config.threading.get_inter_op_parallelism_threads()) # Number of thread pools
-# print("Intra-op parallelism:", tf.config.threading.get_intra_op_parallelism_threads()) # Threads per pool
-
-indata = fitinputdata.FitInputData(args.filename, args.pseudoData)
+indata = inputdata.FitInputData(args.filename, args.pseudoData)
 ws = workspace.Workspace(args.outputFormat)
 fitter = fitter.Fitter(indata, ws, args)
 

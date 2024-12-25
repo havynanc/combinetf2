@@ -14,6 +14,18 @@ class Fitter:
         if self.binByBinStat:
             self.systgroupsfull.append("binByBinStat")
 
+        if options.externalCovariance and not options.chisqFit:
+            raise Exception(
+                'option "--externalCovariance" only works with "--chisqFit"'
+            )
+        if options.externalCovariance and options.binByBinStat:
+            raise Exception(
+                'option "--binByBinStat" currently not supported for options "--externalCovariance"'
+            )
+
+        self.chisqFit = options.chisqFit
+        self.externalCovariance = options.externalCovariance
+
         self.nsystgroupsfull = len(self.systgroupsfull)
 
         self.pois = []
@@ -64,7 +76,7 @@ class Fitter:
                     raise RuntimeError(
                         "Bins in 'nobs <= 0' encountered, chi^2 fit can not be performed."
                     )
-                self.data_cov_inv = tf.reciprocal(tf.linalg.diag(self.nobs))
+                self.data_cov_inv = tf.linalg.diag(tf.math.reciprocal(self.nobs))
 
         # constraint minima for nuisance parameters
         self.theta0 = tf.Variable(
@@ -141,9 +153,9 @@ class Fitter:
 
     @tf.function(reduce_retracing=True)
     def _compute_impact_group(self, cov, nstat, idxs):
-        cov_reduced = tf.gather(cov, idxs, axis=0)
-        cov_reduced = tf.gather(cov_reduced, idxs, axis=1)
-        v = tf.gather(cov[:nstat], idxs, axis=1)
+        cov_reduced = tf.gather(cov, idxs, axis=1)
+        v = cov_reduced[:nstat]
+        cov_reduced = tf.gather(cov_reduced, idxs, axis=0)
         invC_v = tf.linalg.solve(cov_reduced, tf.transpose(v))
         v_invC_v = tf.einsum("ij,ji->i", v, invC_v)
         return tf.sqrt(v_invC_v)
@@ -234,10 +246,10 @@ class Fitter:
     @tf.function(reduce_retracing=True)
     def _compute_global_impact_group(self, d_squared, idxs):
         gathered = tf.gather(d_squared, idxs, axis=-1)
-        d_squared_summed = tf.reduce_sum(d_squared, axis=-1)
+        d_squared_summed = tf.reduce_sum(gathered, axis=-1)
         return tf.sqrt(d_squared_summed)
 
-    @tf.function
+    # @tf.function
     def _global_impacts_parms(self, cov):
 
         dxdtheta0, dxdnobs, dxdbeta0 = self._global_impacts(cov)
@@ -1064,21 +1076,21 @@ class Fitter:
         else:
             nobsnull = tf.equal(self.nobs, tf.zeros_like(self.nobs))
 
-        nexpsafe = tf.where(nobsnull, tf.ones_like(self.nobs), nexp)
-        lognexp = tf.math.log(nexpsafe)
+            nexpsafe = tf.where(nobsnull, tf.ones_like(self.nobs), nexp)
+            lognexp = tf.math.log(nexpsafe)
 
-        nexpnomsafe = tf.where(nobsnull, tf.ones_like(self.nobs), self.nexpnom)
-        lognexpnom = tf.math.log(nexpnomsafe)
+            nexpnomsafe = tf.where(nobsnull, tf.ones_like(self.nobs), self.nexpnom)
+            lognexpnom = tf.math.log(nexpnomsafe)
 
-        # final likelihood computation
+            # final likelihood computation
 
-        # poisson term
-        lnfull = tf.reduce_sum(-self.nobs * lognexp + nexp, axis=-1)
+            # poisson term
+            lnfull = tf.reduce_sum(-self.nobs * lognexp + nexp, axis=-1)
 
-        # poisson term with offset to improve numerical precision
-        ln = tf.reduce_sum(
-            -self.nobs * (lognexp - lognexpnom) + nexp - self.nexpnom, axis=-1
-        )
+            # poisson term with offset to improve numerical precision
+            ln = tf.reduce_sum(
+                -self.nobs * (lognexp - lognexpnom) + nexp - self.nexpnom, axis=-1
+            )
 
         # constraints
         lc = tf.reduce_sum(
