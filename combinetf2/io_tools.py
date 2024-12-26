@@ -58,26 +58,25 @@ def read_impacts_poi(
             labels = np.append(labels, "Total")
 
     if pulls:
-        pulls, constraints, pulls_prefit = get_pulls_and_constraints(fitresult)
+        _, pulls, constraints = get_pulls_and_constraints(fitresult)
         if sort:
             pulls = pulls[order]
             constraints = constraints[order]
-            pulls_prefit = pulls_prefit[order]
 
-        return pulls, constraints, pulls_prefit, impacts, labels
+        return pulls, constraints, impacts, labels
 
     return impacts, labels
 
 
-def get_pulls_and_constraints(fitresult):
-    h_parms = fitresult["parms"].get()
-    h_parms_prefit = fitresult["parms_prefit"].get()
+def get_pulls_and_constraints(fitresult, prefit=False):
+    hist_name = "parms_prefit" if prefit else "parms"
+    h_parms = fitresult[hist_name].get()
 
+    labels = np.array(h_parms.axes["parms"])
     pulls = h_parms.values()
     constraints = np.sqrt(h_parms.variances())
-    pulls_prefit = np.zeros_like(pulls, dtype=float)
 
-    return pulls, constraints, pulls_prefit
+    return labels, pulls, constraints
 
 
 def get_theoryfit_data(fitresult):

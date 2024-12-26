@@ -12,6 +12,13 @@ parser.add_argument(
     action="store_true",
     help="Make sparse tensor",
 )
+parser.add_argument(
+    "--symmetrizeAll",
+    default=False,
+    action="store_true",
+    help="Make fully symmetric tensor",
+)
+
 args = parser.parse_args()
 
 # Make histograms
@@ -60,14 +67,22 @@ h2_data.fill(a, b)
 x, a, b = get_sig()
 h1_sig.fill(x)
 h2_sig.fill(a, b)
-# scale down signal by 50%
-h1_sig.values()[...] = h1_sig.values() * 0.5
-h2_sig.values()[...] = h2_sig.values() * 0.5
 
 x, a, b = get_bkg()
 h1_bkg.fill(x)
 h2_bkg.fill(a, b)
-# scale up background by 5%
+
+# pseudodata as exact composition of signal and background
+h1_pseudo = h1_sig.copy()
+h2_pseudo = h2_sig.copy()
+h1_pseudo.values()[...] = h1_pseudo.values() + h1_bkg.values()[...]
+h2_pseudo.values()[...] = h2_pseudo.values() + h2_bkg.values()[...]
+
+# scale signal down signal by 50%
+h1_sig.values()[...] = h1_sig.values() * 0.5
+h2_sig.values()[...] = h2_sig.values() * 0.5
+
+# scale bkg up background by 5%
 h1_bkg.values()[...] = h1_bkg.values() * 1.05
 h2_bkg.values()[...] = h2_bkg.values() * 1.05
 
@@ -76,12 +91,17 @@ variances_flat = np.concatenate(
     [h1_data.values().flatten(), h2_data.values().flatten()]
 )
 cov = np.diag(variances_flat)
+
+# add fully correlated contribution
+variances_bkg = np.concatenate([h1_bkg.values().flatten(), h2_bkg.values().flatten()])
+cov_bkg = np.diag(variances_bkg * 0.05)
+
 # Add correlations to off-diagonal elements
 for i in range(len(variances_flat)):
     for j in range(i + 1, len(variances_flat)):
         # Compute the covariance using the specified correlation
-        correlation = np.random.uniform(-0.25, 0.25)  # random correlation
-        covariance = correlation * np.sqrt(cov[i, i] * cov[j, j])
+        correlation = 1.0  # np.random.uniform(-0.25, 0.25)  # random correlation
+        covariance = correlation * np.sqrt(cov_bkg[i, i] * cov_bkg[j, j])
         cov[i, j] = covariance
         cov[j, i] = covariance
 
@@ -94,6 +114,9 @@ writer = tensorwriter.TensorWriter(sparse=args.sparse)
 
 writer.add_data(h1_data, "ch0")
 writer.add_data(h2_data, "ch1")
+
+writer.add_pseudodata(h1_pseudo, "original", "ch0")
+writer.add_pseudodata(h2_pseudo, "original", "ch1")
 
 writer.add_data_covariance(cov)
 
@@ -141,6 +164,17 @@ writer.add_systematic(
     "ch0",
     groups=["slopes", "slopes_signal"],
     symmetrize="average",
+    kfactor=1.2,
+)
+
+writer.add_systematic(
+    [h1_sig_syst1_up, h1_sig_syst1_dn],
+    "slope_signal",
+    "signal",
+    "ch0",
+    symmetrize="average",
+    constrained=False,
+    noi=True,
 )
 
 h1_sig_syst2_up = h1_sig.copy()
@@ -187,6 +221,16 @@ writer.add_systematic(
     symmetrize="conservative",
 )
 
+writer.add_systematic(
+    [h2_sig_syst1_up, h2_sig_syst1_dn],
+    "slope_signal",
+    "signal",
+    "ch1",
+    symmetrize="average",
+    constrained=False,
+    noi=True,
+)
+
 h2_sig_syst2_up = h2_sig.copy()
 h2_sig_syst2_dn = h2_sig.copy()
 h2_sig_syst2_up.values()[...] = h2_sig.values() * (1 + weights) ** 2
@@ -198,7 +242,7 @@ writer.add_systematic(
     "signal",
     "ch1",
     groups=["slopes", "slopes_signal"],
-    symmetrize=None,
+    symmetrize="quadratic" if args.symmetrizeAll else None,
 )
 
 

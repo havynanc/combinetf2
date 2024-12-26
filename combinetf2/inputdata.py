@@ -91,6 +91,7 @@ class FitInputData:
 
                 self.metadata = pickle_load_h5py(f["meta"])
                 self.channel_info = self.metadata["channel_info"]
+                self.symmetric_tensor = self.metadata["symmetric_tensor"]
             else:
                 self.channel_info = {
                     "ch0": {
@@ -105,6 +106,7 @@ class FitInputData:
                         ]
                     }
                 }
+                self.symmetric_tensor = False
 
             # compute indices for channels
             ibin = 0

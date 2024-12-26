@@ -249,7 +249,7 @@ class Fitter:
         d_squared_summed = tf.reduce_sum(gathered, axis=-1)
         return tf.sqrt(d_squared_summed)
 
-    # @tf.function
+    @tf.function
     def _global_impacts_parms(self, cov):
 
         dxdtheta0, dxdnobs, dxdbeta0 = self._global_impacts(cov)
@@ -569,16 +569,21 @@ class Fitter:
         mrnorm = tf.expand_dims(rnorm, -1)
         ernorm = tf.reshape(rnorm, [1, -1])
 
-        # interpolation for asymmetric log-normal
-        twox = 2.0 * theta
-        twox2 = twox * twox
-        alpha = 0.125 * twox * (twox2 * (3.0 * twox2 - 10.0) + 15.0)
-        alpha = tf.clip_by_value(alpha, -1.0, 1.0)
+        if self.indata.symmetric_tensor:
+            mthetaalpha = tf.reshape(theta, [self.indata.nsyst, 1])
+        else:
+            # interpolation for asymmetric log-normal
+            twox = 2.0 * theta
+            twox2 = twox * twox
+            alpha = 0.125 * twox * (twox2 * (3.0 * twox2 - 10.0) + 15.0)
+            alpha = tf.clip_by_value(alpha, -1.0, 1.0)
 
-        thetaalpha = theta * alpha
+            thetaalpha = theta * alpha
 
-        mthetaalpha = tf.stack([theta, thetaalpha], axis=0)  # now has shape [2,nsyst]
-        mthetaalpha = tf.reshape(mthetaalpha, [2 * self.indata.nsyst, 1])
+            mthetaalpha = tf.stack(
+                [theta, thetaalpha], axis=0
+            )  # now has shape [2,nsyst]
+            mthetaalpha = tf.reshape(mthetaalpha, [2 * self.indata.nsyst, 1])
 
         if self.indata.sparse:
             logsnorm = tf.sparse.sparse_dense_matmul(
@@ -597,10 +602,16 @@ class Fitter:
                 snormnorm = tf.sparse.to_dense(snormnorm_sparse)
 
         else:
-            mlogk = tf.reshape(
-                self.indata.logk,
-                [self.indata.nbins * self.indata.nproc, 2 * self.indata.nsyst],
-            )
+            if self.indata.symmetric_tensor:
+                mlogk = tf.reshape(
+                    self.indata.logk,
+                    [self.indata.nbins * self.indata.nproc, self.indata.nsyst],
+                )
+            else:
+                mlogk = tf.reshape(
+                    self.indata.logk,
+                    [self.indata.nbins * self.indata.nproc, 2 * self.indata.nsyst],
+                )
             logsnorm = tf.matmul(mlogk, mthetaalpha)
             logsnorm = tf.reshape(logsnorm, [self.indata.nbins, self.indata.nproc])
 

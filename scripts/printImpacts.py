@@ -38,10 +38,10 @@ def printImpacts(args, fitresult, poi):
         if args.nuisance not in labels:
             raise ValueError(f"Invalid nuisance {args.nuisance}. Options are {labels}")
         print(
-            f"Impact of nuisance {args.nuisance} is {impacts[list(labels).index(args.nuisance)]*100} {unit}"
+            f"Impact of nuisance {args.nuisance} on {poi} is {impacts[list(labels).index(args.nuisance)]*100} {unit}"
         )
     else:
-        print(f"Impact of all systematics (in {unit})")
+        print(f"Impact of all systematics on {poi} (in {unit})")
         print(
             "\n".join([f"   {k}: {round(v*100, 2)}" for k, v in zip(labels, impacts)])
         )

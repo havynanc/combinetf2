@@ -19,6 +19,7 @@ class TensorWriter:
         self.allow_negative_expectation = allow_negative_expectation
         self.exponential_transform = exponential_transform
         self.binByBinStatScale = 1.0
+        self.symmetric_tensor = True  # If all shape systematics are symmetrized the systematic tensor is symmetric leading to reduced memory and improved efficiency
 
         self.signals = set()
         self.bkgs = set()
@@ -234,6 +235,7 @@ class TensorWriter:
                     )
                     self.book_systematic(var_name_out_diff, **kargs)
             else:
+                self.symmetric_tensor = False
                 logkup_proc = self.get_logk(syst_up, norm, kfactor)
                 logkdown_proc = -self.get_logk(syst_down, norm, kfactor)
 
@@ -318,7 +320,7 @@ class TensorWriter:
         name,
         profile=True,
         noi=False,
-        constraint=True,
+        constrained=True,
         groups=None,
     ):
         print(f"Book systematic {name}")
@@ -326,7 +328,7 @@ class TensorWriter:
             self.systsnoprofile.add(name)
         elif noi:
             self.systsnoi.add(name)
-        elif not constraint:
+        elif not constrained:
             self.systsnoconstraint.add(name)
         else:
             self.systsstandard.add(name)
@@ -381,6 +383,9 @@ class TensorWriter:
         systs = self.get_systs()
         nsyst = len(systs)
 
+        if self.symmetric_tensor:
+            print("No asymmetric systematics - write fully symmetric tensor")
+
         ibin = 0
         if self.sparse:
             print(f"Write out sparse array")
@@ -398,8 +403,6 @@ class TensorWriter:
                 dict_norm_chan = self.dict_norm[chan]
                 dict_logkavg_chan_indices = self.dict_logkavg_indices[chan]
                 dict_logkavg_chan_values = self.dict_logkavg[chan]
-                dict_logkhalfdiff_chan_indices = self.dict_logkhalfdiff_indices[chan]
-                dict_logkhalfdiff_chan_values = self.dict_logkhalfdiff[chan]
 
                 for iproc, proc in enumerate(procs):
                     if proc not in dict_norm_chan:
@@ -435,10 +438,7 @@ class TensorWriter:
 
                     dict_logkavg_proc_indices = dict_logkavg_chan_indices[proc]
                     dict_logkavg_proc_values = dict_logkavg_chan_values[proc]
-                    dict_logkhalfdiff_proc_indices = dict_logkhalfdiff_chan_indices[
-                        proc
-                    ]
-                    dict_logkhalfdiff_proc_values = dict_logkhalfdiff_chan_values[proc]
+
                     for isyst, syst in enumerate(systs):
                         if syst not in dict_logkavg_proc_indices.keys():
                             continue
@@ -470,13 +470,13 @@ class TensorWriter:
                         )
                         logkavg_proc_values = None
 
-                        if syst in dict_logkhalfdiff_proc_indices:
-                            logkhalfdiff_proc_indices = dict_logkhalfdiff_proc_indices[
-                                syst
-                            ]
-                            logkhalfdiff_proc_values = dict_logkhalfdiff_proc_values[
-                                syst
-                            ]
+                        if syst in self.dict_logkhalfdiff_indices[chan][proc].keys():
+                            logkhalfdiff_proc_indices = self.dict_logkhalfdiff_indices[
+                                chan
+                            ][proc][syst]
+                            logkhalfdiff_proc_values = self.dict_logkhalfdiff[chan][
+                                proc
+                            ][syst]
 
                             nvals_proc = len(logkhalfdiff_proc_values)
                             oldlength = logk_sparse_size
@@ -508,8 +508,6 @@ class TensorWriter:
                     # free memory
                     dict_logkavg_proc_indices = None
                     dict_logkavg_proc_values = None
-                    dict_logkhalfdiff_proc_indices = None
-                    dict_logkhalfdiff_proc_values = None
 
                 # free memory
                 norm_proc = None
@@ -548,7 +546,10 @@ class TensorWriter:
             )
 
             # now straightforward sorting of logk_sparse into canonical order
-            logk_sparse_dense_shape = (norm_sparse_indices.shape[0], 2 * nsyst)
+            if self.symmetric_tensor:
+                logk_sparse_dense_shape = (norm_sparse_indices.shape[0], nsyst)
+            else:
+                logk_sparse_dense_shape = (norm_sparse_indices.shape[0], 2 * nsyst)
             logk_sort_indices = np.argsort(
                 np.ravel_multi_index(
                     np.transpose(logk_sparse_indices), logk_sparse_dense_shape
@@ -562,13 +563,14 @@ class TensorWriter:
             print(f"Write out dense array")
             # initialize with zeros, i.e. no variation
             norm = np.zeros([self.nbins, nproc], self.dtype)
-            logk = np.zeros([self.nbins, nproc, 2, nsyst], self.dtype)
+            if self.symmetric_tensor:
+                logk = np.zeros([self.nbins, nproc, nsyst], self.dtype)
+            else:
+                logk = np.zeros([self.nbins, nproc, 2, nsyst], self.dtype)
 
             for chan in self.channels.keys():
                 nbinschan = self.nbinschan[chan]
                 dict_norm_chan = self.dict_norm[chan]
-                dict_logkavg_chan = self.dict_logkavg[chan]
-                dict_logkhalfdiff_chan = self.dict_logkhalfdiff[chan]
 
                 for iproc, proc in enumerate(procs):
                     if proc not in dict_norm_chan:
@@ -580,19 +582,24 @@ class TensorWriter:
 
                     norm[ibin : ibin + nbinschan, iproc] = norm_proc
 
-                    dict_logkavg_proc = dict_logkavg_chan[proc]
-                    dict_logkhalfdiff_proc = dict_logkhalfdiff_chan[proc]
+                    dict_logkavg_proc = self.dict_logkavg[chan][proc]
+                    dict_logkhalfdiff_proc = self.dict_logkhalfdiff[chan][proc]
                     for isyst, syst in enumerate(systs):
                         if syst not in dict_logkavg_proc.keys():
                             continue
 
-                        logk[ibin : ibin + nbinschan, iproc, 0, isyst] = (
-                            dict_logkavg_proc[syst]
-                        )
-                        if syst in dict_logkhalfdiff_proc.keys():
-                            logk[ibin : ibin + nbinschan, iproc, 1, isyst] = (
-                                dict_logkhalfdiff_proc[syst]
+                        if self.symmetric_tensor:
+                            logk[ibin : ibin + nbinschan, iproc, isyst] = (
+                                dict_logkavg_proc[syst]
                             )
+                        else:
+                            logk[ibin : ibin + nbinschan, iproc, 0, isyst] = (
+                                dict_logkavg_proc[syst]
+                            )
+                            if syst in dict_logkhalfdiff_proc.keys():
+                                logk[ibin : ibin + nbinschan, iproc, 1, isyst] = (
+                                    dict_logkhalfdiff_proc[syst]
+                                )
 
                 ibin += nbinschan
 
@@ -627,6 +634,7 @@ class TensorWriter:
                 args=args, wd=common.base_dir
             ),
             "channel_info": self.channels,
+            "symmetric_tensor": self.symmetric_tensor,
         }
 
         narf.ioutils.pickle_dump_h5py("meta", meta, f)
@@ -663,7 +671,7 @@ class TensorWriter:
         )
         create_dataset("noigroups", noigroups)
         create_dataset("noigroupidxs", noigroupidxs, dtype="int32")
-        create_dataset("pseudodatanames", self.pseudodata_names)
+        create_dataset("pseudodatanames", [n for n in self.pseudodata_names])
 
         # create h5py datasets with optimized chunk shapes
         nbytes = 0
