@@ -18,7 +18,6 @@ class TensorWriter:
     ):
         self.allow_negative_expectation = allow_negative_expectation
         self.exponential_transform = exponential_transform
-        self.binByBinStatScale = 1.0
         self.symmetric_tensor = True  # If all shape systematics are symmetrized the systematic tensor is symmetric leading to reduced memory and improved efficiency
 
         self.signals = set()
@@ -195,12 +194,15 @@ class TensorWriter:
 
         norm = self.dict_norm[channel][process]
 
+        var_name_out = name
+
         if isinstance(h, (list, tuple, np.ndarray)):
             self._check_hist_and_channel(h[0], channel, add=False)
             self._check_hist_and_channel(h[1], channel, add=False)
 
             syst_up = self.get_flat_values(h[0])
             syst_down = self.get_flat_values(h[1])
+
             if symmetrize is not None:
 
                 logkup_proc = self.get_logk(syst_up, norm, kfactor)
@@ -245,7 +247,9 @@ class TensorWriter:
                 logkup_proc = None
                 logkdown_proc = None
 
-                self.book_logk_halfdiff(logkhalfdiff_proc, channel, process, name)
+                self.book_logk_halfdiff(
+                    logkhalfdiff_proc, channel, process, var_name_out
+                )
         elif mirror:
             self._check_hist_and_channel(h, channel, add=False)
             syst = self.get_flat_values(h)
@@ -255,8 +259,8 @@ class TensorWriter:
                 "Only one histogram given but mirror=False, can not construct a variation"
             )
 
-        self.book_logk_avg(logkavg_proc, channel, process, name)
-        self.book_systematic(name, **kargs)
+        self.book_logk_avg(logkavg_proc, channel, process, var_name_out)
+        self.book_systematic(var_name_out, **kargs)
 
     def get_logk(self, syst, norm, kfac=1.0):
         if not np.all(np.isfinite(syst)):
@@ -323,7 +327,6 @@ class TensorWriter:
         constrained=True,
         groups=None,
     ):
-        print(f"Book systematic {name}")
         if not profile:
             self.systsnoprofile.add(name)
         elif noi:
@@ -363,9 +366,7 @@ class TensorWriter:
         for chan, axes in self.channels.items():
             nbinschan = self.nbinschan[chan]
             data_obs[ibin : ibin + nbinschan] = self.dict_data_obs[chan]
-            sumw2[ibin : ibin + nbinschan] = (
-                self.binByBinStatScale**2 * self.dict_sumw2[chan]
-            )
+            sumw2[ibin : ibin + nbinschan] = self.dict_sumw2[chan]
 
             for idx, name in enumerate(self.pseudodata_names):
                 pseudodata[ibin : ibin + nbinschan, idx] = self.dict_pseudodata[chan][
