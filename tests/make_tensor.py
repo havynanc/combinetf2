@@ -1,4 +1,5 @@
 import argparse
+import os
 
 import hist
 import numpy as np
@@ -6,6 +7,9 @@ import numpy as np
 from combinetf2 import tensorwriter
 
 parser = argparse.ArgumentParser()
+parser.add_argument(
+    "-o", "--output", default="test_tesnor.hdf5", help="output file name"
+)
 parser.add_argument(
     "--sparse",
     default=False,
@@ -95,15 +99,6 @@ cov = np.diag(variances_flat)
 # add fully correlated contribution
 variances_bkg = np.concatenate([h1_bkg.values().flatten(), h2_bkg.values().flatten()])
 cov_bkg = np.diag(variances_bkg * 0.05)
-
-# Add correlations to off-diagonal elements
-for i in range(len(variances_flat)):
-    for j in range(i + 1, len(variances_flat)):
-        # Compute the covariance using the specified correlation
-        correlation = 1.0  # np.random.uniform(-0.25, 0.25)  # random correlation
-        covariance = correlation * np.sqrt(cov_bkg[i, i] * cov_bkg[j, j])
-        cov[i, j] = covariance
-        cov[j, i] = covariance
 
 # add bin by bin stat uncertainty on diagonal elements
 cov += np.diag(np.concatenate([h1_sig.values().flatten(), h2_sig.values().flatten()]))
@@ -245,8 +240,5 @@ writer.add_systematic(
     symmetrize="quadratic" if args.symmetrizeAll else None,
 )
 
-
-outfilename = "input_tensor"
-if args.sparse:
-    outfilename += "_sparse"
-writer.write(outfolder="test_results", outfilename=outfilename)
+directory, filename = os.path.split(args.output)
+writer.write(outfolder=directory, outfilename=filename)

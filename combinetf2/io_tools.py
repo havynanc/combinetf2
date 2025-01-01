@@ -79,7 +79,7 @@ def get_pulls_and_constraints(fitresult, prefit=False):
     return labels, pulls, constraints
 
 
-def get_theoryfit_data(fitresult):
+def get_fitresult_data(fitresult):
     print(
         f"Prepare theory fit: load measured differential cross secction distribution and covariance matrix"
     )

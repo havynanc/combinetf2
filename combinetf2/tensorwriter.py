@@ -19,6 +19,7 @@ class TensorWriter:
         self.allow_negative_expectation = allow_negative_expectation
         self.exponential_transform = exponential_transform
         self.symmetric_tensor = True  # If all shape systematics are symmetrized the systematic tensor is symmetric leading to reduced memory and improved efficiency
+        self.add_bin_by_bin_stat_to_data_cov = False  # add bin by bin statistical uncertainty to data covariance matrix in case covariance is given for chi2
 
         self.signals = set()
         self.bkgs = set()
@@ -41,7 +42,7 @@ class TensorWriter:
 
         # temporary data
         self.dict_data_obs = {}  # [channel]
-        self.data_covariance_inverted = None
+        self.data_covariance = None
         self.dict_pseudodata = {}  # [channel][pseudodata]
         self.dict_norm = {}  # [channel][process]
         self.dict_sumw2 = {}  # [channel]
@@ -74,15 +75,11 @@ class TensorWriter:
             raise RuntimeError(f"Data histogram for channel '{channel}' already set.")
         self.dict_data_obs[channel] = self.get_flat_values(h)
 
-    def add_data_covariance(self, cov):
+    def add_data_covariance(self, cov, add_bin_by_bin_stat_to_data_cov=False):
         cov = cov if isinstance(cov, np.ndarray) else cov.values()
         cov = np.reshape(cov, (self.nbins, self.nbins))
-        self.data_covariance_inverted = np.linalg.inv(cov)
-
-    def add_data_covariance_inverted(self, cov_inv):
-        cov_inv = cov_inv if isinstance(cov_inv, np.ndarray) else cov_inv.values()
-        cov_inv = np.reshape(cov_inv, (self.nbins, self.nbins))
-        self.data_covariance_inverted = cov_inv
+        self.data_covariance = np.linalg.inv(cov)
+        self.add_bin_by_bin_stat_to_data_cov = add_bin_by_bin_stat_to_data_cov
 
     def add_pseudodata(self, h, name=None, channel="ch0"):
         self._check_hist_and_channel(h, channel)
@@ -693,9 +690,16 @@ class TensorWriter:
         )
         pseudodata = None
 
-        if self.data_covariance_inverted is not None:
+        if self.data_covariance is not None:
+            full_cov = (
+                np.add(self.data_covariance, np.diag(sumw2))
+                if self.add_bin_by_bin_stat_to_data_cov
+                else self.data_covariance
+            )
+            full_cov_inv = np.linalg.inv(full_cov)
+
             nbytes += h5pyutils.writeFlatInChunks(
-                self.data_covariance_inverted,
+                full_cov_inv,
                 f,
                 "hdata_cov_inv",
                 maxChunkBytes=self.chunkSize,
