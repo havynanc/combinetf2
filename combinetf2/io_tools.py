@@ -59,11 +59,16 @@ def read_impacts_poi(
 
     if pulls:
         _, pulls, constraints = get_pulls_and_constraints(fitresult)
+        _, pulls_prefit, constraints_prefit = get_pulls_and_constraints(
+            fitresult, prefit=True
+        )
         if sort:
             pulls = pulls[order]
             constraints = constraints[order]
+            pulls_prefit = pulls_prefit[order]
+            constraints_prefit = constraints_prefit[order]
 
-        return pulls, constraints, impacts, labels
+        return pulls, pulls_prefit, constraints, constraints_prefit, impacts, labels
 
     return impacts, labels
 

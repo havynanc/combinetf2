@@ -1,7 +1,7 @@
 #!/bin/bash
 export APPTAINER_BIND="/scratch,/cvmfs" 
-if [[ -d $WREM_BASE ]]; then
-    export APPTAINER_BIND="${APPTAINER_BIND},${WREM_BASE}/.."
+if [[ -d $COMBINETF2_BASE ]]; then
+    export APPTAINER_BIND="${APPTAINER_BIND},${COMBINETF2_BASE}/.."
 fi
 CONTAINER=/cvmfs/unpacked.cern.ch/gitlab-registry.cern.ch/bendavid/cmswmassdocker/wmassdevrolling\:v38
 
