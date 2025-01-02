@@ -25,7 +25,6 @@ class TensorWriter:
         self.bkgs = set()
 
         self.channels = {}
-        self.nbins = 0
         self.nbinschan = {}
         self.pseudodata_names = set()
 
@@ -77,7 +76,6 @@ class TensorWriter:
 
     def add_data_covariance(self, cov, add_bin_by_bin_stat_to_data_cov=False):
         cov = cov if isinstance(cov, np.ndarray) else cov.values()
-        cov = np.reshape(cov, (self.nbins, self.nbins))
         self.data_covariance = np.linalg.inv(cov)
         self.add_bin_by_bin_stat_to_data_cov = add_bin_by_bin_stat_to_data_cov
 
@@ -133,9 +131,9 @@ class TensorWriter:
     def add_channel(self, axes, name=None):
         if name is None:
             name = f"ch{len(self.channels)}"
+        print(f"Add new channel {name}")
         self.channels[name] = {"axes": axes}
         ibins = np.product([len(a) for a in axes])
-        self.nbins += ibins
         self.nbinschan[name] = ibins
         self.dict_norm[name] = {}
         self.dict_sumw2[name] = np.zeros(ibins)
@@ -149,13 +147,14 @@ class TensorWriter:
         axes = [a for a in h.axes]
         if channel not in self.channels.keys():
             if add:
-                print(f"Add new channel {channel}")
                 self.add_channel(axes, channel)
             else:
                 raise RuntimeError(f"Channel {channel} not known!")
         elif axes != self.channels[channel]["axes"]:
             raise RuntimeError(
-                f"Histogram axes {axes} different from channel axes {self.channels[channel]["axes"]} of channel {channel}"
+                f"Histogram axes different from channel axes of channel {channel}"
+                f"\nHistogram axes: {axes}"
+                f"\nChannel axes: {self.channels[channel]["axes"]}"
             )
 
     def add_lnN_systematic(
@@ -354,14 +353,17 @@ class TensorWriter:
         procs = list(self.signals) + list(self.bkgs)
         nproc = len(procs)
 
+        nbins = sum([v for v in self.nbinschan.values()])
+
         print(f"Write out nominal arrays")
-        sumw = np.zeros([self.nbins], self.dtype)
-        sumw2 = np.zeros([self.nbins], self.dtype)
-        data_obs = np.zeros([self.nbins], self.dtype)
-        pseudodata = np.zeros([self.nbins, len(self.pseudodata_names)], self.dtype)
+        sumw = np.zeros([nbins], self.dtype)
+        sumw2 = np.zeros([nbins], self.dtype)
+        data_obs = np.zeros([nbins], self.dtype)
+        pseudodata = np.zeros([nbins, len(self.pseudodata_names)], self.dtype)
         ibin = 0
-        for chan, axes in self.channels.items():
+        for chan in self.channels.keys():
             nbinschan = self.nbinschan[chan]
+
             data_obs[ibin : ibin + nbinschan] = self.dict_data_obs[chan]
             sumw2[ibin : ibin + nbinschan] = self.dict_sumw2[chan]
 
@@ -522,7 +524,7 @@ class TensorWriter:
             logk_sparse_values.resize([logk_sparse_size])
 
             # straightforward sorting of norm_sparse into canonical order
-            norm_sparse_dense_shape = (self.nbins, nproc)
+            norm_sparse_dense_shape = (nbins, nproc)
             norm_sort_indices = np.argsort(
                 np.ravel_multi_index(
                     np.transpose(norm_sparse_indices), norm_sparse_dense_shape
@@ -560,11 +562,11 @@ class TensorWriter:
         else:
             print(f"Write out dense array")
             # initialize with zeros, i.e. no variation
-            norm = np.zeros([self.nbins, nproc], self.dtype)
+            norm = np.zeros([nbins, nproc], self.dtype)
             if self.symmetric_tensor:
-                logk = np.zeros([self.nbins, nproc, nsyst], self.dtype)
+                logk = np.zeros([nbins, nproc, nsyst], self.dtype)
             else:
-                logk = np.zeros([self.nbins, nproc, 2, nsyst], self.dtype)
+                logk = np.zeros([nbins, nproc, 2, nsyst], self.dtype)
 
             for chan in self.channels.keys():
                 nbinschan = self.nbinschan[chan]
