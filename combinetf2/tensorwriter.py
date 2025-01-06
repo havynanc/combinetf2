@@ -76,7 +76,6 @@ class TensorWriter:
 
     def add_data_covariance(self, cov, add_bin_by_bin_stat_to_data_cov=False):
         cov = cov if isinstance(cov, np.ndarray) else cov.values()
-        cov = np.reshape(cov, (self.nbins, self.nbins))
         self.data_covariance = np.linalg.inv(cov)
         self.add_bin_by_bin_stat_to_data_cov = add_bin_by_bin_stat_to_data_cov
 
