@@ -133,12 +133,10 @@ ws = workspace.Workspace(args.outputFormat)
 fitter = fitter.Fitter(indata, ws, args)
 
 if args.toys == -1:
-    fitter.nobs.assign(fitter.expected_events(profile=False))
-
-cov_prefit = fitter.prefit_covariance()
+    fitter.nobs.assign(fitter.expected_events())
 
 results = {
-    "parms_prefit": fitter.parms_hist(cov_prefit, hist_name="prefit"),
+    "parms_prefit": fitter.parms_hist(hist_name="prefit"),
     "projections": [
         {"channel": projection[0], "axes": projection[1:]}
         for projection in args.project
@@ -175,9 +173,7 @@ if args.saveHists:
     print(f"Save - inclusive hist")
 
     hist_prefit_inclusive, aux_info = fitter.expected_hists(
-        cov_prefit,
         inclusive=True,
-        profile=False,
         compute_variance=args.computeHistErrors,
         compute_chi2=not args.noChi2,
         aux_info=True,
@@ -188,9 +184,7 @@ if args.saveHists:
     print(f"Save - processes hist")
 
     hist_prefit = fitter.expected_hists(
-        cov_prefit,
         inclusive=False,
-        profile=False,
         compute_variance=args.computeHistErrors,
         name="prefit",
         label="prefit expected number of events",
@@ -215,11 +209,9 @@ if args.saveHists:
         axes_str = "-".join(axes)
 
         hist_prefit_inclusive, aux_info = fitter.expected_projection_hist(
-            cov=cov_prefit,
             channel=channel,
             axes=axes,
             inclusive=True,
-            profile=False,
             compute_variance=args.computeHistErrors,
             compute_chi2=not args.noChi2,
             aux_info=True,
@@ -230,11 +222,9 @@ if args.saveHists:
         print(f"Save projection for channel {channel} - processes")
 
         hist_prefit = fitter.expected_projection_hist(
-            cov=cov_prefit,
             channel=channel,
             axes=axes,
             inclusive=False,
-            profile=False,
             compute_variance=args.computeHistErrors,
             name=f"prefit_projection_{channel}_{axes_str}",
             label=f"prefit expected number of events, projection for channel {channel} and axes {axes_str}.",
@@ -248,12 +238,11 @@ if args.saveHists:
             projection["chi2_prefit"] = aux_info["chi2"]
 
     if args.computeVariations:
-        cov_prefit_variations = fitter.prefit_covariance(unconstrained_err=1.0)
+        cov_prefit = fitter.cov.numpy()
+        fitter.cov = fitter.prefit_covariance(unconstrained_err=1.0)
 
         hist_prefit_variations = fitter.expected_hists(
-            cov_prefit_variations,
             inclusive=True,
-            profile=False,
             compute_variance=False,
             compute_variations=True,
             name="prefit_inclusive_variations",
@@ -269,11 +258,9 @@ if args.saveHists:
             axes_str = "-".join(axes)
 
             hist_prefit_variations = fitter.expected_projection_hist(
-                cov=cov_prefit_variations,
                 channel=channel,
                 axes=axes,
                 inclusive=True,
-                profile=False,
                 compute_variance=False,
                 compute_variations=True,
                 name=f"prefit_inclusive_variations_projection_f{channel}_f{axes_str}",
@@ -282,7 +269,7 @@ if args.saveHists:
 
             projection["hist_prefit_variations"] = hist_prefit_variations
 
-        del cov_prefit_variations
+        fitter.cov.assign(cov_prefit)
 
 
 if args.externalPostfit is not None:
@@ -301,36 +288,34 @@ if args.externalPostfit is not None:
             x_ext = h_parms_ext.values()
             parms_ext = np.array(h_parms_ext.axes["parms"])
             cov_ext = h5results_ext["cov"].get().values()
-
-    # FIXME do this without explicit loops and ideally in tensorflow directly
+            dxdtheta0_ext = h5results_ext["dxdtheta0"].get().values()
 
     xvals = fitter.x.numpy()
-    covval = cov_prefit.numpy()
-
-    parmmap = {}
-
+    covval = fitter.cov.numpy()
+    dxdtheta0 = fitter.dxdtheta0.numpy()
     parms = fitter.parms.astype(str)
-    for iparm, parm in enumerate(parms):
-        parmmap[parm] = iparm
 
-    for iparm_ext, parmi_ext in enumerate(parms_ext):
-        iparm = parmmap.get(parmi_ext)
+    # Find common elements with their matching indices
+    idxs = np.nonzero(np.isin(parms, parms_ext))[0]
+    idxs_ext = np.nonzero(np.isin(parms_ext, parms))[0]
 
-        if iparm is None:
-            continue
+    xvals[idxs] = x_ext[idxs_ext]
+    covval[np.ix_(idxs, idxs)] = cov_ext[np.ix_(idxs_ext, idxs_ext)]
 
-        xvals[iparm] = x_ext[iparm_ext]
+    # systematic indices, exclude pois and shift by npois (assuming pois come first)
+    npoi = len(parms) - dxdtheta0.shape[1]
+    npoi_ext = len(parms_ext) - dxdtheta0_ext.shape[1]
 
-        for jparm_ext, parmj_ext in enumerate(parms_ext):
-            jparm = parmmap.get(parmj_ext)
+    idxs_systs = idxs[idxs >= npoi] - npoi
+    idxs_systs_ext = idxs_ext[idxs_ext >= npoi_ext] - npoi_ext
 
-            if jparm is None:
-                continue
-
-            covval[iparm, jparm] = cov_ext[iparm_ext, jparm_ext]
+    dxdtheta0[np.ix_(idxs, idxs_systs)] = dxdtheta0_ext[
+        np.ix_(idxs_ext, idxs_systs_ext)
+    ]
 
     fitter.x.assign(xvals)
-    cov = tf.convert_to_tensor(covval)
+    fitter.cov = tf.constant(covval)
+    fitter.dxdtheta0 = tf.constant(dxdtheta0)
 else:
     dofit = args.toys >= 0
 
@@ -338,9 +323,19 @@ else:
         fitter.minimize()
 
     val, grad, hess = fitter.loss_val_grad_hess()
-    cov = tf.linalg.inv(hess)
+    fitter.hess = hess
+    fitter.cov = tf.linalg.inv(hess)
 
-postfit_profile = args.externalPostfit is None
+    fitter.profile = True
+
+    if (args.doImpacts and args.globalImpacts) or (
+        args.saveHists
+        and (args.computeHistErrors or args.computeHistCov or args.computeHistImpacts)
+    ):
+        # compute derivatives of parameters needed later
+        fitter.set_derivatives_x()
+
+        results["dxdtheta0"] = fitter.dxdtheta0_hist()
 
 nllvalfull = fitter.full_nll().numpy()
 satnllvalfull, ndfsat = fitter.saturated_nll()
@@ -353,21 +348,20 @@ results.update(
         "nllvalfull": nllvalfull,
         "satnllvalfull": satnllvalfull,
         "ndfsat": ndfsat,
-        "postfit_profile": postfit_profile,
-        "cov": fitter.cov_hist(cov),
-        "parms": fitter.parms_hist(cov),
+        "postfit_profile": fitter.profile,
+        "parms": fitter.parms_hist(),
+        "cov": fitter.cov_hist(),
     }
 )
 
 if args.doImpacts:
-
-    h, h_grouped = fitter.impacts_hists(cov, hess)
+    h, h_grouped = fitter.impacts_hists()
     results["impacts"] = h
     results["impacts_grouped"] = h_grouped
 
     if args.globalImpacts:
 
-        h, h_grouped = fitter.global_impacts_hists(cov)
+        h, h_grouped = fitter.global_impacts_hists()
         results["global_impacts"] = h
         results["global_impacts_grouped"] = h_grouped
 
@@ -377,9 +371,7 @@ if args.saveHists:
     print(f"Save - inclusive hist")
 
     hist_postfit_inclusive, aux_info = fitter.expected_hists(
-        cov,
         inclusive=True,
-        profile=postfit_profile,
         compute_variance=args.computeHistErrors,
         compute_cov=args.computeHistCov,
         compute_global_impacts=args.computeHistImpacts,
@@ -392,9 +384,7 @@ if args.saveHists:
     print(f"Save - processes hist")
 
     hist_postfit = fitter.expected_hists(
-        cov,
         inclusive=False,
-        profile=postfit_profile,
         compute_variance=args.computeHistErrors,
         name="postfit",
         label="postfit expected number of events",
@@ -428,11 +418,9 @@ if args.saveHists:
         print(f"Save projection for channel {channel} - inclusive")
 
         hist_postfit_inclusive, aux_info = fitter.expected_projection_hist(
-            cov=cov,
             channel=channel,
             axes=axes,
             inclusive=True,
-            profile=postfit_profile,
             compute_variance=args.computeHistErrors,
             compute_cov=args.computeHistCov,
             compute_global_impacts=args.computeHistImpacts,
@@ -445,11 +433,9 @@ if args.saveHists:
         print(f"Save projection for channel {channel} - inclusive")
 
         hist_postfit = fitter.expected_projection_hist(
-            cov=cov,
             channel=channel,
             axes=axes,
             inclusive=False,
-            profile=postfit_profile,
             compute_variance=args.computeHistErrors,
             name=f"postfit_projection_{channel}_{axes_str}",
             label=f"postfit expected number of events, projection for channel {channel} and axes {axes_str}.",
@@ -476,9 +462,7 @@ if args.saveHists:
 
     if args.computeVariations:
         hist_postfit_variations = fitter.expected_hists(
-            cov,
             inclusive=True,
-            profile=postfit_profile,
             profile_grad=False,
             compute_variance=False,
             compute_variations=True,
@@ -489,9 +473,7 @@ if args.saveHists:
         results["hist_postfit_variations"] = hist_postfit_variations
 
         hist_postfit_variations_correlated = fitter.expected_hists(
-            cov,
             inclusive=True,
-            profile=postfit_profile,
             compute_variance=False,
             compute_variations=True,
             correlated_variations=True,
@@ -510,11 +492,9 @@ if args.saveHists:
             axes_str = "-".join(axes)
 
             hist_postfit_variations = fitter.expected_projection_hist(
-                cov=cov,
                 channel=channel,
                 axes=axes,
                 inclusive=True,
-                profile=postfit_profile,
                 profile_grad=False,
                 compute_variance=False,
                 compute_variations=True,
@@ -525,11 +505,9 @@ if args.saveHists:
             projection["hist_postfit_variations"] = hist_postfit_variations
 
             hist_postfit_variations_correlated = fitter.expected_projection_hist(
-                cov=cov,
                 channel=channel,
                 axes=axes,
                 inclusive=True,
-                profile=postfit_profile,
                 compute_variance=False,
                 compute_variations=True,
                 correlated_variations=True,

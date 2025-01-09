@@ -8,7 +8,7 @@ from combinetf2 import tensorwriter
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
-    "-o", "--output", default="test_tesnor.hdf5", help="output file name"
+    "-o", "--output", default="./test_tensor.hdf5", help="output file name"
 )
 parser.add_argument(
     "--sparse",
@@ -22,6 +22,13 @@ parser.add_argument(
     action="store_true",
     help="Make fully symmetric tensor",
 )
+parser.add_argument(
+    "--exponentialTransform",
+    default=False,
+    action="store_true",
+    help="Store tensor with exponential transformation",
+)
+
 
 args = parser.parse_args()
 
@@ -105,7 +112,10 @@ cov += np.diag(np.concatenate([h1_sig.values().flatten(), h2_sig.values().flatte
 cov += np.diag(np.concatenate([h1_bkg.values().flatten(), h2_bkg.values().flatten()]))
 
 # Build tensor
-writer = tensorwriter.TensorWriter(sparse=args.sparse)
+writer = tensorwriter.TensorWriter(
+    sparse=args.sparse,
+    exponential_transform=args.exponentialTransform,
+)
 
 writer.add_data(h1_data, "ch0")
 writer.add_data(h2_data, "ch1")
@@ -241,4 +251,6 @@ writer.add_systematic(
 )
 
 directory, filename = os.path.split(args.output)
+if directory == "":
+    directory = "./"
 writer.write(outfolder=directory, outfilename=filename)

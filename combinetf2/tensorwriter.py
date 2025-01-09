@@ -18,6 +18,10 @@ class TensorWriter:
     ):
         self.allow_negative_expectation = allow_negative_expectation
         self.exponential_transform = exponential_transform
+        self.exponential_transform_scale = (
+            100000  # multiplier for the exponential transformed tensor
+        )
+
         self.symmetric_tensor = True  # If all shape systematics are symmetrized the systematic tensor is symmetric leading to reduced memory and improved efficiency
         self.add_bin_by_bin_stat_to_data_cov = False  # add bin by bin statistical uncertainty to data covariance matrix in case covariance is given for chi2
 
@@ -152,9 +156,11 @@ class TensorWriter:
                 raise RuntimeError(f"Channel {channel} not known!")
         elif axes != self.channels[channel]["axes"]:
             raise RuntimeError(
-                f"Histogram axes different from channel axes of channel {channel}"
-                f"\nHistogram axes: {axes}"
-                f"\nChannel axes: {self.channels[channel]["axes"]}"
+                f"""
+                Histogram axes different from channel axes of channel {channel}
+                \nHistogram axes: {axes}
+                \nChannel axes: {self.channels[channel]["axes"]}
+                """
             )
 
     def add_lnN_systematic(
@@ -266,7 +272,7 @@ class TensorWriter:
 
         # check if there is a sign flip between systematic and nominal
         if self.exponential_transform:
-            _logk = kfac * (syst - norm) / 100000
+            _logk = kfac * (syst - norm) / self.exponential_transform_scale
         else:
             _logk = kfac * np.log(syst / norm)
         _logk_view = np.where(
@@ -410,7 +416,7 @@ class TensorWriter:
                     norm_proc = dict_norm_chan[proc]
 
                     if self.exponential_transform:
-                        norm_proc = np.exp(norm_proc / 100000)
+                        norm_proc = np.exp(norm_proc / self.exponential_transform_scale)
 
                     norm_indices = np.transpose(np.nonzero(norm_proc))
                     norm_values = np.reshape(norm_proc[norm_indices], [-1])
@@ -578,7 +584,7 @@ class TensorWriter:
 
                     norm_proc = dict_norm_chan[proc]
                     if self.exponential_transform:
-                        norm_proc = np.exp(norm_proc / 100000)
+                        norm_proc = np.exp(norm_proc / self.exponential_transform_scale)
 
                     norm[ibin : ibin + nbinschan, iproc] = norm_proc
 
@@ -635,6 +641,8 @@ class TensorWriter:
             ),
             "channel_info": self.channels,
             "symmetric_tensor": self.symmetric_tensor,
+            "exponential_transform": self.exponential_transform,
+            "exponential_transform_scale": self.exponential_transform_scale,
         }
 
         narf.ioutils.pickle_dump_h5py("meta", meta, f)

@@ -55,12 +55,8 @@ jobs:
     outputs:
       WREMNANTS_OUTDIR: ${{steps.export.outputs.WREMNANTS_OUTDIR}}
 
-
     steps:
       - uses: actions/checkout@v4
-
-      - name: setup outdir
-        run: echo "WREMNANTS_OUTDIR=/tmp/${USER}/$(uuidgen)" >> $GITHUB_ENV
 
       - id: export
         run: |
@@ -81,6 +77,9 @@ jobs:
 
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v4
+
+      - name: setup environment variables
+        run: source setup.py
 
       - name: make tensor
         run: >-
@@ -105,6 +104,9 @@ jobs:
 
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v4
+
+      - name: setup environment variables
+        run: source setup.py
 
       - name: nominal fit
         run: >- 
@@ -147,6 +149,9 @@ jobs:
           echo "WREMNANTS_OUTDIR=${WREMNANTS_OUTDIR}" >> $GITHUB_ENV
 
       - uses: actions/checkout@v4
+
+      - name: setup environment variables
+        run: source setup.py
 
       - name: print impacts
         run: scripts/ci/run_with_singularity.sh scripts/ci/setup_and_run_python.sh scripts/printImpacts.py $WREMNANTS_OUTDIR/fitresults.hdf5 -s

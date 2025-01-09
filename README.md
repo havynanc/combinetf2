@@ -7,26 +7,37 @@ Implemted approximations in the limit of large sample size to simplify intensive
 ## Setup
 
 CombineTF2 can be run within a comprehensive singularity (recommended) or in an environment set up by yourself. 
+It makes use of the [narf-ioutils](https://pypi.org/project/narf-ioutils/0.1.1/) package for storing hdf5 files in compressed format.
+
+### In a python virtual environment
+The simplest is to make a python virtual environment. It depends on the python version you are working with (tested with 3.9.18).
+First, make a python version, e.g. in the combinetf2 base directory (On some machines you have to use `python3`):
+```bash
+python -m venv env
+```
+The activate it and install the necessary packages
+```bash
+source env/bin/activate
+pip install tensorflow-io[tensorflow] numpy h5py hist scipy narf.ioutils
+```
+In case you want to contribute to the development, please also install the linters `isort` `flake8` `black` used in the pre-commit hooks and the github CI
+Deactivate the environment with `deactivate`.
 
 ### In singularity
+(Currently not working due to missing narf-ioutils package)
+
 The singularity includes a comprehensive set of packages. 
 It also comes with custom optimized builds that for example enable numpy and scipy to be run with more than 64 threads (the limit in the standard build).
-Activate the singularity image (to be done every time before running code)
+Activate the singularity image (to be done every time before running code). 
 ```bash
 singularity run /cvmfs/unpacked.cern.ch/gitlab-registry.cern.ch/bendavid/cmswmassdocker/wmassdevrolling\:latest
-```
-
-### In custom environment
-The only non-standard package is 
-```
-https://pypi.org/project/narf-ioutils/0.1.1/
 ```
 
 ### Get the code
 ```bash
 MY_GIT_USER=$(git config user.github)
 git clone git@github.com:$MY_GIT_USER/combinetf2.git
-cd WRemnants/
+cd combinetf2/
 git remote add upstream git@github.com:WMass/combinetf2.git
 ```
 
@@ -36,9 +47,15 @@ git pull upstream main
 git push origin main
 ```
 
+### Run the code
+Setting up environment variables and python path (to be done every time before running code).
+```bash
+source setup.sh
+```
+
 ## Making the input tensor
 
-An example can be found in ```tests/make_tensor.py```. 
+An example can be found in ```tests/make_tensor.py -o test_tensor.hdf5```. 
 
 ### Symmetrization
 By default, systematic variations are asymmetric. 
@@ -50,11 +67,11 @@ Different symmetrization options are supported:
  * "quadratic": TBD
 If a systematic variation is added by providing a single histogram, the variation is mirrored. 
 
-## Running the fit
+## Run the fit
 
 For example:
 ```bash
-python scripts/fit.py input_tensor.hdf5 -o results/fitresult.hdf5 -t 0 --doImpacts --doGlobalImpacts --binByBinStat --saveHists --computeHistErrors
+python scripts/fit.py test_tensor.hdf5 -o results/fitresult.hdf5 -t 0 --doImpacts --globalImpacts --binByBinStat --saveHists --computeHistErrors --project ch1 a --project ch1 b
 ```
 
 ## Fit diagnostics
@@ -66,7 +83,7 @@ python scripts/printImpacts.py results/fitresult.hdf5
 
 ## Contributing to the code
 
-We use linters. Activate git pre-commit hooks (only need to do this once when checking out)
+We use pre-commit hooks and linters in the CI. Activate git pre-commit hooks (only need to do this once when checking out)
 ```
 git config --local include.path ../.gitconfig
 ```
