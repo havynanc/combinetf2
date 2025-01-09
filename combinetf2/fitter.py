@@ -187,7 +187,7 @@ class Fitter:
         v_invC_v = tf.einsum("ij,ji->i", v_reduced, invC_v)
         return tf.sqrt(v_invC_v)
 
-    # @tf.function
+    @tf.function
     def _impacts_parms(self):
         # impact for poi at index i in covariance matrix from nuisance with index j is C_ij/sqrt(C_jj) = <deltax deltatheta>/sqrt(<deltatheta^2>)
         cov_poi = self.cov[: self.npoi]
@@ -196,7 +196,7 @@ class Fitter:
         impacts = v / tf.reshape(tf.sqrt(tf.linalg.diag_part(self.cov)), [1, -1])
 
         impacts_grouped = tf.map_fn(
-            lambda idxs: self._compute_impact_group(v, idxs),
+            lambda idxs: self._compute_impact_group(v[:, self.npoi :], idxs),
             tf.ragged.constant(self.indata.systgroupidxs, dtype=tf.int32),
             fn_output_signature=tf.TensorSpec(
                 shape=(impacts.shape[0],), dtype=tf.float64
@@ -241,7 +241,7 @@ class Fitter:
         impacts, impacts_grouped = self._impacts_parms()
 
         parms = np.concatenate(
-            [self.parms[: self.npoi], self.parms[self.indata.noigroupidxs]]
+            [self.parms[: self.npoi], self.parms[self.npoi :][self.indata.noigroupidxs]]
         )
 
         # write out histograms
@@ -264,7 +264,7 @@ class Fitter:
         d_squared_summed = tf.reduce_sum(gathered, axis=-1)
         return tf.sqrt(d_squared_summed)
 
-    # @tf.function
+    @tf.function
     def _global_impacts_parms(self):
         # compute impacts for pois and nois
         dxdtheta0_poi = self.dxdtheta0[: self.npoi]
@@ -321,7 +321,7 @@ class Fitter:
         impacts, impacts_grouped = self._global_impacts_parms()
 
         parms = np.concatenate(
-            [self.parms[: self.npoi], self.parms[self.indata.noigroupidxs]]
+            [self.parms[: self.npoi], self.parms[self.npoi :][self.indata.noigroupidxs]]
         )
 
         # write out histograms
@@ -338,7 +338,7 @@ class Fitter:
 
         return h, h_grouped
 
-    # @tf.function
+    @tf.function
     def _expvar_profiled(
         self, fun_exp, compute_cov=False, compute_global_impacts=False
     ):
@@ -406,10 +406,6 @@ class Fitter:
 
             # global impacts of unconstrained parameters are always 0, only store impacts of constrained ones
             impacts = dexpdtheta0[:, self.indata.nsystnoconstraint :]
-
-            import pdb
-
-            pdb.set_trace()
 
             impacts_grouped = tf.transpose(impacts_grouped)
 
@@ -978,13 +974,13 @@ class Fitter:
             h_impacts = self.hist(
                 name,
                 [*hist_axes, axis_impacts],
-                values=exp_impacts[start:stop],
+                values=exp_impacts,
                 label=label,
             )
             h_impacts_grouped = self.hist(
                 name,
                 [*hist_axes, axis_impacts_grouped],
-                values=exp_impacts_grouped[start:stop],
+                values=exp_impacts_grouped,
                 label=label,
             )
 

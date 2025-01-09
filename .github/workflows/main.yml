@@ -27,16 +27,16 @@ jobs:
 
       - name: run isort
         run: |
-          scripts/ci/run_with_singularity.sh isort . --check-only --diff --profile black --line-length 88
+          isort . --check-only --diff --profile black --line-length 88
 
       - name: run Flake8
         run: >-
-          scripts/ci/run_with_singularity.sh flake8 . --max-line-length 88
+          flake8 . --max-line-length 88
           --select=F401,F402,F403,F404,F405,F406,F407,F601,F602,F621,F622,F631,F632,F633,F634,F701,F702,F704,F706,F707,F721,F722,F723,F821,F822,F823,F831,F901
 
       - name: run Black
         run: |
-          scripts/ci/run_with_singularity.sh black --exclude '(^\.git|\.github)' --check .
+          black --exclude '(^\.git|\.github)' --check .
 
       - name: check Python Files
         run: |
@@ -44,7 +44,7 @@ jobs:
           find . -name '*.py' | \
           xargs -P 16 -I {} bash -c '
             echo "Checking python file: {}"
-            scripts/ci/run_with_singularity.sh python -m py_compile "{}" || \
+            python -m py_compile "{}" || \
             { echo "Invalid python syntax in {}"; exit 1; }
           '
 
@@ -53,127 +53,123 @@ jobs:
     needs: linting
 
     outputs:
-      WREMNANTS_OUTDIR: ${{steps.export.outputs.WREMNANTS_OUTDIR}}
+      COMBINETF2_OUTDIR: ${{steps.export.outputs.COMBINETF2_OUTDIR}}
+      PYTHONPATH: ${{steps.export.outputs.PYTHONPATH}}
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: setup outdir
+        run: echo "COMBINETF2_OUTDIR=/tmp/${USER}/$(uuidgen)" >> $GITHUB_ENV
+
+      - name: setup python path
+        run: echo "PYTHONPATH=$GITHUB_WORKSPACE:$PYTHONPATH" >> $GITHUB_ENV
 
       - id: export
         run: |
-          echo "WREMNANTS_OUTDIR=$WREMNANTS_OUTDIR" >> $GITHUB_OUTPUT
-
+          echo "COMBINETF2_OUTDIR=$COMBINETF2_OUTDIR" >> $GITHUB_OUTPUT
+          echo "PYTHONPATH=$PYTHONPATH" >> $GITHUB_OUTPUT
 
   make-tensor:
-    # The type of runner that the job will run on
     runs-on: [self-hosted, linux, x64]
     needs: setenv
 
-    # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
       - env:
-          WREMNANTS_OUTDIR: ${{ needs.setenv.outputs.WREMNANTS_OUTDIR }}
+          COMBINETF2_OUTDIR: ${{ needs.setenv.outputs.COMBINETF2_OUTDIR }}
+          PYTHONPATH: ${{ needs.setenv.outputs.PYTHONPATH }}
         run: |
-          echo "WREMNANTS_OUTDIR=${WREMNANTS_OUTDIR}" >> $GITHUB_ENV
+          echo "COMBINETF2_OUTDIR=${COMBINETF2_OUTDIR}" >> $GITHUB_ENV
+          echo "PYTHONPATH=${PYTHONPATH}" >> $GITHUB_ENV
 
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v4
-
-      - name: setup environment variables
-        run: source setup.py
 
       - name: make tensor
         run: >-
-          scripts/ci/run_with_singularity.sh scripts/ci/setup_and_run_python.sh tests/make_tensor.py -o $WREMNANTS_OUTDIR/test_tensor.hdf5
+          python tests/make_tensor.py -o $COMBINETF2_OUTDIR/test_tensor.hdf5
 
       - name: make sparse tensor
         run: >-
-          scripts/ci/run_with_singularity.sh scripts/ci/setup_and_run_python.sh tests/make_tensor.py -o $WREMNANTS_OUTDIR/test_tensor_sparse.hdf5 --sparse
+          python tests/make_tensor.py -o $COMBINETF2_OUTDIR/test_tensor_sparse.hdf5 --sparse
 
 
   fitting:
-    # The type of runner that the job will run on
     runs-on: [self-hosted, linux, x64]
-    needs: make-tensor
+    needs: [setenv, make-tensor]
 
-    # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
       - env:
-          WREMNANTS_OUTDIR: ${{ needs.setenv.outputs.WREMNANTS_OUTDIR }}
+          COMBINETF2_OUTDIR: ${{ needs.setenv.outputs.COMBINETF2_OUTDIR }}
+          PYTHONPATH: ${{ needs.setenv.outputs.PYTHONPATH }}
         run: |
-          echo "WREMNANTS_OUTDIR=${WREMNANTS_OUTDIR}" >> $GITHUB_ENV
+          echo "COMBINETF2_OUTDIR=${COMBINETF2_OUTDIR}" >> $GITHUB_ENV
+          echo "PYTHONPATH=${PYTHONPATH}" >> $GITHUB_ENV
 
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v4
-
-      - name: setup environment variables
-        run: source setup.py
 
       - name: nominal fit
         run: >- 
-          scripts/ci/run_with_singularity.sh scripts/ci/setup_and_run_python.sh scripts/fit.py 
-          $WREMNANTS_OUTDIR/test_tensor.hdf5 -o $WREMNANTS_OUTDIR/fitresults.hdf5
-          -t -0 --binByBinStat -- --doImpacts --globalImpacts 
+          python scripts/fit.py 
+          $COMBINETF2_OUTDIR/test_tensor.hdf5 -o $COMBINETF2_OUTDIR/fitresults.hdf5
+          -t -0 --binByBinStat --doImpacts --globalImpacts --computeHistErrors --computeHistCov --computeHistImpacts 
           --saveHists --computeHistErrors --project ch1 a --project ch1 b 
 
       - name: sparse tensor fit 
         run: >- 
-          scripts/ci/run_with_singularity.sh scripts/ci/setup_and_run_python.sh scripts/fit.py 
-          $WREMNANTS_OUTDIR/test_tensor_sparse.hdf5  -o $WREMNANTS_OUTDIR/fitresults_sparse.hdf5
-          -t -0 --binByBinStat -- --doImpacts --globalImpacts 
+          python scripts/fit.py 
+          $COMBINETF2_OUTDIR/test_tensor_sparse.hdf5 -o $COMBINETF2_OUTDIR/fitresults_sparse.hdf5
+          -t -0 --binByBinStat --doImpacts --globalImpacts --computeVariations
           --saveHists --computeHistErrors --project ch1 a --project ch1 b 
 
       - name: pseudodata fit
         run: >- 
-          scripts/ci/run_with_singularity.sh scripts/ci/setup_and_run_python.sh scripts/fit.py 
-          $WREMNANTS_OUTDIR/test_tensor.hdf5 -o $WREMNANTS_OUTDIR/fitresults_pseudodata.hdf5
+          python scripts/fit.py 
+          $COMBINETF2_OUTDIR/test_tensor.hdf5 -o $COMBINETF2_OUTDIR/fitresults_pseudodata.hdf5
           --pseudoData original -t 0 --binByBinStat
 
       - name: chi2 fit
         run: >- 
-          scripts/ci/run_with_singularity.sh scripts/ci/setup_and_run_python.sh scripts/fit.py 
-          $WREMNANTS_OUTDIR/test_tensor.hdf5 -o $WREMNANTS_OUTDIR/fitresults_chi2.hdf5
+          python scripts/fit.py 
+          $COMBINETF2_OUTDIR/test_tensor.hdf5 -o $COMBINETF2_OUTDIR/fitresults_chi2.hdf5
           -t -0 --chisqFit --externalCovariance --doImpacts --globalImpacts 
           --saveHists --computeHistErrors --project ch1 a --project ch1 b 
 
 
   evaluation:
-    # The type of runner that the job will run on
     runs-on: [self-hosted, linux, x64]
-    needs: fitting
+    needs: [setenv, fitting]
 
-    # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
       - env:
-          WREMNANTS_OUTDIR: ${{ needs.setenv.outputs.WREMNANTS_OUTDIR }}
+          COMBINETF2_OUTDIR: ${{ needs.setenv.outputs.COMBINETF2_OUTDIR }}
+          PYTHONPATH: ${{ needs.setenv.outputs.PYTHONPATH }}
         run: |
-          echo "WREMNANTS_OUTDIR=${WREMNANTS_OUTDIR}" >> $GITHUB_ENV
+          echo "COMBINETF2_OUTDIR=${COMBINETF2_OUTDIR}" >> $GITHUB_ENV
+          echo "PYTHONPATH=${PYTHONPATH}" >> $GITHUB_ENV
 
       - uses: actions/checkout@v4
 
-      - name: setup environment variables
-        run: source setup.py
-
       - name: print impacts
-        run: scripts/ci/run_with_singularity.sh scripts/ci/setup_and_run_python.sh scripts/printImpacts.py $WREMNANTS_OUTDIR/fitresults.hdf5 -s
+        run: python scripts/printImpacts.py $COMBINETF2_OUTDIR/fitresults.hdf5 -s
 
       - name: print global impacts
-        run: scripts/ci/run_with_singularity.sh scripts/ci/setup_and_run_python.sh scripts/printImpacts.py $WREMNANTS_OUTDIR/fitresults.hdf5 -s --globalImpacts
+        run: python scripts/printImpacts.py $COMBINETF2_OUTDIR/fitresults.hdf5 -s --globalImpacts
 
       - name: print pulls & constraints
-        run: scripts/ci/run_with_singularity.sh scripts/ci/setup_and_run_python.sh scripts/printPullsAndConstraints.py $WREMNANTS_OUTDIR/fitresults.hdf5 
+        run: python scripts/printPullsAndConstraints.py $COMBINETF2_OUTDIR/fitresults.hdf5 
 
 
   copy-clean:
     runs-on: [self-hosted, linux, x64]
-    needs: evaluation
+    needs: [setenv, evaluation]
     if: always() 
     steps:
       - env:
-          WREMNANTS_OUTDIR: ${{ needs.setenv.outputs.WREMNANTS_OUTDIR }}
+          COMBINETF2_OUTDIR: ${{ needs.setenv.outputs.COMBINETF2_OUTDIR }}
         run: |
-          echo "WREMNANTS_OUTDIR=${WREMNANTS_OUTDIR}" >> $GITHUB_ENV
+          echo "COMBINETF2_OUTDIR=${COMBINETF2_OUTDIR}" >> $GITHUB_ENV
 
       - name: clean
         run: |
-          echo "Removing temp directory $WREMNANTS_OUTDIR"
-          rm -r $WREMNANTS_OUTDIR
+          echo "Removing temp directory $COMBINETF2_OUTDIR"
+          rm -r $COMBINETF2_OUTDIR

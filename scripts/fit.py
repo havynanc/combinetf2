@@ -269,11 +269,12 @@ if args.saveHists:
 
             projection["hist_prefit_variations"] = hist_prefit_variations
 
-        fitter.cov.assign(cov_prefit)
+        fitter.cov = tf.constant(cov_prefit)
 
 
 if args.externalPostfit is not None:
     # load results from external fit and set postfit value and covariance elements for common parameters
+    dxdtheta0_ext = None
     with h5py.File(args.externalPostfit, "r") as fext:
         if "x" in fext.keys():
             # fitresult from combinetf 1
@@ -288,11 +289,11 @@ if args.externalPostfit is not None:
             x_ext = h_parms_ext.values()
             parms_ext = np.array(h_parms_ext.axes["parms"])
             cov_ext = h5results_ext["cov"].get().values()
-            dxdtheta0_ext = h5results_ext["dxdtheta0"].get().values()
+            if "dxdtheta0" in h5results_ext.keys():
+                dxdtheta0_ext = h5results_ext["dxdtheta0"].get().values()
 
     xvals = fitter.x.numpy()
     covval = fitter.cov.numpy()
-    dxdtheta0 = fitter.dxdtheta0.numpy()
     parms = fitter.parms.astype(str)
 
     # Find common elements with their matching indices
@@ -302,22 +303,29 @@ if args.externalPostfit is not None:
     xvals[idxs] = x_ext[idxs_ext]
     covval[np.ix_(idxs, idxs)] = cov_ext[np.ix_(idxs_ext, idxs_ext)]
 
-    # systematic indices, exclude pois and shift by npois (assuming pois come first)
-    npoi = len(parms) - dxdtheta0.shape[1]
-    npoi_ext = len(parms_ext) - dxdtheta0_ext.shape[1]
-
-    idxs_systs = idxs[idxs >= npoi] - npoi
-    idxs_systs_ext = idxs_ext[idxs_ext >= npoi_ext] - npoi_ext
-
-    dxdtheta0[np.ix_(idxs, idxs_systs)] = dxdtheta0_ext[
-        np.ix_(idxs_ext, idxs_systs_ext)
-    ]
-
     fitter.x.assign(xvals)
     fitter.cov = tf.constant(covval)
-    fitter.dxdtheta0 = tf.constant(dxdtheta0)
+
+    if dxdtheta0_ext is not None:
+        # take global impacts dx/dtheta0 from external postfit
+        dxdtheta0 = fitter.dxdtheta0.numpy()
+
+        # systematic indices, exclude pois and shift by npois (assuming pois come first)
+        npoi = len(parms) - dxdtheta0.shape[1]
+        npoi_ext = len(parms_ext) - dxdtheta0_ext.shape[1]
+
+        idxs_systs = idxs[idxs >= npoi] - npoi
+        idxs_systs_ext = idxs_ext[idxs_ext >= npoi_ext] - npoi_ext
+
+        dxdtheta0[np.ix_(idxs, idxs_systs)] = dxdtheta0_ext[
+            np.ix_(idxs_ext, idxs_systs_ext)
+        ]
+        fitter.dxdtheta0 = tf.constant(dxdtheta0)
+
 else:
     dofit = args.toys >= 0
+
+    fitter.profile = True
 
     if dofit:
         fitter.minimize()
@@ -325,8 +333,6 @@ else:
     val, grad, hess = fitter.loss_val_grad_hess()
     fitter.hess = hess
     fitter.cov = tf.linalg.inv(hess)
-
-    fitter.profile = True
 
     if (args.doImpacts and args.globalImpacts) or (
         args.saveHists
