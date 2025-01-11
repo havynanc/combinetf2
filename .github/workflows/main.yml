@@ -58,6 +58,7 @@ jobs:
     outputs:
       COMBINETF2_OUTDIR: ${{steps.export.outputs.COMBINETF2_OUTDIR}}
       WEB_DIR: ${{steps.export.outputs.WEB_DIR}}
+      PLOT_DIR: ${{steps.export.outputs.PLOT_DIR}}
       PYTHONPATH: ${{steps.export.outputs.PYTHONPATH}}
 
     steps:
@@ -71,6 +72,15 @@ jobs:
           echo "xrdfs root://eosuser.cern.ch// ls $EOS_DIR"
           xrdfs root://eosuser.cern.ch// ls $EOS_DIR
 
+      - name: setup unscheduled
+        if: github.event_name != 'schedule'
+        run: echo PLOT_DIR=PR$(echo $GITHUB_REF | awk 'BEGIN { FS = "/" } ; { print $3 }')/$(date +%Y_%m_%d) >> $GITHUB_ENV
+
+      - name: setup reference run
+        if: github.event_name == 'schedule'
+        run: |
+          echo PLOT_DIR=ReferenceRuns/$(date +%Y_%m_%d)_$(git rev-parse --short "$GITHUB_SHA") >> $GITHUB_ENV
+
       - name: setup outdir
         run: echo "COMBINETF2_OUTDIR=/tmp/${USER}/$(uuidgen)" >> $GITHUB_ENV
 
@@ -80,13 +90,14 @@ jobs:
       - name: setup webdir
         run: echo "WEB_DIR=$COMBINETF2_OUTDIR/$LOCAL_WEB_DIR" >> $GITHUB_ENV
 
-      - name: create webdir
-        run: mkdir -p ${{env.WEB_DIR}}
+      - name: create plot dir
+        run: mkdir -p $WEB_DIR/$PLOT_DIR
 
       - id: export
         run: |
           echo "COMBINETF2_OUTDIR=$COMBINETF2_OUTDIR" >> $GITHUB_OUTPUT
           echo "WEB_DIR=$WEB_DIR" >> $GITHUB_OUTPUT
+          echo "PLOT_DIR=$PLOT_DIR" >> $GITHUB_OUTPUT
           echo "PYTHONPATH=$PYTHONPATH" >> $GITHUB_OUTPUT
 
   make-tensor:
@@ -144,7 +155,7 @@ jobs:
         run: >- 
           python scripts/fit.py 
           $COMBINETF2_OUTDIR/test_tensor.hdf5 -o $COMBINETF2_OUTDIR/fitresults_pseudodata.hdf5
-          --pseudoData original -t 0 --binByBinStat
+          --pseudoData original -t 0 --binByBinStat --doImpacts --globalImpacts
 
       - name: chi2 fit
         run: >- 
@@ -163,10 +174,12 @@ jobs:
           COMBINETF2_OUTDIR: ${{ needs.setenv.outputs.COMBINETF2_OUTDIR }}
           PYTHONPATH: ${{ needs.setenv.outputs.PYTHONPATH }}
           WEB_DIR: ${{ needs.setenv.outputs.WEB_DIR }}
+          PLOT_DIR: ${{ needs.setenv.outputs.PLOT_DIR }}
         run: |
           echo "COMBINETF2_OUTDIR=${COMBINETF2_OUTDIR}" >> $GITHUB_ENV
           echo "PYTHONPATH=${PYTHONPATH}" >> $GITHUB_ENV
           echo "WEB_DIR=${WEB_DIR}" >> $GITHUB_ENV
+          echo "PLOT_DIR=${PLOT_DIR}" >> $GITHUB_ENV
 
       - uses: actions/checkout@v4
 
@@ -181,18 +194,17 @@ jobs:
 
       - name: plot impacts
         run: >-
-          python scripts/pullsAndImpacts.py $COMBINETF2_OUTDIR/fitresults.hdf5 -o $WEB_DIR
+          python scripts/pullsAndImpacts.py $COMBINETF2_OUTDIR/fitresults.hdf5 -o $WEB_DIR/$PLOT_DIR
           --otherExtensions pdf png  -n 50
-          --groups Total slopes background_normalization binByBinStat stat 
-          --title Title --subtitle Subtitle
+          --subtitle Preliminary --groups Total slopes background_normalization binByBinStat stat 
 
       - name: plot global impacts
         run: >-
-          python scripts/pullsAndImpacts.py $COMBINETF2_OUTDIR/fitresults.hdf5 -o $WEB_DIR
-          -r $COMBINETF2_OUTDIR/fitresults_chi2.hdf5 --refName "Pseudo data"
+          python scripts/pullsAndImpacts.py $COMBINETF2_OUTDIR/fitresults.hdf5 -o $WEB_DIR/$PLOT_DIR
+          -r $COMBINETF2_OUTDIR/fitresults_pseudodata.hdf5 --refName "Pseudo data"
           --otherExtensions pdf png  -n 50 --oneSidedImpacts --globalImpacts --diffPullAsym --showNumbers
           --groups Total slopes background_normalization binByBinStat stat 
-          --title Title --subtitle Subtitle --postfix data_vs_pseudodata
+          --subtitle Preliminary --postfix data_vs_pseudodata
 
 
   copy-clean:

@@ -617,13 +617,6 @@ def parseArgs():
         "--subtitle",
         default=None,
         type=str,
-        choices=[
-            "",
-            "Preliminary",
-            "Work in progress",
-            "Internal",
-            "Supplementary",
-        ],
         help="Subtitle to be printed after title",
     )
     parser.add_argument(
