@@ -172,11 +172,23 @@ class TensorWriter:
         profile=True,
         groups=None,
     ):
-        norm = self.dict_norm[channel][process]
-        syst = norm * uncertainty
+        if not isinstance(process, (list, tuple, np.ndarray)):
+            process = [process]
 
-        logk = self.get_logk(syst, norm)
-        self.book_logk_avg(logk, channel, process, name)
+        if not isinstance(uncertainty, (list, tuple, np.ndarray)):
+            uncertainty = [uncertainty]
+
+        if len(uncertainty) != 1 and len(process) != len(uncertainty):
+            raise RuntimeError(
+                f"uncertainty must be either a scalar or list with the same length as the list of processes but len(process) = {len(process)} and len(uncertainty) = {len(uncertainty)}"
+            )
+
+        for p, u in zip(process, uncertainty):
+            norm = self.dict_norm[channel][p]
+            syst = norm * u
+            logk = self.get_logk(syst, norm)
+            self.book_logk_avg(logk, channel, p, name)
+
         self.book_systematic(name, groups=groups, profile=profile)
 
     def add_systematic(
@@ -205,53 +217,49 @@ class TensorWriter:
             syst_up = self.get_flat_values(h[0])
             syst_down = self.get_flat_values(h[1])
 
-            if symmetrize is not None:
+            logkup_proc = self.get_logk(syst_up, norm, kfactor)
+            logkdown_proc = -self.get_logk(syst_down, norm, kfactor)
 
-                logkup_proc = self.get_logk(syst_up, norm, kfactor)
-                logkdown_proc = -self.get_logk(syst_down, norm, kfactor)
+            if symmetrize == "conservative":
+                # symmetrize by largest magnitude of up and down variations
+                logkavg_proc = np.where(
+                    np.abs(logkup_proc) > np.abs(logkdown_proc),
+                    logkup_proc,
+                    logkdown_proc,
+                )
+            elif symmetrize == "average":
+                # symmetrize by average of up and down variations
+                logkavg_proc = 0.5 * (logkup_proc + logkdown_proc)
+            elif symmetrize in ["linear", "quadratic"]:
+                # "linear" corresponds to a piecewise linear dependence of logk on theta
+                # while "quadratic" corresponds to a quadratic dependence and leads
+                # to a large variance
+                diff_fact = np.sqrt(3.0) if symmetrize == "quadratic" else 1.0
 
-                if symmetrize == "conservative":
-                    # symmetrize by largest magnitude of up and down variations
-                    logkavg_proc = np.where(
-                        np.abs(logkup_proc) > np.abs(logkdown_proc),
-                        logkup_proc,
-                        logkdown_proc,
-                    )
-                elif symmetrize == "average":
-                    # symmetrize by average of up and down variations
-                    logkavg_proc = 0.5 * (logkup_proc + logkdown_proc)
-                elif symmetrize in ["linear", "quadratic"]:
-                    # "linear" corresponds to a piecewise linear dependence of logk on theta
-                    # while "quadratic" corresponds to a quadratic dependence and leads
-                    # to a large variance
-                    diff_fact = np.sqrt(3.0) if symmetrize == "quadratic" else 1.0
+                # split asymmetric variation into two symmetric variations
+                logkavg_proc = 0.5 * (logkup_proc + logkdown_proc)
+                logkdiffavg_proc = 0.5 * diff_fact * (logkup_proc - logkdown_proc)
 
-                    # split asymmetric variation into two symmetric variations
-                    logkavg_proc = 0.5 * (logkup_proc + logkdown_proc)
-                    logkdiffavg_proc = 0.5 * diff_fact * (logkup_proc - logkdown_proc)
+                var_name_out = name + "SymAvg"
+                var_name_out_diff = name + "SymDiff"
 
-                    var_name_out = name + "SymAvg"
-                    var_name_out_diff = name + "SymDiff"
-
-                    # special case, book the extra systematic
-                    self.book_logk_avg(
-                        logkdiffavg_proc, channel, process, var_name_out_diff
-                    )
-                    self.book_systematic(var_name_out_diff, **kargs)
+                # special case, book the extra systematic
+                self.book_logk_avg(
+                    logkdiffavg_proc, channel, process, var_name_out_diff
+                )
+                self.book_systematic(var_name_out_diff, **kargs)
             else:
                 self.symmetric_tensor = False
-                logkup_proc = self.get_logk(syst_up, norm, kfactor)
-                logkdown_proc = -self.get_logk(syst_down, norm, kfactor)
 
                 logkavg_proc = 0.5 * (logkup_proc + logkdown_proc)
                 logkhalfdiff_proc = 0.5 * (logkup_proc - logkdown_proc)
 
-                logkup_proc = None
-                logkdown_proc = None
-
                 self.book_logk_halfdiff(
                     logkhalfdiff_proc, channel, process, var_name_out
                 )
+            logkup_proc = None
+            logkdown_proc = None
+
         elif mirror:
             self._check_hist_and_channel(h, channel, add=False)
             syst = self.get_flat_values(h)
