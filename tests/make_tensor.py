@@ -99,13 +99,13 @@ h1_bkg_2.fill(x)
 
 # pseudodata as exact composition of signal and background
 h1_pseudo.values()[...] = (
-    h1_pseudo.values() + h1_bkg.values()[...] + h1_bkg_2.values()[...]
+    h1_sig.values() + h1_bkg.values()[...] + h1_bkg_2.values()[...]
 )
-h2_pseudo.values()[...] = h2_pseudo.values() + h2_bkg.values()[...]
+h2_pseudo.values()[...] = h2_sig.values() + h2_bkg.values()[...]
 h1_pseudo.variances()[...] = (
-    h1_pseudo.variances() + h1_bkg.variances()[...] + h1_bkg_2.variances()[...]
+    h1_sig.variances() + h1_bkg.variances()[...] + h1_bkg_2.variances()[...]
 )
-h2_pseudo.variances()[...] = h2_pseudo.variances() + h2_bkg.variances()[...]
+h2_pseudo.variances()[...] = h2_sig.variances() + h2_bkg.variances()[...]
 
 # scale signal down signal by 50%
 h1_sig.values()[...] = h1_sig.values() * 0.5

@@ -159,7 +159,7 @@ def plotImpacts(
                 "{:0"
                 + str(
                     int(
-                        np.log10(max(df["absimpact"]))
+                        max(0, np.log10(max(df["absimpact"])))
                         if max(df[f"absimpact_ref"]) > 0
                         else 0
                     )
@@ -178,7 +178,7 @@ def plotImpacts(
                     "{:0"
                     + str(
                         int(
-                            np.log10(max(df[f"absimpact_ref"]))
+                            max(0, np.log10(max(df[f"absimpact_ref"])))
                             if max(df[f"absimpact_ref"]) > 0
                             else 0
                         )

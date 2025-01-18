@@ -206,6 +206,8 @@ jobs:
           --groups Total slopes background_normalization binByBinStat stat 
           --subtitle Preliminary --postfix data_vs_pseudodata
 
+      - name: copy index php file
+        run: cp data/Templates/index_mit.php $WEB_DIR/$PLOT_DIR/index.php
 
   copy-clean:
     runs-on: [self-hosted, linux, x64]
