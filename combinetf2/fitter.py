@@ -5,7 +5,7 @@ import tensorflow as tf
 
 
 class Fitter:
-    def __init__(self, indata, workspace, options):
+    def __init__(self, indata, options):
         self.indata = indata
         self.binByBinStat = options.binByBinStat
         self.normalize = options.normalize
@@ -51,14 +51,14 @@ class Fitter:
         self.allowNegativePOI = options.allowNegativePOI
 
         if self.allowNegativePOI:
-            xpoidefault = poidefault
+            self.xpoidefault = poidefault
         else:
-            xpoidefault = tf.sqrt(poidefault)
+            self.xpoidefault = tf.sqrt(poidefault)
 
         # tf variable containing all fit parameters
         thetadefault = tf.zeros([self.indata.nsyst], dtype=self.indata.dtype)
         if self.npoi > 0:
-            xdefault = tf.concat([xpoidefault, thetadefault], axis=0)
+            xdefault = tf.concat([self.xpoidefault, thetadefault], axis=0)
         else:
             xdefault = thetadefault
 
@@ -89,13 +89,15 @@ class Fitter:
         )
 
         # global observables for mc stat uncertainty
-        self.beta0 = tf.ones_like(self.indata.data_obs)
+        self.beta0 = tf.Variable(
+            tf.ones_like(self.indata.data_obs), trainable=False, name="beta0"
+        )
 
         nexpfullcentral = self.expected_events()
         self.nexpnom = tf.Variable(nexpfullcentral, trainable=False, name="nexpnom")
 
         # parameter covariance matrix
-        self.cov = self.prefit_covariance()
+        self.cov = tf.Variable(self.prefit_covariance(), trainable=False, name="cov")
         self.hess = tf.zeros(
             [self.npoi + self.indata.nsyst, self.npoi + self.indata.nsyst],
             dtype=self.indata.dtype,
@@ -112,9 +114,17 @@ class Fitter:
             [self.npoi + self.indata.nsyst, *self.beta0.shape], dtype=self.indata.dtype
         )
 
-        # i/o attributes
-        self.workspace = workspace
-        self.hist = self.workspace.hist
+    def hist(self, name, axes, values, variances=None, label=None):
+        if not isinstance(axes, (list, tuple, np.ndarray)):
+            axes = [axes]
+        storage_type = (
+            hist.storage.Weight() if variances is not None else hist.storage.Double()
+        )
+        h = hist.Hist(*axes, storage=storage_type, name=name, label=label)
+        h.values()[...] = memoryview(tf.reshape(values, h.shape))
+        if variances is not None:
+            h.variances()[...] = memoryview(tf.reshape(variances, h.shape))
+        return h
 
     def prefit_covariance(self, unconstrained_err=0.0):
         # free parameters are taken to have zero uncertainty for the purposes of prefit uncertainties
@@ -139,6 +149,24 @@ class Fitter:
 
         return val, jac
 
+    def theta0defaultassign(self):
+        self.theta0.assign(tf.zeros([self.indata.nsyst], dtype=self.theta0.dtype))
+
+    def xdefaultassign(self):
+        if self.npoi == 0:
+            self.x.assign(self.theta0)
+        else:
+            self.x.assign(tf.concat([self.xpoidefault, self.theta0], axis=0))
+
+    def beta0defaultassign(self):
+        self.beta0.assign(tf.ones_like(self.indata.data_obs, dtype=self.beta0.dtype))
+
+    def defaultassign(self):
+        self.cov.assign(self.prefit_covariance())
+        self.theta0defaultassign()
+        self.beta0defaultassign()
+        self.xdefaultassign()
+
     def bayesassign(self):
         if self.npoi > 0:
             raise NotImplementedError(
@@ -152,6 +180,52 @@ class Fitter:
         self.theta0.assign(
             tf.random.normal(shape=self.theta0.shape, dtype=self.theta0.dtype)
         )
+
+    def toyassign(self, bayesian=False, bootstrap_data=False):
+        if bayesian:
+            # randomize actual values
+            self.bayesassign()
+        else:
+            # randomize nuisance constraint minima
+            self.frequentistassign()
+
+        if self.binByBinStat:
+            # TODO properly implement randomization of constraint parameters associated with bin-by-bin stat nuisances for frequentist toys,
+            # currently bin-by-bin stat fluctuations are always handled in a bayesian way in toys
+            # this also means bin-by-bin stat fluctuations are not consistently propagated for bootstrap toys from data
+            self.beta0.assign(
+                tf.random.gamma(
+                    shape=[],
+                    alpha=self.indata.kstat + 1.0,
+                    beta=self.indata.kstat,
+                    dtype=self.beta0.dtype,
+                )
+            )
+
+        if bootstrap_data:
+            # randomize from observed data
+            if self.binByBinStat and not bayesian:
+                raise Exception(
+                    "Since bin-by-bin statistical uncertainties are always propagated in a bayesian manner, \
+                    they cannot currently be consistently propagated for bootstrap toys"
+                )
+            self.nobs.assign(
+                tf.random.poisson(
+                    lam=self.indata.data_obs, shape=[], dtype=self.nobs.dtype
+                )
+            )
+        else:
+            # randomize from expectation
+            self.nobs.assign(
+                tf.random.poisson(
+                    lam=self.expected_events(), shape=[], dtype=self.nobs.dtype
+                )
+            )
+
+        # assign start values for nuisance parameters to constraint minima
+        self.xdefaultassign()
+        # set likelihood offset
+        self.nexpnom.assign(self.expected_events())
 
     def parms_hist(self, hist_name="parms"):
         parms = list(self.parms.astype(str))
@@ -1209,20 +1283,20 @@ class Fitter:
         def scipy_loss(xval):
             self.x.assign(xval)
             val, grad = self.loss_val_grad()
-            print("scipy_loss", val)
+            # print("scipy_loss", val)
             return val.numpy(), grad.numpy()
 
         def scipy_hessp(xval, pval):
             self.x.assign(xval)
             p = tf.convert_to_tensor(pval)
             val, grad, hessp = self.loss_val_grad_hessp(p)
-            print("scipy_hessp", val)
+            # print("scipy_hessp", val)
             return hessp.numpy()
 
         def scipy_hess(xval):
             self.x.assign(xval)
             val, grad, hess = self.loss_val_grad_hess()
-            print("scipy_hess", val)
+            # print("scipy_hess", val)
             return hess.numpy()
 
         xval = self.x.numpy()
