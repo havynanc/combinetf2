@@ -1370,12 +1370,6 @@ class Fitter:
             # print("scipy_hessp", val)
             return hessp.numpy()
 
-        def scipy_hess(xval):
-            self.x.assign(xval)
-            val, grad, hess = self.loss_val_grad_hess()
-            # print("scipy_hess", val)
-            return hess.numpy()
-
         xval = self.x.numpy()
 
         res = scipy.optimize.minimize(
@@ -1393,19 +1387,6 @@ class Fitter:
     def nll_scan(self, param, scan_range, scan_points, use_prefit=False):
         # make a likelihood scan for a single parameter
         # assuming the likelihood is minimized
-
-        def scipy_loss(xval):
-            self.x.assign(xval)
-            val, grad = self.loss_val_grad()
-            return val.numpy(), grad.numpy()
-
-        def scipy_hessp(xval, pval):
-            self.x.assign(xval)
-            p = tf.convert_to_tensor(pval)
-            val, grad, hessp = self.loss_val_grad_hessp(p)
-            if np.allclose(hessp.numpy(), 0, atol=1e-8):
-                return np.zeros_like(hessp.numpy())
-            return hessp.numpy()
 
         idx = np.where(self.parms.astype(str) == param)[0][0]
 
@@ -1425,7 +1406,6 @@ class Fitter:
         # set central point
         nlls[nscans // 2] = 0
         scan_vals[nscans // 2] = xval[idx].numpy()
-
         # scan positive side and negative side independently to profit from previous step
         for sign in [-1, 1]:
             param_scan_values = xval[idx].numpy() + sign * param_offsets
@@ -1433,19 +1413,32 @@ class Fitter:
                 if i == 0:
                     continue
 
-                xval_init = self.x.numpy()  # initial value from previous iteration
-                xval_init[idx] = ixval
+                self.x.assign(tf.tensor_scatter_nd_update(self.x, [[idx]], [ixval]))
+
+                def scipy_loss(xval):
+                    self.x.assign(xval)
+                    val, grad = self.loss_val_grad()
+                    grad = grad.numpy()
+                    grad[idx] = 0  # Zero out gradient for the frozen parameter
+                    return val.numpy(), grad
+
+                def scipy_hessp(xval, pval):
+                    self.x.assign(xval)
+                    pval[idx] = (
+                        0  # Ensure the perturbation does not affect frozen parameter
+                    )
+                    p = tf.convert_to_tensor(pval)
+                    val, grad, hessp = self.loss_val_grad_hessp(p)
+                    hessp = hessp.numpy()
+                    hessp[idx] = (
+                        0  # Zero out Hessian-vector product at the frozen index
+                    )
+                    return hessp
 
                 res = scipy.optimize.minimize(
                     scipy_loss,
-                    xval_init,
-                    constraints={
-                        "type": "eq",
-                        "fun": lambda x: x[idx] - ixval,
-                        "jac": lambda x: np.eye(len(x))[idx],
-                        "hess": scipy.optimize.SR1(),  # TODO: use exact hessian or hessian vector product
-                    },
-                    method="trust-constr",
+                    self.x,
+                    method="trust-krylov",
                     jac=True,
                     hessp=scipy_hessp,
                 )
@@ -1461,19 +1454,6 @@ class Fitter:
         return scan_vals, nlls
 
     def nll_scan2D(self, param_tuple, scan_range, scan_points, use_prefit=False):
-
-        def scipy_loss(xval):
-            self.x.assign(xval)
-            val, grad = self.loss_val_grad()
-            # print("scipy_loss", val)
-            return val.numpy(), grad.numpy()
-
-        def scipy_hessp(xval, pval):
-            self.x.assign(xval)
-            p = tf.convert_to_tensor(pval)
-            val, grad, hessp = self.loss_val_grad_hessp(p)
-            # print("scipy_hessp", val)
-            return hessp.numpy()
 
         idx0 = np.where(self.parms.astype(str) == param_tuple[0])[0][0]
         idx1 = np.where(self.parms.astype(str) == param_tuple[1])[0][0]
@@ -1495,26 +1475,42 @@ class Fitter:
 
             for iy, iyval in enumerate(y_scans):
                 print(f"Scan point ({ix},{iy})")
+
                 xval_init[idx1] = iyval
+
+                self.x.assign(
+                    tf.tensor_scatter_nd_update(
+                        self.x, [[idx0], [idx1]], [ixval, iyval]
+                    )
+                )
+
+                def scipy_loss(xval):
+                    self.x.assign(xval)
+                    val, grad = self.loss_val_grad()
+                    grad = grad.numpy()
+                    grad[idx0] = 0
+                    grad[idx1] = 0
+                    return val.numpy(), grad
+
+                def scipy_hessp(xval, pval):
+                    self.x.assign(xval)
+                    pval[idx0] = 0
+                    pval[idx1] = 0
+                    p = tf.convert_to_tensor(pval)
+                    val, grad, hessp = self.loss_val_grad_hessp(p)
+                    hessp = hessp.numpy()
+                    hessp[idx0] = 0
+                    hessp[idx1] = 0
+
+                    if np.allclose(hessp, 0, atol=1e-8):
+                        return np.zeros_like(hessp)
+
+                    return hessp
 
                 res = scipy.optimize.minimize(
                     scipy_loss,
                     xval_init,
-                    constraints=[
-                        {
-                            "type": "eq",
-                            "fun": lambda x: x[idx0] - ixval,
-                            "jac": lambda x: np.eye(len(x))[idx0],
-                            "hess": scipy.optimize.SR1(),  # TODO: use exact hessian or hessian vector product
-                        },
-                        {
-                            "type": "eq",
-                            "fun": lambda x: x[idx1] - iyval,
-                            "jac": lambda x: np.eye(len(x))[idx1],
-                            "hess": scipy.optimize.SR1(),  # TODO: use exact hessian or hessian vector product
-                        },
-                    ],
-                    method="trust-constr",
+                    method="trust-krylov",
                     jac=True,
                     hessp=scipy_hessp,
                 )
@@ -1526,27 +1522,26 @@ class Fitter:
         return x_scans, y_scans, nlls
 
     def contour_scan(self, param, nll_min, cl=1):
-        def scipy_loss(xval):
-            self.x.assign(xval)
-            val, grad = self.loss_val_grad()
-            return val.numpy()
 
         def scipy_grad(xval):
             self.x.assign(xval)
             val, grad = self.loss_val_grad()
             return grad.numpy()
 
-        idx = np.where(self.parms.astype(str) == param)[0][0]
-        xval = tf.identity(self.x)
+        # def scipy_hessp(xval, pval):
+        #     self.x.assign(xval)
+        #     p = tf.convert_to_tensor(pval)
+        #     val, grad, hessp = self.loss_val_grad_hessp(p)
+        #     # print("scipy_hessp", val)
+        #     return hessp.numpy()
 
-        # Constraint function and its derivatives
-        delta_nll = 0.5 * cl**2
-
-        def constraint(params):
-            return scipy_loss(params) - nll_min - delta_nll
+        def scipy_loss(xval):
+            self.x.assign(xval)
+            val = self.loss_val()
+            return val.numpy() - nll_min - 0.5 * cl**2
 
         nlc = scipy.optimize.NonlinearConstraint(
-            fun=constraint,
+            fun=scipy_loss,
             lb=0,
             ub=0,
             jac=scipy_grad,
@@ -1554,6 +1549,9 @@ class Fitter:
         )
 
         # initial guess from covariance
+        idx = np.where(self.parms.astype(str) == param)[0][0]
+        xval = tf.identity(self.x)
+
         xup = xval[idx] + self.cov[idx, idx] ** 0.5
         xdn = xval[idx] - self.cov[idx, idx] ** 0.5
 
@@ -1622,7 +1620,7 @@ class Fitter:
 
         nlc = scipy.optimize.NonlinearConstraint(
             fun=constraint,
-            lb=0,
+            lb=-np.inf,
             ub=0,
             jac=scipy_grad,
             hess=scipy.optimize.SR1(),

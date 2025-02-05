@@ -556,13 +556,13 @@ def parseArgs():
     parser.add_argument(
         "inputFile",
         type=str,
-        help="fitresults output ROOT/hdf5 file from combinetf",
+        help="fitresults output hdf5 file from fit",
     )
     parser.add_argument(
         "-r",
         "--referenceFile",
         type=str,
-        help="fitresults output ROOT/hdf5 file from combinetf for reference",
+        help="fitresults output hdf5 file from fit for reference",
     )
     parser.add_argument(
         "--refName",

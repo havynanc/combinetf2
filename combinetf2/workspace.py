@@ -10,6 +10,8 @@ def make_pickle_proxies(obj):
         for k, v in obj.items():
             obj[k] = make_pickle_proxies(v)
         return obj
+    elif isinstance(obj, (list, tuple)):
+        return type(obj)([make_pickle_proxies(o) for o in obj])
     elif isinstance(obj, hist.Hist):
         return narf.ioutils.H5PickleProxy(obj)
     else:
@@ -50,7 +52,7 @@ class Workspace:
 
         if postfix is not None:
             parts = output.rsplit(".", 1)
-            output = f"{parts[0]}_{postfix}.{parts[1]}"
+            output = f"{parts[0]}{postfix}.{parts[1]}"
 
         print(f"Write output file {output}")
         with h5py.File(output, "w") as fout:

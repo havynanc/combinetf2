@@ -76,7 +76,13 @@ def parseArgs():
 
 
 def plot_scan(
-    h_scan, h_contours=None, param_value=None, param="x", title=None, subtitle=None
+    h_scan,
+    h_contours=None,
+    param_value=0,
+    param_variance=1,
+    param="x",
+    title=None,
+    subtitle=None,
 ):
 
     x = np.array(h_scan.axes["scan"]).astype(float)
@@ -88,10 +94,23 @@ def plot_scan(
     ax.axhline(y=1, color="gray", linestyle="--", alpha=0.5)
     ax.axhline(y=4, color="gray", linestyle="--", alpha=0.5)
 
+    parabola_vals = param_value + np.linspace(
+        -3 * param_variance**0.5, 3 * param_variance**0.5, 100
+    )
+    parabola_nlls = 1 / param_variance * (parabola_vals - param_value) ** 2
+    ax.plot(
+        parabola_vals,
+        parabola_nlls,
+        marker="",
+        markerfacecolor="none",
+        color="red",
+        linestyle="-",
+        label="Hessian",
+    )
+
     ax.plot(x, y, marker="x", color="blue", label="Likelihood scan")
 
     if h_contours is not None:
-
         for i, cl in enumerate(h_contours.axes["confidence_level"]):
             x = h_contours[{"confidence_level": cl}].values()[::-1] + param_value
             y = np.full(len(x), float(cl) ** 2)
@@ -137,22 +156,30 @@ if __name__ == "__main__":
     meta = {
         "combinetf2": meta["meta_info"],
     }
-    scans = [key for key in fitresult.keys() if key.startswith("nll_scan_")]
 
-    h_contour = fitresult["contour_scans"].get()
     h_params = fitresult["parms"].get()
 
-    parms = h_contour.axes["parms"] if len(args.params) == 0 else args.params
+    h_contour = None
+    if "contour_scans" in fitresult.keys():
+        h_contour = fitresult["contour_scans"].get()
+
+    parms = h_params.axes["parms"] if len(args.params) == 0 else args.params
 
     for param in parms:
-        param_value = h_params[{"parms": param}].value
+        p = h_params[{"parms": param}]
+        param_value = p.value
+        param_variance = p.variance
         h_scan = fitresult[f"nll_scan_{param}"].get()
-        h_contour_param = h_contour[{"parms": param, "impacts": param}]
+
+        h_contour_param = None
+        if h_contour is not None:
+            h_contour_param = h_contour[{"parms": param, "impacts": param}]
 
         fig = plot_scan(
             h_scan,
             h_contour_param,
             param_value=param_value,
+            param_variance=param_variance,
             param=param,
             title=args.title,
             subtitle=args.subtitle,

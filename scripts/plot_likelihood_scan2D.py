@@ -4,6 +4,7 @@ import os
 import matplotlib.pyplot as plt
 import numpy as np
 from narf import ioutils
+from scipy.stats import chi2
 
 from combinetf2 import io_tools
 
@@ -86,17 +87,12 @@ def ellipse(cov, mu0, mu1, cl, cartesian_angle=False):
 
     theta = np.arctan2(l1 - a, b)
 
+    sl1 = np.sqrt(cl * l1)
+    sl2 = np.sqrt(cl * l2)
+
     def func(t):
-        x = (
-            mu0
-            + np.sqrt(l1) * np.cos(theta) * np.cos(t)
-            - np.sqrt(l2) * np.sin(theta) * np.sin(t)
-        )
-        y = (
-            mu1
-            + np.sqrt(l1) * np.sin(theta) * np.cos(t)
-            + np.sqrt(l2) * np.cos(theta) * np.sin(t)
-        )
+        x = mu0 + sl1 * np.cos(theta) * np.cos(t) - sl2 * np.sin(theta) * np.sin(t)
+        y = mu1 + sl1 * np.sin(theta) * np.cos(t) + sl2 * np.cos(theta) * np.sin(t)
         return x, y
 
     return func
@@ -111,7 +107,8 @@ def plot_scan(
     xlabel="x",
     ylabel="y",
     confidence_levels=[
-        1.0,
+        0.68,
+        0.95,
     ],
     n_points=100,
     title=None,
@@ -121,6 +118,10 @@ def plot_scan(
     # Parameterize ellipse
     t = np.linspace(0, 2 * np.pi, n_points)
 
+    # Compute confidence levels dynamically
+    dof = 2  # Degrees of freedom for a 2D likelihood scan
+    levels = chi2.ppf(confidence_levels, df=dof)
+
     if h_scan is not None:
         right = 0.97
     else:
@@ -129,16 +130,24 @@ def plot_scan(
     fig, ax = plt.subplots(figsize=(6, 4))
     fig.subplots_adjust(left=0.16, bottom=0.14, right=right, top=0.94)
 
-    if h_scan is not None:
-        x_scan = np.array(h_scan.axes["scan_x"]).astype(float)
-        y_scan = np.array(h_scan.axes["scan_y"]).astype(float)
-        nll_values = h_scan.values()
-        plt.pcolormesh(x_scan, y_scan, 2 * nll_values, shading="auto", cmap="plasma")
-        plt.colorbar(label=r"$-2\,\Delta \log L$")
+    # Plot mean point
+    ax.scatter(px, py, color="red", marker="x", label="Best fit")
 
-    for cl in confidence_levels:
+    for i, cl in enumerate(levels):
         xy = ellipse(cov, px, py, cl)(t)
-        ax.plot(xy[0], xy[1], label=f"{cl}σ")
+
+        label_contour = None
+        label_hess = None
+        if i == 0:
+            label_contour = "Contour scan"
+            label_hess = "Hessian"
+            linestyle = "-"
+        if i == 1:
+            linestyle = "--"
+
+        ax.plot(
+            xy[0], xy[1], color="red", linestyle=linestyle, label=label_hess
+        )  # f"{cl}σ")
 
         if h_contour is not None and str(cl) in h_contour.axes["confidence_level"]:
             x_contour = h_contour[{"confidence_level": str(cl), "params": 0}].values()
@@ -149,11 +158,39 @@ def plot_scan(
                 marker="o",
                 markerfacecolor="none",
                 color="black",
-                label=f"Contour scan {cl}σ",
+                linestyle=linestyle,
+                label=label_contour,
             )
 
-    # Plot mean point
-    ax.scatter(px, py, color="red", marker="x", label="Best fit")
+    if h_scan is not None:
+        x_scan = np.array(h_scan.axes["scan_x"]).astype(float)
+        y_scan = np.array(h_scan.axes["scan_y"]).astype(float)
+        nll_values = 2 * h_scan.values()
+        plt.pcolormesh(
+            x_scan, y_scan, nll_values, shading="auto", cmap="plasma", zorder=0
+        )
+        plt.colorbar(label=r"$-2\,\Delta \log L$")
+
+        # Overlay contours for 68% and 95% confidence levels
+        linestyles = ["-", "--", "."]
+
+        contour = plt.contour(
+            x_scan,
+            y_scan,
+            nll_values,
+            linestyles=linestyles[: len(levels)],
+            levels=levels,
+            colors="black",
+        )
+        plt.clabel(
+            contour,
+            fmt={l: rf"{c*100}%" for l, c in zip(levels, confidence_levels)},
+            colors="black",
+        )
+
+        ax.plot(
+            [], [], label="Likelihood scan", marker="none", color="black", linestyle="-"
+        )
 
     textsize = ax.xaxis.label.get_size()
 
@@ -175,7 +212,7 @@ def plot_scan(
     ax.axhline(py, color="gray", linestyle="--", alpha=0.5)
     ax.axvline(px, color="gray", linestyle="--", alpha=0.5)
 
-    ax.legend(loc="upper right")
+    ax.legend(loc="lower left")
 
     return fig
 
@@ -185,7 +222,7 @@ if __name__ == "__main__":
     fitresult, meta = io_tools.get_fitresult(args.inputFile, meta=True)
 
     meta = {
-        "combinetf2": meta["meta_info"],
+        "tensorfit": meta["meta_info"],
     }
 
     h_params = fitresult["parms"].get()

@@ -1,4 +1,5 @@
 import argparse
+import os
 import time
 
 import h5py
@@ -13,12 +14,19 @@ def make_parser():
     parser = argparse.ArgumentParser()
 
     parser.add_argument("filename", help="filename of the main hdf5 input")
-    parser.add_argument("-o", "--output", default="fitresults", help="output file name")
+    parser.add_argument("-o", "--output", default="./", help="output directory")
+    parser.add_argument("--outname", default="fitresults", help="output file name")
     parser.add_argument(
         "--outputFormat",
         default="narf",
         choices=["narf", "h5py"],
         help="output file name",
+    )
+    parser.add_argument(
+        "--postfix",
+        default=None,
+        type=str,
+        help="Postfix to append on output file name",
     )
     parser.add_argument(
         "-t",
@@ -342,12 +350,12 @@ def postfit(args, fitter, results, dofit=True):
         dxdtheta0_ext = None
         with h5py.File(args.externalPostfit, "r") as fext:
             if "x" in fext.keys():
-                # fitresult from combinetf 1
+                # fitresult from combinetf
                 x_ext = fext["x"][...]
                 parms_ext = fext["parms"][...].astype(str)
                 cov_ext = fext["cov"][...]
             else:
-                # fitresult from combinetf 2
+                # fitresult from combinetf2
                 h5results_ext = narf.ioutils.pickle_load_h5py(fext["results"])
                 h_parms_ext = h5results_ext["parms"].get()
 
@@ -682,17 +690,17 @@ if __name__ == "__main__":
     fits = np.concatenate(
         [np.array([x]) if x <= 0 else 1 + np.arange(x, dtype=int) for x in args.toys]
     )
+    postfix = "" if args.postfix is None else f"_{args.postfix}"
     for ifit in fits:
         ifitter.defaultassign()
 
         if ifit == -1:
-            postfix = "asimov"
+            postfix += "_asimov"
             ifitter.nobs.assign(ifitter.expected_events())
         if ifit == 0:
-            postfix = None
             ifitter.nobs.assign(ifitter.indata.data_obs)
         elif ifit >= 1:
-            postfix = f"toy{ifit}"
+            postfix += f"_toy{ifit}"
             ifitter.toyassign(
                 bayesian=args.toysBayesian, bootstrap_data=args.bootstrapData
             )
@@ -711,7 +719,8 @@ if __name__ == "__main__":
             "procs": ifitter.indata.procs,
         }
 
-        ws.write(args.output, results, postfix=postfix, meta=meta)
+        file_path = os.path.join(args.output, args.outname)
+        ws.write(file_path, results, postfix=postfix, meta=meta)
 
     end_time = time.time()
     elapsed_time = end_time - start_time

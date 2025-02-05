@@ -140,27 +140,27 @@ jobs:
       - name: nominal fit
         run: >- 
           python scripts/fit.py 
-          $COMBINETF2_OUTDIR/test_tensor.hdf5 -o $COMBINETF2_OUTDIR/fitresults.hdf5
+          $COMBINETF2_OUTDIR/test_tensor.hdf5 -o $COMBINETF2_OUTDIR/
           -t 0 --binByBinStat --doImpacts --globalImpacts --computeHistErrors --computeHistCov --computeHistImpacts 
           --saveHists --computeHistErrors --project ch1 a --project ch1 b 
 
       - name: sparse tensor fit 
         run: >- 
           python scripts/fit.py 
-          $COMBINETF2_OUTDIR/test_tensor_sparse.hdf5 -o $COMBINETF2_OUTDIR/fitresults_sparse.hdf5
+          $COMBINETF2_OUTDIR/test_tensor_sparse.hdf5 -o $COMBINETF2_OUTDIR/ --postfix sparse
           -t -0 --binByBinStat --doImpacts --globalImpacts --computeVariations
           --saveHists --computeHistErrors --project ch1 a --project ch1 b 
 
       - name: pseudodata fit
         run: >- 
           python scripts/fit.py 
-          $COMBINETF2_OUTDIR/test_tensor.hdf5 -o $COMBINETF2_OUTDIR/fitresults_pseudodata.hdf5
-          --pseudoData original -t 0 --binByBinStat --doImpacts --globalImpacts
+          $COMBINETF2_OUTDIR/test_tensor.hdf5 -o $COMBINETF2_OUTDIR/ --postfix pseudodata
+          -t 0 --pseudoData original --binByBinStat --doImpacts --globalImpacts
 
       - name: chi2 fit
         run: >- 
           python scripts/fit.py 
-          $COMBINETF2_OUTDIR/test_tensor.hdf5 -o $COMBINETF2_OUTDIR/fitresults_chi2.hdf5
+          $COMBINETF2_OUTDIR/test_tensor.hdf5 -o $COMBINETF2_OUTDIR/ --postfix chi2
           -t -0 --chisqFit --externalCovariance --doImpacts --globalImpacts 
           --saveHists --computeHistErrors --project ch1 a --project ch1 b 
 
@@ -231,21 +231,22 @@ jobs:
       - name: nominal fit with scans
         run: >- 
           python scripts/fit.py 
-          $COMBINETF2_OUTDIR/test_tensor.hdf5 -o $COMBINETF2_OUTDIR/fitresults_scans.hdf5
+          $COMBINETF2_OUTDIR/test_tensor.hdf5 -o $COMBINETF2_OUTDIR/ --postfix scans
           -t 0 --doImpacts 
           --scan sig slope_signal --contourScan sig slope_signal --contourLevels 1 2
+          --scan2D sig slope_signal
 
-      # --scan2D sig slope_signal --contourScan2D sig slope_signal
+      #  --contourScan2D sig slope_signal
 
       - name: plot 1D likelihood scan
         run: >-
           python scripts/plot_likelihood_scan.py $COMBINETF2_OUTDIR/fitresults_scans.hdf5 -o $WEB_DIR/$PLOT_DIR 
           --title CombineTF2 --subtitle Preliminary --params sig slope_signal
 
-      # - name: plot 2D likelihood scan
-      #   run: >-
-      #     python scripts/plot_likelihood_scan2D.py $COMBINETF2_OUTDIR/fitresults_scans.hdf5 -o $WEB_DIR/$PLOT_DIR 
-      #     --title CombineTF2 --subtitle Preliminary --params sig slope_signal
+      - name: plot 2D likelihood scan
+        run: >-
+          python scripts/plot_likelihood_scan2D.py $COMBINETF2_OUTDIR/fitresults_scans.hdf5 -o $WEB_DIR/$PLOT_DIR 
+          --title CombineTF2 --subtitle Preliminary --params sig slope_signal
 
       - name: copy index php file
         run: cp data/Templates/index_mit.php $WEB_DIR/$PLOT_DIR/index.php
