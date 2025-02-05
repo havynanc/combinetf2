@@ -62,10 +62,18 @@ def read_impacts_poi(
             labels = np.append(labels, "Total")
 
     if pulls:
-        _, pulls, constraints = get_pulls_and_constraints(fitresult, asym=asym)
-        _, pulls_prefit, constraints_prefit = get_pulls_and_constraints(
+        pulls_labels, pulls, constraints = get_pulls_and_constraints(
+            fitresult, asym=asym
+        )
+        pulls_labels, pulls_prefit, constraints_prefit = get_pulls_and_constraints(
             fitresult, prefit=True
         )
+        if len(pulls_labels) != len(labels):
+            mask = [l in labels for l in pulls_labels]
+            pulls = pulls[mask]
+            pulls_prefit = pulls_prefit[mask]
+            constraints = constraints[mask]
+            constraints_prefit = constraints_prefit[mask]
         return pulls, pulls_prefit, constraints, constraints_prefit, impacts, labels
 
     return impacts, labels

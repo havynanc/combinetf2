@@ -75,6 +75,33 @@ def parseArgs():
     return parser.parse_args()
 
 
+def ellipse(cov, mu0, mu1, cl, cartesian_angle=False):
+
+    a = cov[0, 0]
+    b = cov[1, 0]
+    c = cov[1, 1]
+
+    l1 = (a + c) / 2 + np.sqrt((a - c) ** 2 / 4 + b**2)
+    l2 = (a + c) / 2 - np.sqrt((a - c) ** 2 / 4 + b**2)
+
+    theta = np.arctan2(l1 - a, b)
+
+    def func(t):
+        x = (
+            mu0
+            + np.sqrt(l1) * np.cos(theta) * np.cos(t)
+            - np.sqrt(l2) * np.sin(theta) * np.sin(t)
+        )
+        y = (
+            mu1
+            + np.sqrt(l1) * np.sin(theta) * np.cos(t)
+            + np.sqrt(l2) * np.cos(theta) * np.sin(t)
+        )
+        return x, y
+
+    return func
+
+
 def plot_scan(
     px,
     py,
@@ -91,19 +118,8 @@ def plot_scan(
     subtitle=None,
 ):
 
-    # Compute eigenvalues and eigenvectors
-    eigvals, eigvecs = np.linalg.eigh(cov)
-
-    # Sort eigenvalues and corresponding eigenvectors
-    order = np.argsort(eigvals)[::-1]
-    eigvals, eigvecs = eigvals[order], eigvecs[:, order]
-
-    # # Compute the ellipse angle (rotation)
-    # theta = np.arctan2(eigvecs[1, 0], eigvecs[0, 0])
-
     # Parameterize ellipse
     t = np.linspace(0, 2 * np.pi, n_points)
-    circle = np.array([np.cos(t), np.sin(t)])  # Unit circle
 
     if h_scan is not None:
         right = 0.97
@@ -121,10 +137,8 @@ def plot_scan(
         plt.colorbar(label=r"$-2\,\Delta \log L$")
 
     for cl in confidence_levels:
-        chi2_val = cl**2  # Approximate Delta Chi^2
-        axes_lengths = np.sqrt(chi2_val * eigvals)  # Scaled eigenvalues
-        ellipse = eigvecs @ np.diag(axes_lengths) @ circle
-        ax.plot(px + ellipse[0, :], py + ellipse[1, :], label=f"{cl}σ")
+        xy = ellipse(cov, px, py, cl)(t)
+        ax.plot(xy[0], xy[1], label=f"{cl}σ")
 
         if h_contour is not None and str(cl) in h_contour.axes["confidence_level"]:
             x_contour = h_contour[{"confidence_level": str(cl), "params": 0}].values()
@@ -211,7 +225,7 @@ if __name__ == "__main__":
             title=args.title,
             subtitle=args.subtitle,
         )
-
+        os.makedirs(args.outpath, exist_ok=True)
         outfile = os.path.join(args.outpath, f"nll_scan2D_{px}_{py}")
         writeOutput(
             fig,

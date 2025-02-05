@@ -43,7 +43,11 @@ def printImpacts(args, fitresult, poi):
     unit = "n.u. %"
 
     if args.sort:
-        order = np.argmax([max(x) for x in impacts])
+
+        def is_scalar(val):
+            return np.isscalar(val) or isinstance(val, (int, float, complex, str, bool))
+
+        order = np.argsort([x if is_scalar(x) else max(abs(x)) for x in impacts])
         labels = labels[order]
         impacts = impacts[order]
 

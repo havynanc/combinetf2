@@ -18,9 +18,9 @@ python -m venv env
 The activate it and install the necessary packages
 ```bash
 source env/bin/activate
-pip install tensorflow-io[tensorflow] numpy h5py hist scipy narf.ioutils pandas plotly kaleido
+pip install tensorflow-io[tensorflow] numpy h5py hist scipy narf.ioutils matplotlib pandas plotly kaleido 
 ```
-The packages `pandas`, `plotly`, and `kaleido` are only needed for the plotting scripts. 
+The packages `matplotlib`, `pandas`, `plotly`, and `kaleido` are only needed for the plotting scripts. 
 In case you want to contribute to the development, please also install the linters `isort` `flake8` `black` used in the pre-commit hooks and the github CI
 Deactivate the environment with `deactivate`.
 

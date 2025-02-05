@@ -477,7 +477,7 @@ def readFitInfoFromFile(
             fitresult, prefit=True
         )
 
-    apply_mask = (group and grouping) or filters
+    apply_mask = (group and grouping is not None) or filters is not None
 
     if apply_mask:
         mask = np.ones(len(labels), dtype=bool)
@@ -517,6 +517,7 @@ def readFitInfoFromFile(
             constraints = constraints[mask]
             pulls_prefit = pulls_prefit[mask]
             constraints_prefit = constraints_prefit[mask]
+
         df["pull"] = pulls
         df["pull_prefit"] = pulls_prefit
         df["pull"] = pulls - pulls_prefit

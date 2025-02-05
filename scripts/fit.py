@@ -75,7 +75,7 @@ def make_parser():
     )
     parser.add_argument(
         "--contourScan2D",
-        default=[],
+        default=None,
         type=str,
         nargs="+",
         action="append",
@@ -85,12 +85,12 @@ def make_parser():
         "--scan",
         default=None,
         type=str,
-        nargs="+",
-        help="run likelihood scan on the specified variables",
+        nargs="*",
+        help="run likelihood scan on the specified variables, specify w/o argument for all parameters",
     )
     parser.add_argument(
         "--scan2D",
-        default=[],
+        default=None,
         type=str,
         nargs="+",
         action="append",
@@ -591,12 +591,14 @@ def postfit(args, fitter, results, dofit=True):
                 )
 
     if args.scan is not None:
-        for param in args.scan:
-            x_scan, nll_values = fitter.nll_scan(
+        parms = np.array(fitter.parms).astype(str) if len(args.scan) == 0 else args.scan
+
+        for param in parms:
+            x_scan, dnll_values = fitter.nll_scan(
                 param, args.scanRange, args.scanPoints, args.scanRangeUsePrefit
             )
             results[f"nll_scan_{param}"] = fitter.nll_scan_hist(
-                param, x_scan, nll_values - nllvalfull
+                param, x_scan, dnll_values
             )
 
     if args.scan2D is not None:
@@ -632,6 +634,10 @@ def postfit(args, fitter, results, dofit=True):
         )
 
     if args.contourScan2D is not None:
+        raise NotImplementedError(
+            "Likelihood contour scans in 2D are not yet implemented"
+        )
+
         # do likelihood contour scans in 2D
         nllvalreduced = fitter.reduced_nll().numpy()
 

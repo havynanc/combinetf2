@@ -54,7 +54,11 @@ def parseArgs():
         "-p", "--postfix", type=str, help="Postfix for output file name"
     )
     parser.add_argument(
-        "--params", type=str, nargs="+", help="Parameters to plot the likelihood scan"
+        "--params",
+        type=str,
+        nargs="*",
+        default=[],
+        help="Parameters to plot the likelihood scan",
     )
     parser.add_argument(
         "--title",
@@ -81,8 +85,8 @@ def plot_scan(
     fig, ax = plt.subplots(figsize=(6, 4))
     fig.subplots_adjust(left=0.12, bottom=0.14, right=0.99, top=0.99)
 
-    ax.axhline(y=1, color="black", linestyle="dashed", linewidth=1)
-    ax.axhline(y=4, color="black", linestyle="dashed", linewidth=1)
+    ax.axhline(y=1, color="gray", linestyle="--", alpha=0.5)
+    ax.axhline(y=4, color="gray", linestyle="--", alpha=0.5)
 
     ax.plot(x, y, marker="x", color="blue", label="Likelihood scan")
 
@@ -92,7 +96,17 @@ def plot_scan(
             x = h_contours[{"confidence_level": cl}].values()[::-1] + param_value
             y = np.full(len(x), float(cl) ** 2)
             label = "Contour scan" if i == 0 else None
-            ax.plot(x, y, color="red", marker="o", linestyle="", label=label)
+            ax.plot(
+                x,
+                y,
+                marker="o",
+                markerfacecolor="none",
+                color="black",
+                linestyle="",
+                label=label,
+            )
+            for ix in x:
+                ax.axvline(x=ix, color="gray", linestyle="--", alpha=0.5)
 
     ax.legend(loc="upper right")
 
@@ -128,7 +142,9 @@ if __name__ == "__main__":
     h_contour = fitresult["contour_scans"].get()
     h_params = fitresult["parms"].get()
 
-    for param in args.params:
+    parms = h_contour.axes["parms"] if len(args.params) == 0 else args.params
+
+    for param in parms:
         param_value = h_params[{"parms": param}].value
         h_scan = fitresult[f"nll_scan_{param}"].get()
         h_contour_param = h_contour[{"parms": param, "impacts": param}]
@@ -141,6 +157,7 @@ if __name__ == "__main__":
             title=args.title,
             subtitle=args.subtitle,
         )
+        os.makedirs(args.outpath, exist_ok=True)
         outfile = os.path.join(args.outpath, f"nll_scan_{param}")
         writeOutput(
             fig,

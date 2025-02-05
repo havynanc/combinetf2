@@ -1391,52 +1391,74 @@ class Fitter:
         return res
 
     def nll_scan(self, param, scan_range, scan_points, use_prefit=False):
+        # make a likelihood scan for a single parameter
+        # assuming the likelihood is minimized
 
         def scipy_loss(xval):
             self.x.assign(xval)
             val, grad = self.loss_val_grad()
-            # print("scipy_loss", val)
             return val.numpy(), grad.numpy()
 
         def scipy_hessp(xval, pval):
             self.x.assign(xval)
             p = tf.convert_to_tensor(pval)
             val, grad, hessp = self.loss_val_grad_hessp(p)
-            # print("scipy_hessp", val)
+            if np.allclose(hessp.numpy(), 0, atol=1e-8):
+                return np.zeros_like(hessp.numpy())
             return hessp.numpy()
 
         idx = np.where(self.parms.astype(str) == param)[0][0]
 
-        xval = self.x.numpy()
+        # store current state of x temporarily
+        xval = tf.identity(self.x)
 
-        dsigs = np.linspace(-scan_range, scan_range, scan_points)
+        param_offsets = np.linspace(0, scan_range, scan_points // 2 + 1)
         if not use_prefit:
-            x_scans = xval[idx] + dsigs * self.cov[idx, idx] ** 0.5
-        else:
-            x_scans = dsigs
+            param_offsets *= self.cov[idx, idx].numpy() ** 0.5
 
-        nlls = np.full(len(x_scans), np.nan)
-        for i, ixval in enumerate(x_scans):
-            xval_this = self.x.numpy()
-            xval_this[idx] = ixval
+        nscans = 2 * len(param_offsets) - 1
+        nlls = np.full(nscans, np.nan)
+        scan_vals = np.zeros(nscans)
 
-            def constraint(x):
-                return x[idx] - ixval
+        # save delta nll w.r.t. global minimum
+        reduced_nll = self.reduced_nll().numpy()
+        # set central point
+        nlls[nscans // 2] = 0
+        scan_vals[nscans // 2] = xval[idx].numpy()
 
-            res = scipy.optimize.minimize(
-                scipy_loss,
-                xval_this,
-                constraints={"type": "eq", "fun": constraint},
-                method="trust-constr",
-                jac=True,
-                hessp=scipy_hessp,
-            )
+        # scan positive side and negative side independently to profit from previous step
+        for sign in [-1, 1]:
+            param_scan_values = xval[idx].numpy() + sign * param_offsets
+            for i, ixval in enumerate(param_scan_values):
+                if i == 0:
+                    continue
 
-            if res["success"]:
-                nlls[i] = self.full_nll().numpy()
+                xval_init = self.x.numpy()  # initial value from previous iteration
+                xval_init[idx] = ixval
 
-        self.x.assign(xval)
-        return x_scans, nlls
+                res = scipy.optimize.minimize(
+                    scipy_loss,
+                    xval_init,
+                    constraints={
+                        "type": "eq",
+                        "fun": lambda x: x[idx] - ixval,
+                        "jac": lambda x: np.eye(len(x))[idx],
+                        "hess": scipy.optimize.SR1(),  # TODO: use exact hessian or hessian vector product
+                    },
+                    method="trust-constr",
+                    jac=True,
+                    hessp=scipy_hessp,
+                )
+                if res["success"]:
+                    nlls[nscans // 2 + sign * i] = (
+                        self.reduced_nll().numpy() - reduced_nll
+                    )
+                    scan_vals[nscans // 2 + sign * i] = ixval
+
+            # reset x to original state
+            self.x.assign(xval)
+
+        return scan_vals, nlls
 
     def nll_scan2D(self, param_tuple, scan_range, scan_points, use_prefit=False):
 
@@ -1468,25 +1490,29 @@ class Fitter:
 
         nlls = np.full((len(x_scans), len(y_scans)), np.nan)
         for ix, ixval in enumerate(x_scans):
-            xval_this = xval.numpy()
-            xval_this[idx0] = ixval
-
-            def constraint_x(x):
-                return x[idx0] - ixval
+            xval_init = xval.numpy()
+            xval_init[idx0] = ixval
 
             for iy, iyval in enumerate(y_scans):
                 print(f"Scan point ({ix},{iy})")
-                xval_this[idx1] = iyval
-
-                def constraint_y(x):
-                    return x[idx1] - iyval
+                xval_init[idx1] = iyval
 
                 res = scipy.optimize.minimize(
                     scipy_loss,
-                    xval_this,
+                    xval_init,
                     constraints=[
-                        {"type": "eq", "fun": constraint_x},
-                        {"type": "eq", "fun": constraint_y},
+                        {
+                            "type": "eq",
+                            "fun": lambda x: x[idx0] - ixval,
+                            "jac": lambda x: np.eye(len(x))[idx0],
+                            "hess": scipy.optimize.SR1(),  # TODO: use exact hessian or hessian vector product
+                        },
+                        {
+                            "type": "eq",
+                            "fun": lambda x: x[idx1] - iyval,
+                            "jac": lambda x: np.eye(len(x))[idx1],
+                            "hess": scipy.optimize.SR1(),  # TODO: use exact hessian or hessian vector product
+                        },
                     ],
                     method="trust-constr",
                     jac=True,
@@ -1524,7 +1550,7 @@ class Fitter:
             lb=0,
             ub=0,
             jac=scipy_grad,
-            hess=scipy.optimize.SR1(),
+            hess=scipy.optimize.SR1(),  # TODO: use exact hessian or hessian vector product
         )
 
         # initial guess from covariance
@@ -1536,10 +1562,8 @@ class Fitter:
         intervals = np.full((2, len(self.parms)), np.nan)
         for i, sign in enumerate([-1.0, 1.0]):
             if sign == 1.0:
-                print(f"Minimize param {param}")
                 xval_init[idx] = xdn
             else:
-                print(f"Minimize param {param}")
                 xval_init[idx] = xup
 
             # Objective function and its derivatives
@@ -1569,8 +1593,6 @@ class Fitter:
                 },
             )
 
-            print(res)
-
             if res["success"]:
                 intervals[i] = res["x"] - xval.numpy()
 
@@ -1579,6 +1601,7 @@ class Fitter:
         return intervals
 
     def contour_scan2D(self, param_tuple, nll_min, cl=1, n_points=16):
+        # Not yet working
         def scipy_loss(xval):
             self.x.assign(xval)
             val, grad = self.loss_val_grad()
@@ -1610,19 +1633,9 @@ class Fitter:
         idx0 = np.where(self.parms.astype(str) == param_tuple[0])[0][0]
         idx1 = np.where(self.parms.astype(str) == param_tuple[1])[0][0]
 
-        # # Compute eigenvalues and eigenvectors
-        # cov = self.cov.numpy()[np.ix_([idx0, idx1], [idx0, idx1])]
-        # # Compute eigenvalues and eigenvectors
-        # eigvals, eigvecs = np.linalg.eigh(cov)
-        # a, b = np.sqrt(eigvals)
-
         intervals = np.full((2, n_points), np.nan)
         for i, t in enumerate(np.linspace(0, 2 * np.pi, n_points, endpoint=False)):
             print(f"Now at {i} with angle={t}")
-
-            # ellipse = [a * np.cos(t), b * np.sin(t)]
-            # xval_init[idx0] = xval[idx0] + ellipse[0]
-            # xval_init[idx1] = xval[idx1] + ellipse[1]
 
             # Objective function and its derivatives
             def objective(params):
@@ -1630,7 +1643,6 @@ class Fitter:
                 x = params[idx0] - xval[idx0]
                 y = params[idx1] - xval[idx1]
                 return -(x**2 + y**2)
-                # return (2*(t>np.pi) - 1) * (x * np.cos(t) + y * np.sin(t))
 
             def objective_jac(params):
                 x = params[idx0] - xval[idx0]
@@ -1687,10 +1699,6 @@ class Fitter:
             if res["success"]:
                 intervals[0, i] = res["x"][idx0]
                 intervals[1, i] = res["x"][idx1]
-
-            import pdb
-
-            pdb.set_trace()
 
             self.x.assign(xval)
 
