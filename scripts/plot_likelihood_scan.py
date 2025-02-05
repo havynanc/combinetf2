@@ -1,0 +1,152 @@
+import argparse
+import os
+
+import matplotlib.pyplot as plt
+import numpy as np
+from narf import ioutils
+
+from combinetf2 import io_tools
+
+plt.rcParams.update({"font.size": 14})
+
+
+def writeOutput(fig, outfile, extensions=[], postfix=None, args=None, meta_info=None):
+    name, _ = os.path.splitext(outfile)
+
+    if postfix:
+        name += f"_{postfix}"
+
+    for ext in extensions:
+        if ext[0] != ".":
+            ext = "." + ext
+        output = name + ext
+        print(f"Write output file {output}")
+        plt.savefig(output)
+
+        output = name.rsplit("/", 1)
+        output[1] = os.path.splitext(output[1])[0]
+        if len(output) == 1:
+            output = (None, *output)
+    if args is None and meta_info is None:
+        return
+    ioutils.write_logfile(
+        *output,
+        args=args,
+        meta_info=meta_info,
+    )
+
+
+def parseArgs():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "inputFile",
+        type=str,
+        help="fitresults output",
+    )
+    parser.add_argument(
+        "-o",
+        "--outpath",
+        type=str,
+        default="./test",
+        help="Folder path for output",
+    )
+    parser.add_argument(
+        "-p", "--postfix", type=str, help="Postfix for output file name"
+    )
+    parser.add_argument(
+        "--params", type=str, nargs="+", help="Parameters to plot the likelihood scan"
+    )
+    parser.add_argument(
+        "--title",
+        default="CombineTF2",
+        type=str,
+        help="Title to be printed in upper left",
+    )
+    parser.add_argument(
+        "--subtitle",
+        default=None,
+        type=str,
+        help="Subtitle to be printed after title",
+    )
+    return parser.parse_args()
+
+
+def plot_scan(
+    h_scan, h_contours=None, param_value=None, param="x", title=None, subtitle=None
+):
+
+    x = np.array(h_scan.axes["scan"]).astype(float)
+    y = h_scan.values() * 2
+
+    fig, ax = plt.subplots(figsize=(6, 4))
+    fig.subplots_adjust(left=0.12, bottom=0.14, right=0.99, top=0.99)
+
+    ax.axhline(y=1, color="black", linestyle="dashed", linewidth=1)
+    ax.axhline(y=4, color="black", linestyle="dashed", linewidth=1)
+
+    ax.plot(x, y, marker="x", color="blue", label="Likelihood scan")
+
+    if h_contours is not None:
+
+        for i, cl in enumerate(h_contours.axes["confidence_level"]):
+            x = h_contours[{"confidence_level": cl}].values()[::-1] + param_value
+            y = np.full(len(x), float(cl) ** 2)
+            label = "Contour scan" if i == 0 else None
+            ax.plot(x, y, color="red", marker="o", linestyle="", label=label)
+
+    ax.legend(loc="upper right")
+
+    textsize = ax.xaxis.label.get_size()
+
+    if title:
+        ax.text(
+            0.1,
+            0.9,
+            title,
+            transform=ax.transAxes,
+            fontweight="bold",
+            fontsize=1.2 * textsize,
+        )
+    if subtitle:
+        ax.text(0.1, 0.82, subtitle, transform=ax.transAxes, fontstyle="italic")
+
+    ax.set_xlabel(param)
+    ax.set_ylabel(r"$-2\,\Delta \log L$")
+
+    return fig
+
+
+if __name__ == "__main__":
+    args = parseArgs()
+    fitresult, meta = io_tools.get_fitresult(args.inputFile, meta=True)
+
+    meta = {
+        "combinetf2": meta["meta_info"],
+    }
+    scans = [key for key in fitresult.keys() if key.startswith("nll_scan_")]
+
+    h_contour = fitresult["contour_scans"].get()
+    h_params = fitresult["parms"].get()
+
+    for param in args.params:
+        param_value = h_params[{"parms": param}].value
+        h_scan = fitresult[f"nll_scan_{param}"].get()
+        h_contour_param = h_contour[{"parms": param, "impacts": param}]
+
+        fig = plot_scan(
+            h_scan,
+            h_contour_param,
+            param_value=param_value,
+            param=param,
+            title=args.title,
+            subtitle=args.subtitle,
+        )
+        outfile = os.path.join(args.outpath, f"nll_scan_{param}")
+        writeOutput(
+            fig,
+            outfile=outfile,
+            extensions=["png", "pdf"],
+            meta_info=meta,
+            args=args,
+            postfix=args.postfix,
+        )

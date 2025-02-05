@@ -3,6 +3,8 @@ import numpy as np
 import scipy
 import tensorflow as tf
 
+from combinetf2 import common
+
 
 class Fitter:
     def __init__(self, indata, options):
@@ -838,11 +840,7 @@ class Fitter:
         var_axes = []
         if compute_variations:
             axis_vars = hist.axis.StrCategory(self.parms, name="vars")
-            axis_downUpVar = hist.axis.Regular(
-                2, -2.0, 2.0, underflow=False, overflow=False, name="downUpVar"
-            )
-
-            var_axes = [axis_vars, axis_downUpVar]
+            var_axes = [axis_vars, common.axis_downUpVar]
 
         for channel, info in self.indata.channel_info.items():
             axes = info["axes"]
@@ -972,10 +970,7 @@ class Fitter:
         var_axes = []
         if compute_variations:
             axis_vars = hist.axis.StrCategory(self.parms, name="vars")
-            axis_downUpVar = hist.axis.Regular(
-                2, -2.0, 2.0, underflow=False, overflow=False, name="downUpVar"
-            )
-            var_axes = [axis_vars, axis_downUpVar]
+            var_axes = [axis_vars, common.axis_downUpVar]
 
         exp_shape = tuple([len(a) for a in exp_axes])
 
@@ -1131,6 +1126,83 @@ class Fitter:
 
         return hists_data_obs, hists_nobs
 
+    def nll_scan_hist(self, param, scan_values, nll_values):
+        axis_scan = hist.axis.StrCategory(
+            np.array(scan_values).astype(str), name="scan"
+        )
+
+        h = self.hist(
+            f"nll_scan_{param}",
+            axis_scan,
+            values=nll_values,
+            label=f"Likelihood scan for parameter {param}",
+        )
+
+        return h
+
+    def nll_scan2D_hist(self, param_tuple, scan_x, scan_y, nll_values):
+        axis_scan_x = hist.axis.StrCategory(np.array(scan_x).astype(str), name="scan_x")
+        axis_scan_y = hist.axis.StrCategory(np.array(scan_y).astype(str), name="scan_y")
+
+        p0, p1 = param_tuple
+
+        h = self.hist(
+            f"nll_scan2D_{p0}_{p1}",
+            [axis_scan_x, axis_scan_y],
+            values=nll_values,
+            label=f"Likelihood 2D scan for parameters {p0} and {p1}",
+        )
+
+        return h
+
+    def contour_scan_hist(self, parms, values, confidence_levels=[1]):
+        axis_impacts = hist.axis.StrCategory(parms, name="impacts")
+
+        axis_cls = hist.axis.StrCategory(
+            np.array(confidence_levels).astype(str), name="confidence_level"
+        )
+
+        axis_parms = hist.axis.StrCategory(
+            np.array(self.parms).astype(str), name="parms"
+        )
+
+        h = self.hist(
+            "contour_scan",
+            [axis_impacts, axis_cls, common.axis_downUpVar, axis_parms],
+            values=values,
+            label="Parameter likelihood contour scans",
+        )
+
+        return h
+
+    def contour_scan2D_hist(self, param_tuples, values, confidence_levels=[1]):
+        axis_param_tuple = hist.axis.StrCategory(
+            ["-".join(p) for p in param_tuples], name="param_tuple"
+        )
+
+        halfstep = np.pi / values.shape[-1]
+        axis_angle = hist.axis.Regular(
+            values.shape[-1],
+            -halfstep,
+            2 * np.pi - halfstep,
+            circular=True,
+            name="angle",
+        )
+        axis_params = hist.axis.Regular(2, 0, 2, name="params")
+
+        axis_cls = hist.axis.StrCategory(
+            np.array(confidence_levels).astype(str), name="confidence_level"
+        )
+
+        h = self.hist(
+            "contour_scan2D",
+            [axis_param_tuple, axis_cls, axis_params, axis_angle],
+            values=values,
+            label="Parameter likelihood contour scans 2D",
+        )
+
+        return h
+
     @tf.function
     def expected_events(self):
         return self._compute_yields(inclusive=True)
@@ -1182,6 +1254,11 @@ class Fitter:
     def full_nll(self):
         l, lfull = self._compute_nll()
         return lfull
+
+    @tf.function
+    def reduced_nll(self):
+        l, lfull = self._compute_nll()
+        return l
 
     def _compute_nll(self, profile_grad=True):
         theta = self.x[self.npoi :]
@@ -1312,3 +1389,309 @@ class Fitter:
         print(res)
 
         return res
+
+    def nll_scan(self, param, scan_range, scan_points, use_prefit=False):
+
+        def scipy_loss(xval):
+            self.x.assign(xval)
+            val, grad = self.loss_val_grad()
+            # print("scipy_loss", val)
+            return val.numpy(), grad.numpy()
+
+        def scipy_hessp(xval, pval):
+            self.x.assign(xval)
+            p = tf.convert_to_tensor(pval)
+            val, grad, hessp = self.loss_val_grad_hessp(p)
+            # print("scipy_hessp", val)
+            return hessp.numpy()
+
+        idx = np.where(self.parms.astype(str) == param)[0][0]
+
+        xval = self.x.numpy()
+
+        dsigs = np.linspace(-scan_range, scan_range, scan_points)
+        if not use_prefit:
+            x_scans = xval[idx] + dsigs * self.cov[idx, idx] ** 0.5
+        else:
+            x_scans = dsigs
+
+        nlls = np.full(len(x_scans), np.nan)
+        for i, ixval in enumerate(x_scans):
+            xval_this = self.x.numpy()
+            xval_this[idx] = ixval
+
+            def constraint(x):
+                return x[idx] - ixval
+
+            res = scipy.optimize.minimize(
+                scipy_loss,
+                xval_this,
+                constraints={"type": "eq", "fun": constraint},
+                method="trust-constr",
+                jac=True,
+                hessp=scipy_hessp,
+            )
+
+            if res["success"]:
+                nlls[i] = self.full_nll().numpy()
+
+        self.x.assign(xval)
+        return x_scans, nlls
+
+    def nll_scan2D(self, param_tuple, scan_range, scan_points, use_prefit=False):
+
+        def scipy_loss(xval):
+            self.x.assign(xval)
+            val, grad = self.loss_val_grad()
+            # print("scipy_loss", val)
+            return val.numpy(), grad.numpy()
+
+        def scipy_hessp(xval, pval):
+            self.x.assign(xval)
+            p = tf.convert_to_tensor(pval)
+            val, grad, hessp = self.loss_val_grad_hessp(p)
+            # print("scipy_hessp", val)
+            return hessp.numpy()
+
+        idx0 = np.where(self.parms.astype(str) == param_tuple[0])[0][0]
+        idx1 = np.where(self.parms.astype(str) == param_tuple[1])[0][0]
+
+        xval = tf.identity(self.x)
+
+        dsigs = np.linspace(-scan_range, scan_range, scan_points)
+        if not use_prefit:
+            x_scans = xval[idx0] + dsigs * self.cov[idx0, idx0] ** 0.5
+            y_scans = xval[idx1] + dsigs * self.cov[idx1, idx1] ** 0.5
+        else:
+            x_scans = dsigs
+            y_scans = dsigs
+
+        nlls = np.full((len(x_scans), len(y_scans)), np.nan)
+        for ix, ixval in enumerate(x_scans):
+            xval_this = xval.numpy()
+            xval_this[idx0] = ixval
+
+            def constraint_x(x):
+                return x[idx0] - ixval
+
+            for iy, iyval in enumerate(y_scans):
+                print(f"Scan point ({ix},{iy})")
+                xval_this[idx1] = iyval
+
+                def constraint_y(x):
+                    return x[idx1] - iyval
+
+                res = scipy.optimize.minimize(
+                    scipy_loss,
+                    xval_this,
+                    constraints=[
+                        {"type": "eq", "fun": constraint_x},
+                        {"type": "eq", "fun": constraint_y},
+                    ],
+                    method="trust-constr",
+                    jac=True,
+                    hessp=scipy_hessp,
+                )
+
+                if res["success"]:
+                    nlls[ix, iy] = self.full_nll().numpy()
+
+        self.x.assign(xval)
+        return x_scans, y_scans, nlls
+
+    def contour_scan(self, param, nll_min, cl=1):
+        def scipy_loss(xval):
+            self.x.assign(xval)
+            val, grad = self.loss_val_grad()
+            return val.numpy()
+
+        def scipy_grad(xval):
+            self.x.assign(xval)
+            val, grad = self.loss_val_grad()
+            return grad.numpy()
+
+        idx = np.where(self.parms.astype(str) == param)[0][0]
+        xval = tf.identity(self.x)
+
+        # Constraint function and its derivatives
+        delta_nll = 0.5 * cl**2
+
+        def constraint(params):
+            return scipy_loss(params) - nll_min - delta_nll
+
+        nlc = scipy.optimize.NonlinearConstraint(
+            fun=constraint,
+            lb=0,
+            ub=0,
+            jac=scipy_grad,
+            hess=scipy.optimize.SR1(),
+        )
+
+        # initial guess from covariance
+        xup = xval[idx] + self.cov[idx, idx] ** 0.5
+        xdn = xval[idx] - self.cov[idx, idx] ** 0.5
+
+        xval_init = xval.numpy()
+
+        intervals = np.full((2, len(self.parms)), np.nan)
+        for i, sign in enumerate([-1.0, 1.0]):
+            if sign == 1.0:
+                print(f"Minimize param {param}")
+                xval_init[idx] = xdn
+            else:
+                print(f"Minimize param {param}")
+                xval_init[idx] = xup
+
+            # Objective function and its derivatives
+            def objective(params):
+                return sign * params[idx]
+
+            def objective_jac(params):
+                jac = np.zeros_like(params)
+                jac[idx] = sign
+                return jac
+
+            def objective_hessp(params, v):
+                return np.zeros_like(v)
+
+            res = scipy.optimize.minimize(
+                objective,
+                xval_init,
+                method="trust-constr",
+                jac=objective_jac,
+                hessp=objective_hessp,
+                constraints=[nlc],
+                options={
+                    "maxiter": 5000,
+                    "xtol": 1e-10,
+                    "gtol": 1e-10,
+                    # "verbose": 3
+                },
+            )
+
+            print(res)
+
+            if res["success"]:
+                intervals[i] = res["x"] - xval.numpy()
+
+            self.x.assign(xval)
+
+        return intervals
+
+    def contour_scan2D(self, param_tuple, nll_min, cl=1, n_points=16):
+        def scipy_loss(xval):
+            self.x.assign(xval)
+            val, grad = self.loss_val_grad()
+            return val.numpy()
+
+        def scipy_grad(xval):
+            self.x.assign(xval)
+            val, grad = self.loss_val_grad()
+            return grad.numpy()
+
+        xval = tf.identity(self.x)
+
+        # Constraint function and its derivatives
+        delta_nll = 0.5 * cl**2
+
+        def constraint(params):
+            return scipy_loss(params) - nll_min - delta_nll
+
+        nlc = scipy.optimize.NonlinearConstraint(
+            fun=constraint,
+            lb=0,
+            ub=0,
+            jac=scipy_grad,
+            hess=scipy.optimize.SR1(),
+        )
+
+        # initial guess from covariance
+        xval_init = xval.numpy()
+        idx0 = np.where(self.parms.astype(str) == param_tuple[0])[0][0]
+        idx1 = np.where(self.parms.astype(str) == param_tuple[1])[0][0]
+
+        # # Compute eigenvalues and eigenvectors
+        # cov = self.cov.numpy()[np.ix_([idx0, idx1], [idx0, idx1])]
+        # # Compute eigenvalues and eigenvectors
+        # eigvals, eigvecs = np.linalg.eigh(cov)
+        # a, b = np.sqrt(eigvals)
+
+        intervals = np.full((2, n_points), np.nan)
+        for i, t in enumerate(np.linspace(0, 2 * np.pi, n_points, endpoint=False)):
+            print(f"Now at {i} with angle={t}")
+
+            # ellipse = [a * np.cos(t), b * np.sin(t)]
+            # xval_init[idx0] = xval[idx0] + ellipse[0]
+            # xval_init[idx1] = xval[idx1] + ellipse[1]
+
+            # Objective function and its derivatives
+            def objective(params):
+                # coordinate center (best fit)
+                x = params[idx0] - xval[idx0]
+                y = params[idx1] - xval[idx1]
+                return -(x**2 + y**2)
+                # return (2*(t>np.pi) - 1) * (x * np.cos(t) + y * np.sin(t))
+
+            def objective_jac(params):
+                x = params[idx0] - xval[idx0]
+                y = params[idx1] - xval[idx1]
+                jac = np.zeros_like(params)
+                jac[idx0] = -2 * x
+                jac[idx1] = -2 * y
+                return jac
+
+            def objective_hessp(params, v):
+                hessp = np.zeros_like(v)
+                hessp[idx0] = -2 * v[idx0]
+                hessp[idx1] = -2 * v[idx1]
+                return hessp
+
+            def constraint_angle(params):
+                # coordinate center (best fit)
+                x = params[idx0] - xval[idx0]
+                y = params[idx1] - xval[idx1]
+                return x * np.sin(t) - y * np.cos(t)
+
+            def constraint_angle_jac(params):
+                jac = np.zeros_like(params)
+                jac[idx0] = np.sin(t)
+                jac[idx1] = -np.cos(t)
+                return jac
+
+            # constraint on angle
+            tc = scipy.optimize.NonlinearConstraint(
+                fun=constraint_angle,
+                lb=0,
+                ub=0,
+                jac=constraint_angle_jac,
+                hess=scipy.optimize.SR1(),
+            )
+
+            res = scipy.optimize.minimize(
+                objective,
+                xval_init,
+                method="trust-constr",
+                jac=objective_jac,
+                hessp=objective_hessp,
+                constraints=[nlc, tc],
+                options={
+                    "maxiter": 10000,
+                    "xtol": 1e-14,
+                    "gtol": 1e-14,
+                    # "verbose": 3
+                },
+            )
+
+            print(res)
+
+            if res["success"]:
+                intervals[0, i] = res["x"][idx0]
+                intervals[1, i] = res["x"][idx1]
+
+            import pdb
+
+            pdb.set_trace()
+
+            self.x.assign(xval)
+
+        return intervals

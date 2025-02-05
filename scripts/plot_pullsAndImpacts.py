@@ -4,11 +4,11 @@ import math
 import os
 import re
 
-import narf.ioutils
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.io as pio
+from narf import ioutils
 from plotly.subplots import make_subplots
 
 from combinetf2 import io_tools
@@ -39,7 +39,7 @@ def writeOutput(fig, outfile, extensions=[], postfix=None, args=None, meta_info=
             output = (None, *output)
     if args is None and meta_info is None:
         return
-    narf.ioutils.write_logfile(
+    ioutils.write_logfile(
         *output,
         args=args,
         meta_info=meta_info,
@@ -74,6 +74,7 @@ def plotImpacts(
     title=None,
     subtitle=None,
     impacts=True,
+    asym=False,
     asym_pulls=False,
     include_ref=False,
     ref_name="ref.",
@@ -201,18 +202,13 @@ def plotImpacts(
 
         def make_bar(
             key="impact",
-            sign=1,
             color="#377eb8",
             name="+1σ impact",
             text_on_bars=False,
             filled=True,
             opacity=1,
         ):
-            x = (
-                np.where(sign * df[key] < 0, np.nan, sign * df[key])
-                if oneSidedImpacts
-                else sign * df[key]
-            )
+            x = np.where(df[key] < 0, np.nan, df[key]) if oneSidedImpacts else df[key]
 
             if text_on_bars:
                 text = np.where(np.isnan(x), None, [f"{value:.2f}" for value in x])
@@ -230,14 +226,18 @@ def plotImpacts(
             )
 
         fig.add_trace(
-            make_bar(text_on_bars=text_on_bars, opacity=0.5 if include_ref else 1),
+            make_bar(
+                key="impact_up",
+                text_on_bars=text_on_bars,
+                opacity=0.5 if include_ref else 1,
+            ),
             row=1,
             col=1,
         )
         if include_ref:
             fig.add_trace(
                 make_bar(
-                    key="impact_ref", name=f"+1σ impact ({ref_name})", filled=False
+                    key="impact_up_ref", name=f"+1σ impact ({ref_name})", filled=False
                 ),
                 row=1,
                 col=1,
@@ -245,8 +245,8 @@ def plotImpacts(
 
         fig.add_trace(
             make_bar(
+                key="impact_down",
                 name="-1σ impact",
-                sign=-1,
                 color="#e41a1c",
                 text_on_bars=text_on_bars,
                 opacity=0.5 if include_ref else 1,
@@ -257,9 +257,8 @@ def plotImpacts(
         if include_ref:
             fig.add_trace(
                 make_bar(
-                    key="impact_ref",
+                    key="impact_down_ref",
                     name=f"-1σ impact ({ref_name})",
-                    sign=-1,
                     color="#e41a1c",
                     filled=False,
                 ),
@@ -291,6 +290,17 @@ def plotImpacts(
         )
 
     if pulls:
+        error_x = dict(
+            color="black",
+            thickness=1.5,
+            width=5,
+        )
+        if asym:
+            error_x["array"] = df["constraint_up"]
+            error_x["arrayminus"] = df["constraint_down"]
+        else:
+            error_x["array"] = df["constraint"]
+
         fig.add_trace(
             go.Scatter(
                 x=df["pull"],
@@ -300,12 +310,7 @@ def plotImpacts(
                     color="black",
                     size=8,
                 ),
-                error_x=dict(
-                    array=df["constraint"],
-                    color="black",
-                    thickness=1.5,
-                    width=5,
-                ),
+                error_x=error_x,
                 name="Pulls ± Constraints",
                 showlegend=include_ref,
             ),
@@ -313,10 +318,17 @@ def plotImpacts(
             col=ncols,
         )
         if include_ref:
+            if asym:
+                base = df["pull_ref"] - df["constraint_down"]
+                x = df["constraint_up"] + df["constraint_down"]
+            else:
+                base = df["pull_ref"] - df["constraint_ref"]
+                x = 2 * df["constraint_ref"]
+
             fig.add_trace(
                 go.Bar(
-                    base=df["pull_ref"] - df["constraint_ref"],
-                    x=2 * df["constraint_ref"],
+                    base=base,
+                    x=x,
                     y=labels,
                     orientation="h",
                     **get_marker(filled=False, color="black"),
@@ -428,6 +440,7 @@ def readFitInfoFromFile(
     group=False,
     global_impacts=False,
     grouping=None,
+    asym=False,
     filters=[],
     stat=0.0,
     normalize=False,
@@ -439,6 +452,7 @@ def readFitInfoFromFile(
             poi,
             group,
             pulls=not group,
+            asym=asym,
             global_impacts=global_impacts,
             add_total=group,
         )
@@ -458,7 +472,7 @@ def readFitInfoFromFile(
             impacts[idx] = stat
     else:
         labels = io_tools.get_syst_labels(fitresult)
-        _, pulls, constraints = io_tools.get_pulls_and_constraints(fitresult)
+        _, pulls, constraints = io_tools.get_pulls_and_constraints(fitresult, asym=asym)
         _, pulls_prefit, constraints_prefit = io_tools.get_pulls_and_constraints(
             fitresult, prefit=True
         )
@@ -488,8 +502,14 @@ def readFitInfoFromFile(
         if scale and not normalize:
             impacts = impacts * scale
 
-        df["impact"] = impacts
-        df["absimpact"] = np.abs(df["impact"])
+        if asym:
+            df["impact_down"] = impacts[..., 1]
+            df["impact_up"] = impacts[..., 0]
+            df["absimpact"] = np.abs(impacts).max(axis=-1)
+        else:
+            df["impact_down"] = -impacts
+            df["impact_up"] = impacts
+            df["absimpact"] = np.abs(impacts)
 
     if not group:
         if apply_mask:
@@ -497,18 +517,21 @@ def readFitInfoFromFile(
             constraints = constraints[mask]
             pulls_prefit = pulls_prefit[mask]
             constraints_prefit = constraints_prefit[mask]
-        df["pull"], df["constraint"], df["pull_prefit"] = (
-            pulls,
-            constraints,
-            pulls_prefit,
-        )
+        df["pull"] = pulls
+        df["pull_prefit"] = pulls_prefit
         df["pull"] = pulls - pulls_prefit
         df["abspull"] = np.abs(df["pull"])
-        valid = (1 - constraints**2) > 0
-        df["newpull"] = 999.0
-        df.loc[valid, "newpull"] = df.loc[valid]["pull"] / np.sqrt(
-            1 - df.loc[valid]["constraint"] ** 2
-        )
+
+        if asym:
+            df["constraint_down"] = -constraints[..., 1]
+            df["constraint_up"] = constraints[..., 0]
+        else:
+            df["constraint"] = constraints
+            valid = (1 - constraints**2) > 0
+            df["newpull"] = 999.0
+            df.loc[valid, "newpull"] = df.loc[valid]["pull"] / np.sqrt(
+                1 - df.loc[valid]["constraint"] ** 2
+            )
 
     if poi:
         df = df.drop(df.loc[df["label"] == poi].index)
@@ -548,7 +571,7 @@ def parseArgs():
     parser.add_argument(
         "-s",
         "--sort",
-        default="absimpact",
+        default=None,
         type=str,
         help="Sort mode for nuisances",
         choices=sort_choices,
@@ -632,6 +655,11 @@ def parseArgs():
         help="Show global impacts instead of traditional ones",
     )
     parser.add_argument(
+        "--asym",
+        action="store_true",
+        help="Show asymmetric numbers from likelihood confidence intervals",
+    )
+    parser.add_argument(
         "--showNumbers", action="store_true", help="Show values of impacts"
     )
     parser.add_argument(
@@ -684,6 +712,7 @@ def producePlots(
     outfile,
     poi=None,
     group=False,
+    asym=False,
     normalize=False,
     fitresult_ref=None,
     grouping=None,
@@ -699,6 +728,7 @@ def producePlots(
             fitresult,
             poi,
             False,
+            asym=asym,
             global_impacts=args.globalImpacts,
             filters=args.filters,
             stat=args.stat / 100.0,
@@ -723,6 +753,7 @@ def producePlots(
             fitresult_ref,
             poi,
             group,
+            asym=asym,
             global_impacts=args.globalImpacts,
             filters=args.filters,
             stat=args.stat / 100.0,
@@ -772,6 +803,7 @@ def producePlots(
         title=args.title,
         subtitle=args.subtitle,
         impacts=not args.noImpacts,
+        asym=asym,
         asym_pulls=args.diffPullAsym,
         include_ref=include_ref,
         ref_name=args.refName,
@@ -814,6 +846,7 @@ if __name__ == "__main__":
 
     kwargs = dict(
         pullrange=args.pullrange,
+        asym=args.asym,
         fitresult_ref=fitresult_ref,
         meta=meta,
         postfix=args.postfix,

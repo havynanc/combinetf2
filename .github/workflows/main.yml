@@ -141,7 +141,7 @@ jobs:
         run: >- 
           python scripts/fit.py 
           $COMBINETF2_OUTDIR/test_tensor.hdf5 -o $COMBINETF2_OUTDIR/fitresults.hdf5
-          -t -0 --binByBinStat --doImpacts --globalImpacts --computeHistErrors --computeHistCov --computeHistImpacts 
+          -t 0 --binByBinStat --doImpacts --globalImpacts --computeHistErrors --computeHistCov --computeHistImpacts 
           --saveHists --computeHistErrors --project ch1 a --project ch1 b 
 
       - name: sparse tensor fit 
@@ -165,7 +165,7 @@ jobs:
           --saveHists --computeHistErrors --project ch1 a --project ch1 b 
 
 
-  evaluation:
+  plotting:
     runs-on: [self-hosted, linux, x64]
     needs: [setenv, fitting]
 
@@ -194,13 +194,13 @@ jobs:
 
       - name: plot impacts
         run: >-
-          python scripts/pullsAndImpacts.py $COMBINETF2_OUTDIR/fitresults.hdf5 -o $WEB_DIR/$PLOT_DIR
+          python scripts/plot_pullsAndImpacts.py $COMBINETF2_OUTDIR/fitresults.hdf5 -o $WEB_DIR/$PLOT_DIR
           --otherExtensions pdf png  -n 50
           --subtitle Preliminary --groups Total slopes background_normalization binByBinStat stat 
 
       - name: plot global impacts
         run: >-
-          python scripts/pullsAndImpacts.py $COMBINETF2_OUTDIR/fitresults.hdf5 -o $WEB_DIR/$PLOT_DIR
+          python scripts/plot_pullsAndImpacts.py $COMBINETF2_OUTDIR/fitresults.hdf5 -o $WEB_DIR/$PLOT_DIR
           -r $COMBINETF2_OUTDIR/fitresults_pseudodata.hdf5 --refName "Pseudo data"
           --otherExtensions pdf png  -n 50 --oneSidedImpacts --globalImpacts --diffPullAsym --showNumbers
           --groups Total slopes background_normalization binByBinStat stat 
@@ -209,9 +209,50 @@ jobs:
       - name: copy index php file
         run: cp data/Templates/index_mit.php $WEB_DIR/$PLOT_DIR/index.php
 
+
+  likelihoodscans:
+    runs-on: [self-hosted, linux, x64]
+    needs: [setenv, make-tensor]
+
+    steps:
+      - env:
+          COMBINETF2_OUTDIR: ${{ needs.setenv.outputs.COMBINETF2_OUTDIR }}
+          PYTHONPATH: ${{ needs.setenv.outputs.PYTHONPATH }}
+          WEB_DIR: ${{ needs.setenv.outputs.WEB_DIR }}
+          PLOT_DIR: ${{ needs.setenv.outputs.PLOT_DIR }}
+        run: |
+          echo "COMBINETF2_OUTDIR=${COMBINETF2_OUTDIR}" >> $GITHUB_ENV
+          echo "PYTHONPATH=${PYTHONPATH}" >> $GITHUB_ENV
+          echo "WEB_DIR=${WEB_DIR}" >> $GITHUB_ENV
+          echo "PLOT_DIR=${PLOT_DIR}" >> $GITHUB_ENV
+
+      - uses: actions/checkout@v4
+
+      - name: nominal fit with scans
+        run: >- 
+          python scripts/fit.py 
+          $COMBINETF2_OUTDIR/test_tensor.hdf5 -o $COMBINETF2_OUTDIR/fitresults_scans.hdf5
+          -t 0 --doImpacts 
+          --scan sig slope_signal --contourScan sig slope_signal --contourLevels 1 2
+
+      # --scan2D sig slope_signal --contourScan2D sig slope_signal
+
+      - name: plot 1D likelihood scan
+        run: >-
+          python scripts/plot_likelihood_scan.py $COMBINETF2_OUTDIR/fitresults_scans.hdf5 -o $WEB_DIR/$PLOT_DIR 
+          --title CombineTF2 --subtitle Preliminary --params sig slope_signal
+
+      # - name: plot 2D likelihood scan
+      #   run: >-
+      #     python scripts/plot_likelihood_scan2D.py $COMBINETF2_OUTDIR/fitresults_scans.hdf5 -o $WEB_DIR/$PLOT_DIR 
+      #     --title CombineTF2 --subtitle Preliminary --params sig slope_signal
+
+      - name: copy index php file
+        run: cp data/Templates/index_mit.php $WEB_DIR/$PLOT_DIR/index.php
+
   copy-clean:
     runs-on: [self-hosted, linux, x64]
-    needs: [setenv, evaluation]
+    needs: [setenv, plotting, likelihoodscans]
     if: always() 
     steps:
       - env:

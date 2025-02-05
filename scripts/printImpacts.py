@@ -1,5 +1,7 @@
 import argparse
 
+import numpy as np
+
 from combinetf2 import io_tools
 
 
@@ -18,6 +20,11 @@ def parseArgs():
         "--globalImpacts", action="store_true", help="Print global impacts"
     )
     parser.add_argument(
+        "--asymImpacts",
+        action="store_true",
+        help="Print asymmetric impacts from likelihood confidence intervals",
+    )
+    parser.add_argument(
         "inputFile",
         type=str,
         help="fitresults output",
@@ -29,22 +36,31 @@ def printImpacts(args, fitresult, poi):
     impacts, labels = io_tools.read_impacts_poi(
         fitresult,
         poi,
+        asym=args.asymImpacts,
         grouped=not args.ungroup,
         global_impacts=args.globalImpacts,
-        sort=args.sort,
     )
     unit = "n.u. %"
+
+    if args.sort:
+        order = np.argmax([max(x) for x in impacts])
+        labels = labels[order]
+        impacts = impacts[order]
+
+    if args.asymImpacts:
+        fimpact = lambda x: f"{round(max(x)*100, 2)} / {round(min(x)*100, 2)}"
+    else:
+        fimpact = lambda x: round(x * 100, 2)
+
     if args.nuisance:
         if args.nuisance not in labels:
             raise ValueError(f"Invalid nuisance {args.nuisance}. Options are {labels}")
         print(
-            f"Impact of nuisance {args.nuisance} on {poi} is {impacts[list(labels).index(args.nuisance)]*100} {unit}"
+            f"Impact of nuisance {args.nuisance} on {poi} is {fimpact(impacts[list(labels).index(args.nuisance)])} {unit}"
         )
     else:
         print(f"Impact of all systematics on {poi} (in {unit})")
-        print(
-            "\n".join([f"   {k}: {round(v*100, 2)}" for k, v in zip(labels, impacts)])
-        )
+        print("\n".join([f"   {k}: {fimpact(v)}" for k, v in zip(labels, impacts)]))
 
 
 if __name__ == "__main__":

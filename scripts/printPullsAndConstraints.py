@@ -37,6 +37,12 @@ def parseArgs():
         type=str,
         help="fitresults output",
     )
+    parser.add_argument(
+        "--asym",
+        default=False,
+        action="store_true",
+        help="Print asymmetric constraints from contour scans",
+    )
     return parser.parse_args()
 
 
@@ -48,6 +54,11 @@ if __name__ == "__main__":
     labels, pulls_prefit, constraints_prefit = io_tools.get_pulls_and_constraints(
         fitresult, prefit=True
     )
+
+    if args.asym:
+        _0, _1, constraints_asym = io_tools.get_pulls_and_constraints(
+            fitresult, asym=True
+        )
 
     if args.sort is not None:
         if args.sort.startswith("abs"):
@@ -77,17 +88,41 @@ if __name__ == "__main__":
         pulls_prefit = pulls_prefit[order]
         constraints_prefit = constraints_prefit[order]
 
-    print(
-        f"   {'Parameter':<30} {'pull':>6} +/- {'constraint':>10} ({'pull prefit':>11} +/- {'constraint prefit':>17})"
-    )
-    print("   " + "-" * 100)
-    print(
-        "\n".join(
-            [
-                f"   {l:<30} {round(p, 2):>6} +/- {round(c, 2):>10} ({round(pp, 2):>11} +/- {round(pc, 2):>17})"
-                for l, p, c, pp, pc in zip(
-                    labels, pulls, constraints, pulls_prefit, constraints_prefit
-                )
-            ]
+        if args.asym:
+            constraints_asym = constraints_asym[order]
+
+    if args.asym:
+        print(
+            f"   {'Parameter':<30} {'pull':>6} +/- {'constraint':>10} + {'up':>10} - {'down':>10} ({'pull prefit':>11} +/- {'constraint prefit':>17})"
         )
-    )
+        print("   " + "-" * 100)
+        print(
+            "\n".join(
+                [
+                    f"   {l:<30} {round(p, 2):>6} +/- {round(c, 2):>10} + {round(c_asym[0], 2):>10} - {round(c_asym[1], 2):>10} ({round(pp, 2):>11} +/- {round(pc, 2):>17})"
+                    for l, p, c, c_asym, pp, pc in zip(
+                        labels,
+                        pulls,
+                        constraints,
+                        constraints_asym,
+                        pulls_prefit,
+                        constraints_prefit,
+                    )
+                ]
+            )
+        )
+    else:
+        print(
+            f"   {'Parameter':<30} {'pull':>6} +/- {'constraint':>10} ({'pull prefit':>11} +/- {'constraint prefit':>17})"
+        )
+        print("   " + "-" * 100)
+        print(
+            "\n".join(
+                [
+                    f"   {l:<30} {round(p, 2):>6} +/- {round(c, 2):>10} ({round(pp, 2):>11} +/- {round(pc, 2):>17})"
+                    for l, p, c, pp, pc in zip(
+                        labels, pulls, constraints, pulls_prefit, constraints_prefit
+                    )
+                ]
+            )
+        )

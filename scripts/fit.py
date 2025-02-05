@@ -58,6 +58,63 @@ def make_parser():
     )
     parser.add_argument("--POIDefault", default=1.0, type=float, help="mode for POI's")
     parser.add_argument(
+        "--contourScan",
+        default=None,
+        type=str,
+        nargs="*",
+        help="run likelihood contour scan on the specified variables, specify w/o argument for all parameters",
+    )
+    parser.add_argument(
+        "--contourLevels",
+        default=[
+            1.0,
+        ],
+        type=float,
+        nargs="+",
+        help="Confidence level in standard deviations for contour scans (1 = 1 sigma = 68%)",
+    )
+    parser.add_argument(
+        "--contourScan2D",
+        default=[],
+        type=str,
+        nargs="+",
+        action="append",
+        help="run likelihood contour scan on the specified variable pairs",
+    )
+    parser.add_argument(
+        "--scan",
+        default=None,
+        type=str,
+        nargs="+",
+        help="run likelihood scan on the specified variables",
+    )
+    parser.add_argument(
+        "--scan2D",
+        default=[],
+        type=str,
+        nargs="+",
+        action="append",
+        help="run 2D likelihood scan on the specified variable pairs",
+    )
+    parser.add_argument(
+        "--scanPoints",
+        default=15,
+        type=int,
+        help="default number of points for likelihood scan",
+    )
+    parser.add_argument(
+        "--scanRange",
+        default=3.0,
+        type=float,
+        help="default scan range in terms of hessian uncertainty",
+    )
+    parser.add_argument(
+        "--scanRangeUsePrefit",
+        default=False,
+        action="store_true",
+        help="use prefit uncertainty to define scan range",
+    )
+    parser.add_argument(
         "--saveHists",
         default=False,
         action="store_true",
@@ -532,6 +589,68 @@ def postfit(args, fitter, results, dofit=True):
                 projection["hist_postfit_variations_correlated"] = (
                     hist_postfit_variations_correlated
                 )
+
+    if args.scan is not None:
+        for param in args.scan:
+            x_scan, nll_values = fitter.nll_scan(
+                param, args.scanRange, args.scanPoints, args.scanRangeUsePrefit
+            )
+            results[f"nll_scan_{param}"] = fitter.nll_scan_hist(
+                param, x_scan, nll_values - nllvalfull
+            )
+
+    if args.scan2D is not None:
+        for param_tuple in args.scan2D:
+            x_scan, yscan, nll_values = fitter.nll_scan2D(
+                param_tuple, args.scanRange, args.scanPoints, args.scanRangeUsePrefit
+            )
+            p0, p1 = param_tuple
+            results[f"nll_scan2D_{p0}_{p1}"] = fitter.nll_scan2D_hist(
+                param_tuple, x_scan, yscan, nll_values - nllvalfull
+            )
+
+    if args.contourScan is not None:
+        # do likelihood contour scans
+        nllvalreduced = fitter.reduced_nll().numpy()
+
+        parms = (
+            np.array(fitter.parms).astype(str)
+            if len(args.contourScan) == 0
+            else args.contourScan
+        )
+
+        contours = np.zeros((len(parms), len(args.contourLevels), 2, len(fitter.parms)))
+        for i, param in enumerate(parms):
+            for j, cl in enumerate(args.contourLevels):
+
+                # find confidence interval
+                contour = fitter.contour_scan(param, nllvalreduced, cl)
+                contours[i, j, ...] = contour
+
+        results["contour_scans"] = fitter.contour_scan_hist(
+            parms, contours, args.contourLevels
+        )
+
+    if args.contourScan2D is not None:
+        # do likelihood contour scans in 2D
+        nllvalreduced = fitter.reduced_nll().numpy()
+
+        contours = np.zeros(
+            (len(args.contourScan2D), len(args.contourLevels), 2, args.scanPoints)
+        )
+        for i, param_tuple in enumerate(args.contourScan2D):
+            for j, cl in enumerate(args.contourLevels):
+
+                # find confidence interval
+                contour = fitter.contour_scan2D(
+                    param_tuple, nllvalreduced, cl, n_points=args.scanPoints
+                )
+                contours[i, j, ...] = contour
+
+        results["contour_scans2D"] = fitter.contour_scan2D_hist(
+            args.contourScan2D, contours, args.contourLevels
+        )
+
     return results
 
 

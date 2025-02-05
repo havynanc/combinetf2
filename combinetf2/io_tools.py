@@ -13,7 +13,11 @@ def get_fitresult(fitresult_filename, meta=False):
 
 
 def get_poi_names(fitresult):
-    h = fitresult["impacts"].get()
+    if "impacts" in fitresult.keys():
+        h = fitresult["impacts"].get()
+    elif "contour_scans" in fitresult.keys():
+        h = fitresult["contour_scans"].get()
+
     return np.array(h.axes["parms"])
 
 
@@ -28,28 +32,28 @@ def read_impacts_poi(
     grouped=False,
     global_impacts=False,
     pulls=False,
-    sort=True,
     add_total=True,
+    asym=False,
 ):
     # read impacts of a single POI
-    impact_name = "impacts"
-    if global_impacts:
-        impact_name = f"global_{impact_name}"
-    if grouped:
-        impact_name += "_grouped"
 
-    h_impacts = fitresult[impact_name].get()
+    if asym:
+        h_impacts = fitresult["contour_scans"].get()[{"confidence_level": "1.0"}]
+    else:
+        impact_name = "impacts"
+        if global_impacts:
+            impact_name = f"global_{impact_name}"
+        if grouped:
+            impact_name += "_grouped"
+
+        h_impacts = fitresult[impact_name].get()
+
     h_impacts = h_impacts[{"parms": poi}]
 
     impacts = h_impacts.values()
     labels = np.array(h_impacts.axes["impacts"])
 
-    if sort:
-        order = np.argsort(impacts)
-        impacts = impacts[order]
-        labels = labels[order]
-
-    if add_total:
+    if add_total and poi not in labels:
         h_parms = fitresult["parms"].get()
         total = np.sqrt(h_parms[{"parms": poi}].variance)
 
@@ -58,28 +62,27 @@ def read_impacts_poi(
             labels = np.append(labels, "Total")
 
     if pulls:
-        _, pulls, constraints = get_pulls_and_constraints(fitresult)
+        _, pulls, constraints = get_pulls_and_constraints(fitresult, asym=asym)
         _, pulls_prefit, constraints_prefit = get_pulls_and_constraints(
             fitresult, prefit=True
         )
-        if sort:
-            pulls = pulls[order]
-            constraints = constraints[order]
-            pulls_prefit = pulls_prefit[order]
-            constraints_prefit = constraints_prefit[order]
-
         return pulls, pulls_prefit, constraints, constraints_prefit, impacts, labels
 
     return impacts, labels
 
 
-def get_pulls_and_constraints(fitresult, prefit=False):
+def get_pulls_and_constraints(fitresult, prefit=False, asym=False):
     hist_name = "parms_prefit" if prefit else "parms"
     h_parms = fitresult[hist_name].get()
-
     labels = np.array(h_parms.axes["parms"])
     pulls = h_parms.values()
-    constraints = np.sqrt(h_parms.variances())
+
+    if asym:
+        h_intervals = fitresult["contour_scans"].get()
+        intervals = h_intervals[{"confidence_level": "1.0"}].values()
+        constraints = np.einsum("i j i -> i j", intervals)
+    else:
+        constraints = np.sqrt(h_parms.variances())
 
     return labels, pulls, constraints
 

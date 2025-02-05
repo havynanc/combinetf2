@@ -1,7 +1,14 @@
 import pathlib
 import re
 
+import hist
+
 base_dir = f"{pathlib.Path(__file__).parent}/../"
+
+
+axis_downUpVar = hist.axis.Regular(
+    2, -2.0, 2.0, underflow=False, overflow=False, name="downUpVar"
+)
 
 
 def natural_sort_key(s):
