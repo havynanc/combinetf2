@@ -690,10 +690,10 @@ if __name__ == "__main__":
     fits = np.concatenate(
         [np.array([x]) if x <= 0 else 1 + np.arange(x, dtype=int) for x in args.toys]
     )
-    postfix = "" if args.postfix is None else f"_{args.postfix}"
     for ifit in fits:
         ifitter.defaultassign()
 
+        postfix = "" if args.postfix is None else f"_{args.postfix}"
         if ifit == -1:
             postfix += "_asimov"
             ifitter.nobs.assign(ifitter.expected_events())

@@ -79,8 +79,7 @@ class TensorWriter:
         self.dict_data_obs[channel] = self.get_flat_values(h)
 
     def add_data_covariance(self, cov, add_bin_by_bin_stat_to_data_cov=False):
-        cov = cov if isinstance(cov, np.ndarray) else cov.values()
-        self.data_covariance = np.linalg.inv(cov)
+        self.data_covariance = cov if isinstance(cov, np.ndarray) else cov.values()
         self.add_bin_by_bin_stat_to_data_cov = add_bin_by_bin_stat_to_data_cov
 
     def add_pseudodata(self, h, name=None, channel="ch0"):
