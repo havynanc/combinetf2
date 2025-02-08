@@ -44,6 +44,12 @@ def parseArgs():
         help="fitresults output",
     )
     parser.add_argument(
+        "--result",
+        default=None,
+        type=str,
+        help="fitresults key in file (e.g. 'asimov'). Leave empty for data fit result.",
+    )
+    parser.add_argument(
         "-o",
         "--outpath",
         type=str,
@@ -151,7 +157,7 @@ def plot_scan(
 
 if __name__ == "__main__":
     args = parseArgs()
-    fitresult, meta = io_tools.get_fitresult(args.inputFile, meta=True)
+    fitresult, meta = io_tools.get_fitresult(args.inputFile, args.result, meta=True)
 
     meta = {
         "combinetf2": meta["meta_info"],

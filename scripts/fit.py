@@ -222,11 +222,12 @@ def save_hists(args, fitter, ws, prefit=True):
     ws.add_expected_hists(
         fitter.indata.channel_info,
         exp,
-        expvar=aux[0],
-        exp_impacts=aux[1],
-        exp_impacts_grouped=aux[2],
-        ndf=aux[3],
-        chi2=aux[4],
+        var=aux[0],
+        cov=aux[1],
+        impacts=aux[2],
+        impacts_grouped=aux[3],
+        ndf=aux[4],
+        chi2=aux[5],
         prefit=prefit,
     )
 
@@ -238,6 +239,7 @@ def save_hists(args, fitter, ws, prefit=True):
     )
 
     ws.add_expected_hists(
+        fitter.indata.channel_info,
         exp,
         var=aux[0],
         process_axis=fitter.indata.axis_procs,
@@ -265,8 +267,9 @@ def save_hists(args, fitter, ws, prefit=True):
             var=aux[0],
             cov=aux[1],
             impacts=aux[2],
-            ndf=aux[3],
-            chi2=aux[4],
+            impacts_grouped=aux[3],
+            ndf=aux[4],
+            chi2=aux[5],
             prefit=prefit,
         )
 
@@ -277,7 +280,6 @@ def save_hists(args, fitter, ws, prefit=True):
             axes=axes,
             inclusive=False,
             compute_variance=args.computeHistErrors,
-            compute_chi2=not args.noChi2,
         )
 
         ws.add_expected_projection_hists(
@@ -302,16 +304,15 @@ def save_hists(args, fitter, ws, prefit=True):
             profile_grad=False,
         )
 
-        ws.add_expected_projection_hists(
+        ws.add_expected_hists(
+            fitter.indata.channel_info,
             exp,
             var=aux[0],
             variations=True,
             prefit=prefit,
         )
 
-        for projection in ws.projections:
-            channel = projection["channel"]
-            axes = projection["axes"]
+        for channel, axes in args.project:
 
             exp, aux = fitter.expected_events_projection(
                 channel=channel,
@@ -427,9 +428,9 @@ def fit(args, fitter, ws, dofit=True):
     )
 
     ws.add_parms_hist(
-        values=ifitter.x.numpy(),
+        values=ifitter.x,
         variances=tf.linalg.diag_part(ifitter.cov),
-        hist_name="parms_prefit",
+        hist_name="parms",
     )
 
     ws.add_cov_hist(fitter.cov)
@@ -539,11 +540,12 @@ if __name__ == "__main__":
         )
         for ifit in fits:
             ifitter.defaultassign()
+            ws.reset_results(ifitter.indata.channel_info.keys())
 
             group = "results"
             if ifit == -1:
                 group += "_asimov"
-                ifitter.nobs.assign(ifitter.expected_events())
+                ifitter.nobs.assign(ifitter._compute_yields(inclusive=True))
             if ifit == 0:
                 ifitter.nobs.assign(ifitter.indata.data_obs)
             elif ifit >= 1:
@@ -553,7 +555,7 @@ if __name__ == "__main__":
                 )
 
             ws.add_parms_hist(
-                values=ifitter.x.numpy(),
+                values=ifitter.x,
                 variances=tf.linalg.diag_part(ifitter.cov),
                 hist_name="parms_prefit",
             )

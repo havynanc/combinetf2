@@ -1,4 +1,3 @@
-# CombineTF2
 ![Framework Logo](data/logo/logo.svg)
 
 Perform complex profile binned maximum likelihood fits by exploiting state-of-the-art differential programming. 

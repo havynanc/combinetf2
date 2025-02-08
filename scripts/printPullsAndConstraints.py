@@ -38,6 +38,12 @@ def parseArgs():
         help="fitresults output",
     )
     parser.add_argument(
+        "--result",
+        default=None,
+        type=str,
+        help="fitresults key in file (e.g. 'asimov'). Leave empty for data fit result.",
+    )
+    parser.add_argument(
         "--asym",
         default=False,
         action="store_true",
@@ -48,7 +54,7 @@ def parseArgs():
 
 if __name__ == "__main__":
     args = parseArgs()
-    fitresult = io_tools.get_fitresult(args.inputFile)
+    fitresult = io_tools.get_fitresult(args.inputFile, args.result)
 
     labels, pulls, constraints = io_tools.get_pulls_and_constraints(fitresult)
     labels, pulls_prefit, constraints_prefit = io_tools.get_pulls_and_constraints(

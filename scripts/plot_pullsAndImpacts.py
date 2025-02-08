@@ -559,10 +559,22 @@ def parseArgs():
         help="fitresults output hdf5 file from fit",
     )
     parser.add_argument(
+        "--result",
+        default=None,
+        type=str,
+        help="fitresults key in file (e.g. 'asimov'). Leave empty for data fit result.",
+    )
+    parser.add_argument(
         "-r",
         "--referenceFile",
         type=str,
         help="fitresults output hdf5 file from fit for reference",
+    )
+    parser.add_argument(
+        "--refResult",
+        default=None,
+        type=str,
+        help="fitresults key in file (e.g. 'asimov'). Leave empty for data fit result.",
     )
     parser.add_argument(
         "--refName",
@@ -836,9 +848,11 @@ if __name__ == "__main__":
         with open(args.translate) as f:
             translate_label = json.load(f)
 
-    fitresult, meta = io_tools.get_fitresult(args.inputFile, meta=True)
+    fitresult, meta = io_tools.get_fitresult(args.inputFile, args.result, meta=True)
     fitresult_ref = (
-        io_tools.get_fitresult(args.referenceFile) if args.referenceFile else None
+        io_tools.get_fitresult(args.referenceFile, args.refResult)
+        if args.referenceFile
+        else None
     )
 
     meta = {

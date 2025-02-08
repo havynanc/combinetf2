@@ -29,6 +29,12 @@ def parseArgs():
         type=str,
         help="fitresults output",
     )
+    parser.add_argument(
+        "--result",
+        default=None,
+        type=str,
+        help="fitresults key in file (e.g. 'asimov'). Leave empty for data fit result.",
+    )
     return parser.parse_args()
 
 
@@ -69,6 +75,6 @@ def printImpacts(args, fitresult, poi):
 
 if __name__ == "__main__":
     args = parseArgs()
-    fitresult = io_tools.get_fitresult(args.inputFile)
+    fitresult = io_tools.get_fitresult(args.inputFile, args.result)
     for poi in io_tools.get_poi_names(fitresult):
         printImpacts(args, fitresult, poi)

@@ -4,6 +4,7 @@ import h5py
 import hist
 import narf.ioutils
 import numpy as np
+import tensorflow as tf
 
 axis_downUpVar = hist.axis.Regular(
     2, -2.0, 2.0, underflow=False, overflow=False, name="downUpVar"
@@ -51,14 +52,19 @@ def get_name_label_expected_hists(
         if variations:
             label += "with variations, "
 
+    return name, label
+
 
 class Workspace:
     def __init__(self, outdir, outname, fitter, postfix=None, projections=[]):
 
         channels = set(p[0] for p in projections)
-        self.projections = {c: {} for c in channels}
+        self.projections = {c: [] for c in channels}
         for c, a in projections:
-            self.projections[c] = a
+            self.projections[c].append(a)
+
+        self.results = {}
+        self.reset_results(fitter.indata.channel_info.keys())
 
         # some information for the impact histograms
         self.global_impact_axis = getGlobalImpactsAxes(fitter.indata)
@@ -67,19 +73,16 @@ class Workspace:
             fitter.indata, fitter.binByBinStat
         )
 
-        self.parms = list(fitter.parms.astype(str))
+        self.parms = fitter.parms
         self.npoi = fitter.npoi
         self.noigroupidxs = fitter.indata.noigroupidxs
 
         self.extension = "hdf5"
-        file_path = self.get_file_path(outdir, outname, postfix)
-        self.fout = h5py.File(file_path, "w")
-
-        self.results = {}
+        self.file_path = self.get_file_path(outdir, outname, postfix)
 
     def __enter__(self):
         """Open the file when entering the context."""
-        print(f"Write output file {self.file_path}")
+        print(f"Write results in file {self.file_path}")
         self.fout = h5py.File(self.file_path, "w")
         return self  # Allows `with Workspace(...) as ws:` usage
 
@@ -88,6 +91,12 @@ class Workspace:
         if self.fout:
             self.fout.close()
             self.fout = None
+
+    def reset_results(self, channels):
+        for c in channels:
+            self.results[c] = {}
+            for a in self.projections.get(c, []):
+                self.results[c][f"projection_{'_'.join(a)}"] = {}
 
     def get_file_path(self, outdir, outname, postfix=None):
         # create output file name
@@ -102,7 +111,7 @@ class Workspace:
 
         if postfix is not None:
             parts = file_path.rsplit(".", 1)
-            file_path = f"{parts[0]}{postfix}.{parts[1]}"
+            file_path = f"{parts[0]}_{postfix}.{parts[1]}"
         return file_path
 
     def dump_obj(self, obj, key, channel=None, projection_axes=None):
@@ -116,10 +125,10 @@ class Workspace:
         else:
             self.results[key] = obj
 
-    def dump_hist(self, hist, **kwargs):
+    def dump_hist(self, hist, channel=None, projection_axes=None):
         name = hist.name
         h = narf.ioutils.H5PickleProxy(hist)
-        self.dump_obj(h, name, **kwargs)
+        self.dump_obj(h, name, channel, projection_axes)
 
     def hist(self, name, axes, values, variances=None, label=None):
         if not isinstance(axes, (list, tuple, np.ndarray)):
@@ -128,17 +137,26 @@ class Workspace:
             hist.storage.Weight() if variances is not None else hist.storage.Double()
         )
         h = hist.Hist(*axes, storage=storage_type, name=name, label=label)
-        h.values()[...] = memoryview(np.reshape(values, h.shape))
+        h.values()[...] = memoryview(tf.reshape(values, h.shape))
         if variances is not None:
-            h.variances()[...] = memoryview(np.reshape(variances, h.shape))
+            h.variances()[...] = memoryview(tf.reshape(variances, h.shape))
         return h
 
-    def add_hist(self, *args, channel=None, projection_axes=None, **kwargs):
-        h = self.hist(*args, *kwargs)
+    def add_hist(
+        self,
+        name,
+        axes,
+        values,
+        variances=None,
+        label=None,
+        channel=None,
+        projection_axes=None,
+    ):
+        h = self.hist(name, axes, values, variances, label)
         self.dump_hist(h, channel, projection_axes)
 
-    def add_value(self, value, name, **kwargs):
-        self.dump_obj(value, name, **kwargs)
+    def add_value(self, value, name, channel=None, projection_axes=None):
+        self.dump_obj(value, name, channel, projection_axes)
 
     def add_observed_hists(self, channel_info, data_obs, nobs):
         hists_data_obs = {}
@@ -155,17 +173,15 @@ class Workspace:
                 axes,
                 values=data_obs[start:stop],
                 label="observed number of events in data",
-                channel=channel,
             )
             h_nobs = self.hist(
                 "hist_nobs",
                 axes,
                 values=nobs[start:stop],
                 label="observed number of events for fit",
-                channel=channel,
             )
 
-            for axes in self.projections[channel]:
+            for axes in self.projections.get(channel, []):
                 self.dump_hist(h_data_obs.project(*axes), channel, axes)
                 self.dump_hist(h_nobs.project(*axes), channel, axes)
 
@@ -175,24 +191,28 @@ class Workspace:
         return hists_data_obs, hists_nobs
 
     def add_parms_hist(self, values, variances, hist_name="parms"):
-        axis_parms = hist.axis.StrCategory(self.parms, name="parms")
-        self.add_hist(hist_name, axis_parms, values=values, variances=variances)
+        axis_parms = hist.axis.StrCategory(list(self.parms.astype(str)), name="parms")
+        self.add_hist(hist_name, axis_parms, values, variances=variances)
 
     def add_cov_hist(self, cov, hist_name="cov"):
-        axis_parms_x = hist.axis.StrCategory(self.parms, name="parms_x")
-        axis_parms_y = hist.axis.StrCategory(self.parms, name="parms_y")
-        self.add_hist(hist_name, [axis_parms_x, axis_parms_y], values=cov)
+        axis_parms_x = hist.axis.StrCategory(
+            list(self.parms.astype(str)), name="parms_x"
+        )
+        axis_parms_y = hist.axis.StrCategory(
+            list(self.parms.astype(str)), name="parms_y"
+        )
+        self.add_hist(hist_name, [axis_parms_x, axis_parms_y], cov)
 
     def add_dxdtheta0_hist(self, values, hist_name="dxdtheta0"):
-        axis_parms_x = hist.axis.StrCategory(self.parms, name="parms_x")
-        axis_parms_theta0 = hist.axis.StrCategory(
-            self.parms[self.npoi :], name="parms_y"
+        axis_parms_x = hist.axis.StrCategory(
+            list(self.parms.astype(str)), name="parms_x"
         )
-        self.add_hist(hist_name, [axis_parms_x, axis_parms_theta0], values=values)
+        axis_parms_theta0 = hist.axis.StrCategory(
+            list(self.parms[self.npoi :].astype(str)), name="parms_y"
+        )
+        self.add_hist(hist_name, [axis_parms_x, axis_parms_theta0], values)
 
-    def add_nll_scan_hist(
-        self, param, scan_values, nll_values, base_name="hist_nll_scan"
-    ):
+    def add_nll_scan_hist(self, param, scan_values, nll_values, base_name="nll_scan"):
         axis_scan = hist.axis.StrCategory(
             np.array(scan_values).astype(str), name="scan"
         )
@@ -200,7 +220,7 @@ class Workspace:
         self.add_hist(
             name,
             axis_scan,
-            values=nll_values,
+            nll_values,
             label=f"Likelihood scan for parameter {param}",
         )
 
@@ -215,7 +235,7 @@ class Workspace:
         self.add_hist(
             name,
             [axis_scan_x, axis_scan_y],
-            values=nll_values,
+            nll_values,
             label=f"Likelihood 2D scan for parameters {p0} and {p1}",
         )
 
@@ -232,7 +252,7 @@ class Workspace:
         self.add_hist(
             name,
             [axis_impacts, axis_cls, axis_downUpVar, axis_parms],
-            values=values,
+            values,
             label="Parameter likelihood contour scans",
         )
 
@@ -257,7 +277,7 @@ class Workspace:
         self.add_hist(
             name,
             [axis_param_tuple, axis_cls, axis_params, axis_angle],
-            values=values,
+            values,
             label="Parameter likelihood contour scans 2D",
         )
 
@@ -280,7 +300,7 @@ class Workspace:
         self.add_hist(
             name,
             [axis_parms, axis_impacts_grouped],
-            values=impacts_grouped,
+            impacts_grouped,
         )
 
     def add_global_impacts_hists(self, *args, base_name="global_impacts", **kwargs):
@@ -296,6 +316,8 @@ class Workspace:
         cov=None,
         impacts=None,
         impacts_grouped=None,
+        ndf=None,
+        chi2=None,
         process_axis=None,
         name=None,
         label=None,
@@ -325,8 +347,8 @@ class Workspace:
             self.add_hist(
                 name,
                 [*hist_axes, *var_axes],
-                values=exp[start:stop],
-                variances=var[start:stop] if var is not None else None,
+                exp[start:stop],
+                var[start:stop] if var is not None else None,
                 label=label,
                 channel=channel,
             )
@@ -336,7 +358,7 @@ class Workspace:
                 self.add_hist(
                     f"{name}_global_impacts",
                     [*hist_axes, axis_impacts],
-                    values=impacts[start:stop],
+                    impacts[start:stop],
                     label=label,
                     channel=channel,
                 )
@@ -346,7 +368,7 @@ class Workspace:
                 self.add_hist(
                     f"{name}_global_impacts_grouped",
                     [*hist_axes, axis_impacts_grouped],
-                    values=impacts_grouped[start:stop],
+                    impacts_grouped[start:stop],
                     label=label,
                     channel=channel,
                 )
@@ -363,9 +385,14 @@ class Workspace:
             self.add_hist(
                 f"{name}_cov",
                 [flat_axis_x, flat_axis_y],
-                values=cov,
+                cov,
                 label=f"{label} covariance",
             )
+
+        if chi2 is not None:
+            postfix = "_prefit" if prefit else ""
+            self.add_value(ndf, "ndf" + postfix)
+            self.add_value(chi2, "chi2" + postfix)
 
         return name, label
 
@@ -408,8 +435,8 @@ class Workspace:
         self.add_hist(
             name,
             [*hist_axes, *var_axes],
-            values=exp,
-            variances=var,
+            exp,
+            var,
             label=label,
             channel=channel,
             projection_axes=axes_names,
@@ -427,7 +454,7 @@ class Workspace:
             self.add_hist(
                 f"{name}_cov",
                 [flat_axis_x, flat_axis_y],
-                values=cov,
+                cov,
                 label=f"{label} covariance",
                 channel=channel,
                 projection_axes=axes_names,
@@ -440,7 +467,7 @@ class Workspace:
             self.add_hist(
                 f"{name}_global_impacts",
                 [*hist_axes, axis_impacts],
-                values=impacts,
+                impacts,
                 label=f"{label} global impacts",
                 channel=channel,
                 projection_axes=axes_names,
@@ -448,7 +475,7 @@ class Workspace:
             self.add_hist(
                 f"{name}_global_impacts_grouped",
                 [*hist_axes, axis_impacts_grouped],
-                values=impacts_grouped,
+                impacts_grouped,
                 label=f"{label} global impacts grouped",
                 channel=channel,
                 projection_axes=axes_names,
