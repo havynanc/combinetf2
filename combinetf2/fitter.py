@@ -1,9 +1,6 @@
-import hist
 import numpy as np
 import scipy
 import tensorflow as tf
-
-from combinetf2 import common
 
 
 class Fitter:
@@ -95,7 +92,7 @@ class Fitter:
             tf.ones_like(self.indata.data_obs), trainable=False, name="beta0"
         )
 
-        nexpfullcentral = self.expected_events()
+        nexpfullcentral = self._compute_yields(inclusive=True)
         self.nexpnom = tf.Variable(nexpfullcentral, trainable=False, name="nexpnom")
 
         # parameter covariance matrix
@@ -115,18 +112,6 @@ class Fitter:
         self.dxdbeta0 = tf.zeros(
             [self.npoi + self.indata.nsyst, *self.beta0.shape], dtype=self.indata.dtype
         )
-
-    def hist(self, name, axes, values, variances=None, label=None):
-        if not isinstance(axes, (list, tuple, np.ndarray)):
-            axes = [axes]
-        storage_type = (
-            hist.storage.Weight() if variances is not None else hist.storage.Double()
-        )
-        h = hist.Hist(*axes, storage=storage_type, name=name, label=label)
-        h.values()[...] = memoryview(tf.reshape(values, h.shape))
-        if variances is not None:
-            h.variances()[...] = memoryview(tf.reshape(variances, h.shape))
-        return h
 
     def prefit_covariance(self, unconstrained_err=0.0):
         # free parameters are taken to have zero uncertainty for the purposes of prefit uncertainties
@@ -220,39 +205,16 @@ class Fitter:
             # randomize from expectation
             self.nobs.assign(
                 tf.random.poisson(
-                    lam=self.expected_events(), shape=[], dtype=self.nobs.dtype
+                    lam=self._compute_yields(inclusive=True),
+                    shape=[],
+                    dtype=self.nobs.dtype,
                 )
             )
 
         # assign start values for nuisance parameters to constraint minima
         self.xdefaultassign()
         # set likelihood offset
-        self.nexpnom.assign(self.expected_events())
-
-    def parms_hist(self, hist_name="parms"):
-        parms = list(self.parms.astype(str))
-        axis_parms = hist.axis.StrCategory(parms, name="parms")
-
-        values = self.x.numpy()
-        variances = tf.linalg.diag_part(self.cov)
-
-        return self.hist(hist_name, axis_parms, values=values, variances=variances)
-
-    def cov_hist(self, hist_name="cov"):
-        parms = list(self.parms.astype(str))
-        axis_parms_x = hist.axis.StrCategory(parms, name="parms_x")
-        axis_parms_y = hist.axis.StrCategory(parms, name="parms_y")
-
-        return self.hist(hist_name, [axis_parms_x, axis_parms_y], values=self.cov)
-
-    def dxdtheta0_hist(self, hist_name="dxdtheta0"):
-        parms = list(self.parms.astype(str))
-        axis_parms_x = hist.axis.StrCategory(parms, name="parms_x")
-        axis_parms_theta0 = hist.axis.StrCategory(parms[self.npoi :], name="parms_y")
-
-        return self.hist(
-            hist_name, [axis_parms_x, axis_parms_theta0], values=self.dxdtheta0
-        )
+        self.nexpnom.assign(self._compute_yields(inclusive=True))
 
     @tf.function(reduce_retracing=True)
     def _compute_impact_group(self, v, idxs):
@@ -264,7 +226,7 @@ class Fitter:
         return tf.sqrt(v_invC_v)
 
     @tf.function
-    def _impacts_parms(self):
+    def impacts_parms(self):
         # impact for poi at index i in covariance matrix from nuisance with index j is C_ij/sqrt(C_jj) = <deltax deltatheta>/sqrt(<deltatheta^2>)
         cov_poi = self.cov[: self.npoi]
         cov_noi = tf.gather(self.cov[self.npoi :], self.indata.noigroupidxs)
@@ -312,28 +274,6 @@ class Fitter:
 
         return impacts, impacts_grouped
 
-    def impacts_hists(self):
-        # store impacts for all POIs and NOIs
-        impacts, impacts_grouped = self._impacts_parms()
-
-        parms = np.concatenate(
-            [self.parms[: self.npoi], self.parms[self.npoi :][self.indata.noigroupidxs]]
-        )
-
-        # write out histograms
-        axis_parms = hist.axis.StrCategory(parms, name="parms")
-        axis_impacts = self.indata.getImpactsAxes()
-        axis_impacts_grouped = self.indata.getImpactsAxesGrouped(self.binByBinStat)
-
-        h = self.hist("impacts", [axis_parms, axis_impacts], values=impacts)
-        h_grouped = self.hist(
-            "impacts_grouped",
-            [axis_parms, axis_impacts_grouped],
-            values=impacts_grouped,
-        )
-
-        return h, h_grouped
-
     @tf.function(reduce_retracing=True)
     def _compute_global_impact_group(self, d_squared, idxs):
         gathered = tf.gather(d_squared, idxs, axis=-1)
@@ -341,7 +281,7 @@ class Fitter:
         return tf.sqrt(d_squared_summed)
 
     @tf.function
-    def _global_impacts_parms(self):
+    def global_impacts_parms(self):
         # compute impacts for pois and nois
         dxdtheta0_poi = self.dxdtheta0[: self.npoi]
         dxdtheta0_noi = tf.gather(self.dxdtheta0[self.npoi :], self.indata.noigroupidxs)
@@ -391,28 +331,6 @@ class Fitter:
         impacts = dxdtheta0[:, self.indata.nsystnoconstraint :]
 
         return impacts, impacts_grouped
-
-    def global_impacts_hists(self):
-        # store impacts for all POIs and NOIs
-        impacts, impacts_grouped = self._global_impacts_parms()
-
-        parms = np.concatenate(
-            [self.parms[: self.npoi], self.parms[self.npoi :][self.indata.noigroupidxs]]
-        )
-
-        # write out histograms
-        axis_parms = hist.axis.StrCategory(parms, name="parms")
-        axis_impacts = self.indata.getGlobalImpactsAxes()
-        axis_impacts_grouped = self.indata.getImpactsAxesGrouped(self.binByBinStat)
-
-        h = self.hist("global_impacts", [axis_parms, axis_impacts], values=impacts)
-        h_grouped = self.hist(
-            "global_impacts_grouped",
-            [axis_parms, axis_impacts_grouped],
-            values=impacts_grouped,
-        )
-
-        return h, h_grouped
 
     @tf.function
     def _expvar_profiled(
@@ -776,6 +694,7 @@ class Fitter:
 
         return nexpfull, normfull, beta
 
+    @tf.function
     def _compute_yields(self, inclusive=True, profile_grad=True):
         nexpfullcentral, normfullcentral, beta = self._compute_yields_with_beta(
             profile_grad=profile_grad, compute_normfull=not inclusive
@@ -798,7 +717,7 @@ class Fitter:
     def expected_variations(self, fun, correlations=False):
         return self._expvariations(fun, correlations=correlations)
 
-    def expected_hists(
+    def expected_events(
         self,
         inclusive=True,
         compute_variance=True,
@@ -808,9 +727,6 @@ class Fitter:
         correlated_variations=False,
         profile_grad=True,
         compute_chi2=False,
-        aux_info=False,
-        name=None,
-        label=None,
     ):
 
         def fun():
@@ -821,6 +737,7 @@ class Fitter:
         ):
             raise NotImplementedError()
 
+        aux = []
         if compute_cov or compute_variance or compute_global_impacts:
             exp, expvar, expcov, exp_impacts, exp_impacts_grouped = (
                 self.expected_with_variance(
@@ -829,80 +746,11 @@ class Fitter:
                     compute_global_impacts=compute_global_impacts,
                 )
             )
+            aux = [expvar, expcov, exp_impacts, exp_impacts_grouped]
         elif compute_variations:
             exp = self.expected_variations(fun, correlations=correlated_variations)
         else:
             exp = tf.function(fun)()
-
-        hists = {}
-        aux_dict = {}
-
-        var_axes = []
-        if compute_variations:
-            axis_vars = hist.axis.StrCategory(self.parms, name="vars")
-            var_axes = [axis_vars, common.axis_downUpVar]
-
-        for channel, info in self.indata.channel_info.items():
-            axes = info["axes"]
-
-            start = info["start"]
-            stop = info["stop"]
-
-            hist_axes = axes.copy()
-
-            if not inclusive:
-                hist_axes.append(self.indata.axis_procs)
-
-            hists[channel] = self.hist(
-                f"{name}_{channel}",
-                [*hist_axes, *var_axes],
-                values=exp[start:stop],
-                variances=expvar[start:stop] if compute_variance else None,
-                label=label,
-            )
-
-            if compute_global_impacts:
-                if "hist_global_impacts" not in aux_dict.keys():
-                    aux_dict["hist_global_impacts"] = {}
-                    aux_dict["hist_global_impacts_grouped"] = {}
-
-                axis_impacts = self.indata.getGlobalImpactsAxes()
-                axis_impacts_grouped = self.indata.getImpactsAxesGrouped(
-                    self.binByBinStat
-                )
-
-                h_impacts = self.hist(
-                    f"{name}_{channel}",
-                    [*hist_axes, axis_impacts],
-                    values=exp_impacts[start:stop],
-                    label=label,
-                )
-                h_impacts_grouped = self.hist(
-                    f"{name}_{channel}",
-                    [*hist_axes, axis_impacts_grouped],
-                    values=exp_impacts_grouped[start:stop],
-                    label=label,
-                )
-
-                aux_dict["hist_global_impacts"][channel] = h_impacts
-                aux_dict["hist_global_impacts_grouped"][channel] = h_impacts_grouped
-
-        if compute_cov:
-            # flat axes for covariance matrix, since it can go across channels
-            flat_axis_x = hist.axis.Integer(
-                0, expcov.shape[0], underflow=False, overflow=False, name="x"
-            )
-            flat_axis_y = hist.axis.Integer(
-                0, expcov.shape[1], underflow=False, overflow=False, name="y"
-            )
-
-            h_expcov = self.hist(
-                f"{name}_cov",
-                [flat_axis_x, flat_axis_y],
-                values=expcov,
-                label=f"{label} covariance",
-            )
-            aux_dict["hist_cov"] = h_expcov
 
         if compute_chi2:
 
@@ -921,15 +769,15 @@ class Fitter:
             chi2val = self.chi2(res, rescov).numpy()
             ndf = tf.size(exp).numpy() - self.normalize
 
-            aux_dict["ndf"] = ndf
-            aux_dict["chi2"] = chi2val
-
-        if aux_info:
-            return hists, aux_dict
+            aux.append(self.chi2(res, rescov).numpy())  # chi2val
+            aux.append(tf.size(exp).numpy() - self.normalize)  # ndf
         else:
-            return hists
+            aux.append(None)
+            aux.append(None)
 
-    def expected_projection_hist(
+        return exp, aux
+
+    def expected_events_projection(
         self,
         channel,
         axes,
@@ -941,9 +789,6 @@ class Fitter:
         correlated_variations=False,
         profile_grad=True,
         compute_chi2=False,
-        aux_info=False,
-        name=None,
-        label=None,
     ):
 
         def fun():
@@ -967,15 +812,9 @@ class Fitter:
             hist_axes.append(self.indata.axis_procs)
             extra_axes.append(self.indata.axis_procs)
 
-        var_axes = []
-        if compute_variations:
-            axis_vars = hist.axis.StrCategory(self.parms, name="vars")
-            var_axes = [axis_vars, common.axis_downUpVar]
-
         exp_shape = tuple([len(a) for a in exp_axes])
 
         channel_axes_names = [axis.name for axis in channel_axes]
-        exp_axes_names = [axis.name for axis in exp_axes]
         extra_axes_names = [axis.name for axis in extra_axes]
 
         axis_idxs = [channel_axes_names.index(axis) for axis in axes]
@@ -1010,6 +849,7 @@ class Fitter:
         ):
             raise NotImplementedError()
 
+        aux = []
         if compute_variance or compute_cov or compute_global_impacts:
             exp, expvar, expcov, exp_impacts, exp_impacts_grouped = (
                 self.expected_with_variance(
@@ -1018,61 +858,13 @@ class Fitter:
                     compute_global_impacts=compute_global_impacts,
                 )
             )
+            aux = [expvar, expcov, exp_impacts, exp_impacts_grouped]
         elif compute_variations:
             exp = self.expected_variations(
                 projection_fun, correlations=correlated_variations
             )
         else:
             exp = tf.function(projection_fun)()
-
-        h = self.hist(
-            name,
-            [*hist_axes, *var_axes],
-            values=exp,
-            variances=expvar if compute_variance else None,
-            label=label,
-        )
-
-        aux_dict = {}
-
-        if compute_global_impacts:
-
-            axis_impacts = self.indata.getGlobalImpactsAxes()
-            axis_impacts_grouped = self.indata.getImpactsAxesGrouped(self.binByBinStat)
-
-            h_impacts = self.hist(
-                name,
-                [*hist_axes, axis_impacts],
-                values=exp_impacts,
-                label=label,
-            )
-            h_impacts_grouped = self.hist(
-                name,
-                [*hist_axes, axis_impacts_grouped],
-                values=exp_impacts_grouped,
-                label=label,
-            )
-
-            aux_dict["hist_global_impacts"] = h_impacts
-            aux_dict["hist_global_impacts_grouped"] = h_impacts_grouped
-
-        if compute_cov:
-            # flat axes for covariance matrix, since it can go across channels
-            flat_axis_x = hist.axis.Integer(
-                0, expcov.shape[0], underflow=False, overflow=False, name="x"
-            )
-            flat_axis_y = hist.axis.Integer(
-                0, expcov.shape[1], underflow=False, overflow=False, name="y"
-            )
-
-            h_expcov = self.hist(
-                f"{name}_cov",
-                [flat_axis_x, flat_axis_y],
-                values=expcov,
-                label=f"{label} covariance",
-            )
-
-            aux_dict["hist_cov"] = h_expcov
 
         if compute_chi2:
 
@@ -1090,122 +882,13 @@ class Fitter:
                     projection_fun_residual, compute_cov=True
                 )
 
-            chi2val = self.chi2(res, rescov).numpy()
-            ndf = tf.size(exp).numpy() - self.normalize
-
-            aux_dict["ndf"] = ndf
-            aux_dict["chi2"] = chi2val
-
-        if aux_info:
-            return h, aux_dict
+            aux.append(self.chi2(res, rescov).numpy())  # chi2val
+            aux.append(tf.size(exp).numpy() - self.normalize)  # ndf
         else:
-            return h
+            aux.append(None)
+            aux.append(None)
 
-    def observed_hists(self):
-        hists_data_obs = {}
-        hists_nobs = {}
-
-        for channel, info in self.indata.channel_info.items():
-            axes = info["axes"]
-
-            start = info["start"]
-            stop = info["stop"]
-
-            hists_data_obs[channel] = self.hist(
-                "data_obs",
-                axes,
-                values=self.indata.data_obs[start:stop],
-                label="observed number of events in data",
-            )
-            hists_nobs[channel] = self.hist(
-                "nobs",
-                axes,
-                values=self.nobs.value()[start:stop],
-                label="observed number of events for fit",
-            )
-
-        return hists_data_obs, hists_nobs
-
-    def nll_scan_hist(self, param, scan_values, nll_values):
-        axis_scan = hist.axis.StrCategory(
-            np.array(scan_values).astype(str), name="scan"
-        )
-
-        h = self.hist(
-            f"nll_scan_{param}",
-            axis_scan,
-            values=nll_values,
-            label=f"Likelihood scan for parameter {param}",
-        )
-
-        return h
-
-    def nll_scan2D_hist(self, param_tuple, scan_x, scan_y, nll_values):
-        axis_scan_x = hist.axis.StrCategory(np.array(scan_x).astype(str), name="scan_x")
-        axis_scan_y = hist.axis.StrCategory(np.array(scan_y).astype(str), name="scan_y")
-
-        p0, p1 = param_tuple
-
-        h = self.hist(
-            f"nll_scan2D_{p0}_{p1}",
-            [axis_scan_x, axis_scan_y],
-            values=nll_values,
-            label=f"Likelihood 2D scan for parameters {p0} and {p1}",
-        )
-
-        return h
-
-    def contour_scan_hist(self, parms, values, confidence_levels=[1]):
-        axis_impacts = hist.axis.StrCategory(parms, name="impacts")
-
-        axis_cls = hist.axis.StrCategory(
-            np.array(confidence_levels).astype(str), name="confidence_level"
-        )
-
-        axis_parms = hist.axis.StrCategory(
-            np.array(self.parms).astype(str), name="parms"
-        )
-
-        h = self.hist(
-            "contour_scan",
-            [axis_impacts, axis_cls, common.axis_downUpVar, axis_parms],
-            values=values,
-            label="Parameter likelihood contour scans",
-        )
-
-        return h
-
-    def contour_scan2D_hist(self, param_tuples, values, confidence_levels=[1]):
-        axis_param_tuple = hist.axis.StrCategory(
-            ["-".join(p) for p in param_tuples], name="param_tuple"
-        )
-
-        halfstep = np.pi / values.shape[-1]
-        axis_angle = hist.axis.Regular(
-            values.shape[-1],
-            -halfstep,
-            2 * np.pi - halfstep,
-            circular=True,
-            name="angle",
-        )
-        axis_params = hist.axis.Regular(2, 0, 2, name="params")
-
-        axis_cls = hist.axis.StrCategory(
-            np.array(confidence_levels).astype(str), name="confidence_level"
-        )
-
-        h = self.hist(
-            "contour_scan2D",
-            [axis_param_tuple, axis_cls, axis_params, axis_angle],
-            values=values,
-            label="Parameter likelihood contour scans 2D",
-        )
-
-        return h
-
-    @tf.function
-    def expected_events(self):
-        return self._compute_yields(inclusive=True)
+        return exp, aux
 
     def set_derivatives_x(self):
         self.dxdtheta0, self.dxdnobs, self.dxdbeta0 = self._compute_derivatives_x()

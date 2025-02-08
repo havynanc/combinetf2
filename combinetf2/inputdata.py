@@ -202,20 +202,3 @@ class FitInputData:
                 # Finally, set self.logk to the new computed logk_array
                 self.logk = logk_array
                 self.norm = self.norm * (data_sum / norm_sum)[None, None, ...]
-
-    def getImpactsAxes(self):
-        impact_names = list(self.signals.astype(str)) + list(self.systs.astype(str))
-        return hist.axis.StrCategory(impact_names, name="impacts")
-
-    def getGlobalImpactsAxes(self):
-        impact_names = list(self.systs.astype(str)[self.nsystnoconstraint :])
-        return hist.axis.StrCategory(impact_names, name="impacts")
-
-    def getImpactsAxesGrouped(self, bin_by_bin_stat=False):
-        impact_names_grouped = list(self.systgroups.astype(str))
-        # impact data stat
-        impact_names_grouped.append("stat")
-        if bin_by_bin_stat:
-            # impact bin-by-bin stat
-            impact_names_grouped.append("binByBinStat")
-        return hist.axis.StrCategory(impact_names_grouped, name="impacts")
