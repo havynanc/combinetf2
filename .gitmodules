@@ -1,0 +1,3 @@
+[submodule "patz"]
+	path = patz
+	url = git@github.com:WMass/patz.git
