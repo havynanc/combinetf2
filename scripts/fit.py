@@ -4,9 +4,9 @@ import time
 import h5py
 import numpy as np
 import tensorflow as tf
-from patz import h5utilz, ioutilz
 
 from combinetf2 import fitter, inputdata, workspace
+from wums import ioutils, output_tools
 
 
 def make_parser():
@@ -226,8 +226,8 @@ def save_hists(args, fitter, ws, prefit=True):
         cov=aux[1],
         impacts=aux[2],
         impacts_grouped=aux[3],
-        ndf=aux[4],
-        chi2=aux[5],
+        chi2=aux[4],
+        ndf=aux[5],
         prefit=prefit,
     )
 
@@ -270,8 +270,8 @@ def save_hists(args, fitter, ws, prefit=True):
             cov=aux[1],
             impacts=aux[2],
             impacts_grouped=aux[3],
-            ndf=aux[4],
-            chi2=aux[5],
+            chi2=aux[4],
+            ndf=aux[5],
             prefit=prefit,
         )
 
@@ -356,7 +356,7 @@ def fit(args, fitter, ws, dofit=True):
                 cov_ext = fext["cov"][...]
             else:
                 # fitresult from combinetf2
-                h5results_ext = h5utilz.pickle_load_h5py(fext["results"])
+                h5results_ext = ioutils.pickle_load_h5py(fext["results"])
                 h_parms_ext = h5results_ext["parms"].get()
 
                 x_ext = h_parms_ext.values()
@@ -525,7 +525,7 @@ if __name__ == "__main__":
 
         # pass meta data into output file
         meta = {
-            "meta_info": ioutilz.make_meta_info_dict(args=args),
+            "meta_info": output_tools.make_meta_info_dict(args=args),
             "meta_info_input": ifitter.indata.metadata,
             "signals": ifitter.indata.signals,
             "procs": ifitter.indata.procs,

@@ -77,6 +77,12 @@ def get_bkg():
     return x, w_x, a, b, w_ab
 
 
+def get_bkg_2():
+    # uniform distributed background
+    x = np.random.normal(0.5, 1.5, 5000)
+    return x
+
+
 # Fill histograms
 x, w_x, a, b, w_ab = get_sig()
 h1_data.fill(x)
@@ -86,6 +92,9 @@ x, w_x, a, b, w_ab = get_bkg()
 h1_data.fill(x)
 h2_data.fill(a, b)
 
+x = get_bkg_2()
+h1_data.fill(x)
+
 x, w_x, a, b, w_ab = get_sig()
 h1_sig.fill(x, weight=w_x)
 h2_sig.fill(a, b, weight=w_ab)
@@ -94,7 +103,7 @@ x, w_x, a, b, w_ab = get_bkg()
 h1_bkg.fill(x, weight=w_x)
 h2_bkg.fill(a, b, weight=w_ab)
 
-x = np.random.uniform(0.1, 1, 1000)
+x = get_bkg_2()
 h1_bkg_2.fill(x)
 
 # pseudodata as exact composition of signal and background
@@ -107,9 +116,9 @@ h1_pseudo.variances()[...] = (
 )
 h2_pseudo.variances()[...] = h2_sig.variances() + h2_bkg.variances()[...]
 
-# scale signal down signal by 50%
-h1_sig.values()[...] = h1_sig.values() * 0.5
-h2_sig.values()[...] = h2_sig.values() * 0.5
+# scale signal down signal by 10%
+h1_sig.values()[...] = h1_sig.values() * 0.9
+h2_sig.values()[...] = h2_sig.values() * 0.9
 
 # scale bkg up background by 5%
 h1_bkg.values()[...] = h1_bkg.values() * 1.05
@@ -173,7 +182,7 @@ writer.add_lnN_systematic("bkg_2_norm", "bkg_2", "ch0", 1.1)
 
 # Apply reweighting: linear function of axis value
 # f(x) = a * x + b
-a, b = 0.01, 0.1  # Linear coefficients
+a, b = 0.01, -0.05  # Linear coefficients
 bin_centers = h1_bkg.axes[0].centers  # Get bin centers
 bin_centers -= bin_centers[0]
 weights = a * bin_centers + b  # Compute weights

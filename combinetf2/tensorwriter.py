@@ -5,10 +5,8 @@ from collections import defaultdict
 import h5py
 import numpy as np
 
-# import narf.ioutils
-from patz import h5utilz, ioutilz
-
 from combinetf2 import common, h5pyutils
+from wums import ioutils, output_tools
 
 
 class TensorWriter:
@@ -645,14 +643,16 @@ class TensorWriter:
 
         # propagate meta info into result file
         meta = {
-            "meta_info": ioutilz.make_meta_info_dict(args=args, wd=common.base_dir),
+            "meta_info": output_tools.make_meta_info_dict(
+                args=args, wd=common.base_dir
+            ),
             "channel_info": self.channels,
             "symmetric_tensor": self.symmetric_tensor,
             "exponential_transform": self.exponential_transform,
             "exponential_transform_scale": self.exponential_transform_scale,
         }
 
-        h5utilz.pickle_dump_h5py("meta", meta, f)
+        ioutils.pickle_dump_h5py("meta", meta, f)
 
         systsnoprofile = self.get_systsnoprofile()
         systsnoconstraint = self.get_systsnoconstraint()

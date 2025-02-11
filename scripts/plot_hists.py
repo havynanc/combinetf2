@@ -1,6 +1,5 @@
 import argparse
 import itertools
-import json
 import os
 
 import hist
@@ -11,11 +10,10 @@ import pandas as pd
 import scipy.stats
 from matplotlib import colormaps
 from matplotlib.lines import Line2D
-from patz import boostHistHelperz as hh
-from patz import ioutilz, loggingz, plot_toolz
-from utilities.styles import styles
 
 import combinetf2.io_tools
+from wums import boostHistHelpers as hh
+from wums import logging, output_tools, plot_tools
 
 hep.style.use(hep.style.ROOT)
 
@@ -402,20 +400,19 @@ def make_plot(
     if args.xlabel is not None:
         xlabel = args.xlabel
     elif len(axes_names) == 1:
-        xlabel = styles.xlabels.get(axes_names[0])
+        xlabel = axes_names[0]
     else:
-        xlabel = f"({', '.join([styles.xlabels.get(s,s).replace('(GeV)','') for s in axes_names])}) bin"
+        xlabel = f"({', '.join(axes_names)}) bin"
     if ratio or diff:
         if args.noData:
             rlabel = ("Diff." if diff else "Ratio") + " to nominal"
         else:
-            rlabel = (
-                f"${args.dataName.replace(" ",r"\ ")}"
-                + ("-" if diff else r"\,/\,")
-                + "Pred.$"
-            )
+            rlabel = args.dataName.replace(" ", r"\ ")
+            if not diff:
+                rlabel += r"\,/\,"
+            rlabel = f"${rlabel} Pred.$"
 
-        fig, ax1, ratio_axes = plot_toolz.figureWithRatio(
+        fig, ax1, ratio_axes = plot_tools.figureWithRatio(
             h_data,
             xlabel,
             ylabel,
@@ -433,7 +430,7 @@ def make_plot(
         )
         ax2 = ratio_axes[-1]
     else:
-        fig, ax1 = plot_toolz.figure(h_data, xlabel, ylabel, args.ylim)
+        fig, ax1 = plot_tools.figure(h_data, xlabel, ylabel, args.ylim)
 
     for (
         h,
@@ -483,6 +480,7 @@ def make_plot(
             zorder=2,
             flow="none",
         )
+
         if h_data_stat is not None:
             var_stat = h_data_stat.values() ** 2
             h_data_stat = h_data.copy()
@@ -521,13 +519,6 @@ def make_plot(
         s_range = lambda x, n=1: (
             int(x) if round(x, n) == float(int(round(x, n))) else round(x, n)
         )
-        s_label = styles.xlabels.get(axes_names[0], axes_names[0])
-        if "(GeV)" in s_label:
-            s_label = s_label.replace("(GeV)", "")
-            s_unit = r"GeV"
-        else:
-            s_unit = ""
-
         max_y = np.max(h_inclusive.values()[...])
         min_y = ax1.get_ylim()[0]
 
@@ -554,8 +545,8 @@ def make_plot(
                 )
                 lo = s_range(axes[0].edges[i - 1])
                 hi = s_range(axes[0].edges[i])
-                plot_toolz.wrap_text(
-                    [s_label, f"${lo}-{hi}$", s_unit],
+                plot_tools.wrap_text(
+                    [axes_names[0], f"${lo}-{hi}$"],
                     ax1,
                     x_lo,
                     y,
@@ -741,7 +732,7 @@ def make_plot(
         if args.extraTextLoc is None or len(args.extraTextLoc) <= 2:
             text_pieces.extend(chi2_text)
         else:
-            plot_toolz.wrap_text(
+            plot_tools.wrap_text(
                 chi2_text,
                 ax1,
                 *args.extraTextLoc[2:],
@@ -750,7 +741,7 @@ def make_plot(
                 va="top",
             )
 
-    # plot_toolz.add_cms_decor(
+    # plot_tools.add_cms_decor(
     #     ax1,
     #     args.cmsDecor,
     #     data=data or "Nonprompt" in labels,
@@ -773,7 +764,7 @@ def make_plot(
         ax1.text(0.05, 0.80, args.subtitle, transform=ax1.transAxes, fontstyle="italic")
 
     if len(h_stack) < 10:
-        plot_toolz.addLegend(
+        plot_tools.addLegend(
             ax1,
             ncols=args.legCols,
             loc=args.legPos,
@@ -784,7 +775,7 @@ def make_plot(
         )
 
     if ratio or diff:
-        plot_toolz.addLegend(
+        plot_tools.addLegend(
             ax2,
             ncols=args.lowerLegCols,
             loc=args.lowerLegPos,
@@ -795,7 +786,7 @@ def make_plot(
             padding_loc=args.lowerLegPadding,
         )
 
-    plot_toolz.fix_axes(ax1, ax2, fig, yscale=args.yscale, noSci=args.noSciy)
+    plot_tools.fix_axes(ax1, ax2, fig, yscale=args.yscale, noSci=args.noSciy)
 
     to_join = [fittype, args.postfix, *axes_names, suffix]
     outfile = "_".join(filter(lambda x: x, to_join))
@@ -804,7 +795,7 @@ def make_plot(
     if args.subtitle == "Preliminary":
         outfile += "_preliminary"
 
-    plot_toolz.save_pdf_and_png(outdir, outfile)
+    plot_tools.save_pdf_and_png(outdir, outfile)
 
     analysis_meta_info = None
     if meta is not None:
@@ -816,7 +807,7 @@ def make_plot(
         else:
             analysis_meta_info = {"AnalysisOutput": meta["meta_info"]}
 
-    # plot_toolz.write_index_and_log(
+    # plot_tools.write_index_and_log(
     #     outdir,
     #     outfile,
     #     yield_tables=yield_tables,
@@ -824,7 +815,7 @@ def make_plot(
     #     **kwargs,
     # )
 
-    ioutilz.write_logfile(
+    output_tools.write_logfile(
         outdir,
         outfile,
         args=args,
@@ -862,7 +853,7 @@ def make_plots(
 
     # vary poi by postfit uncertainty
     if varNames is not None:
-        hist_var = result[f"hist_{fittype}_variations{correlated}"].get()
+        hist_var = result[f"hist_{fittype}_inclusive_variations{correlated}"].get()
     else:
         hist_var = None
 
@@ -879,30 +870,10 @@ def make_plots(
         for h in hist_stack:
             h.values(flow=True)[...] = np.log(h.values(flow=True)[...])
 
-    if any(x in hist_data.axes.name for x in ["helicity"]):
-        if asimov:
-            hist_data.values()[...] = 1e5 * np.log(hist_data.values())
-        or_vals = np.copy(hist_inclusive.values())
-        hist_inclusive.values()[...] = 1e5 * np.log(hist_inclusive.values())
-        hist_inclusive.variances()[...] = (
-            1e10 * (hist_inclusive.variances()) / np.square(or_vals)
-        )
-
-        if varNames is not None:
-            hist_var.values()[...] = 1e5 * np.log(hist_var.values())
-            hist_var.variances()[...] = (
-                1e10 * (hist_var.variances()) / np.square(or_vals)
-            )
-
-        for h in hist_stack:
-            or_vals = np.copy(h.values())
-            h.values()[...] = 1e5 * np.log(h.values())
-            h.variances()[...] = 1e10 * (h.variances()) / np.square(or_vals)
-
-    if args.processGrouping is not None:
-        hist_stack, labels, colors, procs = styles.process_grouping(
-            args.processGrouping, hist_stack, procs
-        )
+    # if args.processGrouping is not None:
+    #     hist_stack, labels, colors, procs = styles.process_grouping(
+    #         args.processGrouping, hist_stack, procs
+    #     )
     labels = [
         l if p not in args.suppressProcsLabel else None for l, p in zip(labels, procs)
     ]
@@ -1035,19 +1006,19 @@ def get_chi2(result, no_chi2=True):
 if __name__ == "__main__":
     args = parseArgs()
 
-    logger = loggingz.setup_logger(__file__, args.verbose, args.noColorLogger)
+    logger = logging.setup_logger(__file__, args.verbose, args.noColorLogger)
 
-    outdir = ioutilz.make_plot_dir(args.outpath, eoscp=args.eoscp)
+    outdir = output_tools.make_plot_dir(args.outpath, eoscp=args.eoscp)
 
     translate_label = {}
-    if args.translate:
-        with open(args.translate) as f:
-            translate_label = json.load(f)
-        translate = lambda x: styles.translate_html_to_latex(
-            translate_label.get(x, x).replace("resum. TNP ", "")
-        )
-    else:
-        translate = lambda x: x
+    # if args.translate:
+    #     with open(args.translate) as f:
+    #         translate_label = json.load(f)
+    #     translate = lambda x: styles.translate_html_to_latex(
+    #         translate_label.get(x, x).replace("resum. TNP ", "")
+    #     )
+    # else:
+    translate = lambda x: x
 
     varNames = args.varNames
     if varNames is not None:
@@ -1058,7 +1029,7 @@ if __name__ == "__main__":
                 varLabels = [translate(e) for e in varNames]
             else:
                 # try to get labels from predefined styles
-                varLabels = [styles.legend_labels_combine.get(e, e) for e in varNames]
+                varLabels = varNames  # [styles.legend_labels_combine.get(e, e) for e in varNames]
         elif len(varLabels) != len(varNames):
             raise ValueError(
                 "Must specify the same number of args for --varNames, and --varLabels"
@@ -1118,10 +1089,16 @@ if __name__ == "__main__":
     meta_input = meta["meta_info_input"]
     channel_info = meta_input["channel_info"]
 
-    procs = meta["procs"].astype(str)
+    procs = meta["procs"].astype(str)[::-1]
     if args.filterProcs is not None:
         procs = [p for p in procs if p in args.filterProcs]
-    labels, colors, procs = styles.get_labels_colors_procs_sorted(procs)
+
+    cmap = plt.get_cmap("tab10")
+
+    labels = procs[:]
+    colors = [cmap(i % cmap.N) for i in range(len(procs))]
+
+    # labels, colors, procs = styles.get_labels_colors_procs_sorted(procs)
 
     if args.correlatedVariations:
         correlated = "_correlated"
@@ -1168,5 +1145,5 @@ if __name__ == "__main__":
                 **opts,
             )
 
-    if ioutilz.is_eosuser_path(args.outpath) and args.eoscp:
-        ioutilz.copy_to_eos(outdir, args.outpath, args.outfolder)
+    if output_tools.is_eosuser_path(args.outpath) and args.eoscp:
+        output_tools.copy_to_eos(outdir, args.outpath, args.outfolder)

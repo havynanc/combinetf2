@@ -3,10 +3,10 @@ import os
 
 import matplotlib.pyplot as plt
 import numpy as np
-from patz import ioutilz
 from scipy.stats import chi2
 
 from combinetf2 import io_tools
+from wums import ioutils
 
 plt.rcParams.update({"font.size": 14})
 
@@ -30,7 +30,7 @@ def writeOutput(fig, outfile, extensions=[], postfix=None, args=None, meta_info=
             output = (None, *output)
     if args is None and meta_info is None:
         return
-    ioutilz.write_logfile(
+    ioutils.write_logfile(
         *output,
         args=args,
         meta_info=meta_info,
