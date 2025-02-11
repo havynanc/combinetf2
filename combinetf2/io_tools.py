@@ -1,6 +1,8 @@
 import h5py
 import numpy as np
-from narf import ioutils
+
+# from narf import ioutils
+from patz import h5utilz
 
 
 def get_fitresult(fitresult_filename, result=None, meta=False):
@@ -10,9 +12,9 @@ def get_fitresult(fitresult_filename, result=None, meta=False):
         key = f"{key}_{result}"
     elif key not in h5file.keys():  # fallback in case only asimov was fit
         key = f"{key}_asimov"
-    h5results = ioutils.pickle_load_h5py(h5file[key])
+    h5results = h5utilz.pickle_load_h5py(h5file[key])
     if meta:
-        meta = ioutils.pickle_load_h5py(h5file["meta"])
+        meta = h5utilz.pickle_load_h5py(h5file["meta"])
         return h5results, meta
     return h5results
 
@@ -105,7 +107,10 @@ def get_fitresult_data(fitresult):
         f"Prepare theory fit: load measured differential cross secction distribution and covariance matrix"
     )
 
-    h_data = {k: h for k, h in fitresult["hist_postfit_inclusive"].items()}
-    h_cov = fitresult["hist_cov_postfit_inclusive"]
+    h_data = {
+        c: fitresult["channels"][c]["hist_postfit_inclusive"]
+        for c in fitresult["channels"]
+    }
+    h_cov = fitresult["hist_postfit_inclusive_cov"]
 
     return h_data, h_cov

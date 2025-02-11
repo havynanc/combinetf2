@@ -3,7 +3,7 @@ import os
 
 import matplotlib.pyplot as plt
 import numpy as np
-from narf import ioutils
+from patz import ioutilz
 from scipy.stats import chi2
 
 from combinetf2 import io_tools
@@ -30,7 +30,7 @@ def writeOutput(fig, outfile, extensions=[], postfix=None, args=None, meta_info=
             output = (None, *output)
     if args is None and meta_info is None:
         return
-    ioutils.write_logfile(
+    ioutilz.write_logfile(
         *output,
         args=args,
         meta_info=meta_info,

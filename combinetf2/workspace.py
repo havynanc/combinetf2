@@ -2,8 +2,10 @@ import os
 
 import h5py
 import hist
-import narf.ioutils
 import numpy as np
+
+# import narf.ioutils
+import patz.h5utilz
 import tensorflow as tf
 
 axis_downUpVar = hist.axis.Regular(
@@ -36,8 +38,7 @@ def get_name_label_expected_hists(
 ):
     if name is None:
         name = "hist"
-        if prefit:
-            name += "_prefit"
+        name += "_prefit" if prefit else "_postfit"
         if process_axis is None:
             name += "_inclusive"
         if variations:
@@ -45,8 +46,7 @@ def get_name_label_expected_hists(
 
     if label is None:
         label = "expected number of events, "
-        if prefit:
-            label = f"prefit {label}"
+        label = f"prefit {label}" if prefit else f"postfit {label}"
         if process_axis is None:
             label += "for all processes combined, "
         if variations:
@@ -60,8 +60,8 @@ class Workspace:
 
         channels = set(p[0] for p in projections)
         self.projections = {c: [] for c in channels}
-        for c, a in projections:
-            self.projections[c].append(a)
+        for p in projections:
+            self.projections[p[0]].append(p[1:])
 
         self.results = {}
         self.reset_results(fitter.indata.channel_info.keys())
@@ -93,10 +93,14 @@ class Workspace:
             self.fout = None
 
     def reset_results(self, channels):
+        self.results["channels"] = {}
         for c in channels:
-            self.results[c] = {}
-            for a in self.projections.get(c, []):
-                self.results[c][f"projection_{'_'.join(a)}"] = {}
+            self.results["channels"][c] = {}
+            projections = self.projections.get(c, [])
+            if len(projections):
+                self.results["channels"][c]["projections"] = {}
+                for a in projections:
+                    self.results["channels"][c]["projections"]["_".join(a)] = {}
 
     def get_file_path(self, outdir, outname, postfix=None):
         # create output file name
@@ -117,17 +121,17 @@ class Workspace:
     def dump_obj(self, obj, key, channel=None, projection_axes=None):
         if channel is not None:
             if projection_axes is not None:
-                self.results[channel][f"projection_{'_'.join(projection_axes)}"][
-                    key
-                ] = obj
+                self.results["channels"][channel]["projections"][
+                    "_".join(projection_axes)
+                ][key] = obj
             else:
-                self.results[channel][key] = obj
+                self.results["channels"][channel][key] = obj
         else:
             self.results[key] = obj
 
     def dump_hist(self, hist, channel=None, projection_axes=None):
         name = hist.name
-        h = narf.ioutils.H5PickleProxy(hist)
+        h = patz.h5utilz.H5PickleProxy(hist)
         self.dump_obj(h, name, channel, projection_axes)
 
     def hist(self, name, axes, values, variances=None, label=None):
@@ -390,7 +394,7 @@ class Workspace:
             )
 
         if chi2 is not None:
-            postfix = "_prefit" if prefit else ""
+            postfix = "_prefit" if prefit else "_postfit"
             self.add_value(ndf, "ndf" + postfix)
             self.add_value(chi2, "chi2" + postfix)
 
@@ -487,10 +491,10 @@ class Workspace:
             self.add_value(chi2, "chi2" + postfix, channel, axes_names)
 
     def write_meta(self, meta):
-        narf.ioutils.pickle_dump_h5py("meta", meta, self.fout)
+        patz.h5utilz.pickle_dump_h5py("meta", meta, self.fout)
 
     def dump_and_flush(self, group):
-        narf.ioutils.pickle_dump_h5py(group, self.results, self.fout)
+        patz.h5utilz.pickle_dump_h5py(group, self.results, self.fout)
         self.results = {}
 
     def close(self):

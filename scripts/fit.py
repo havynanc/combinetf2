@@ -2,9 +2,9 @@ import argparse
 import time
 
 import h5py
-import narf.ioutils
 import numpy as np
 import tensorflow as tf
+from patz import h5utilz, ioutilz
 
 from combinetf2 import fitter, inputdata, workspace
 
@@ -246,7 +246,9 @@ def save_hists(args, fitter, ws, prefit=True):
         prefit=prefit,
     )
 
-    for channel, axes in args.project:
+    for p in args.project:
+        channel = p[0]
+        axes = p[1:]
         print(f"Save projection for channel {channel} - inclusive")
 
         exp, aux = fitter.expected_events_projection(
@@ -312,7 +314,9 @@ def save_hists(args, fitter, ws, prefit=True):
             prefit=prefit,
         )
 
-        for channel, axes in args.project:
+        for p in args.project:
+            channel = p[0]
+            axes = p[1:]
 
             exp, aux = fitter.expected_events_projection(
                 channel=channel,
@@ -352,7 +356,7 @@ def fit(args, fitter, ws, dofit=True):
                 cov_ext = fext["cov"][...]
             else:
                 # fitresult from combinetf2
-                h5results_ext = narf.ioutils.pickle_load_h5py(fext["results"])
+                h5results_ext = h5utilz.pickle_load_h5py(fext["results"])
                 h_parms_ext = h5results_ext["parms"].get()
 
                 x_ext = h_parms_ext.values()
@@ -521,7 +525,7 @@ if __name__ == "__main__":
 
         # pass meta data into output file
         meta = {
-            "meta_info": narf.ioutils.make_meta_info_dict(args=args),
+            "meta_info": ioutilz.make_meta_info_dict(args=args),
             "meta_info_input": ifitter.indata.metadata,
             "signals": ifitter.indata.signals,
             "procs": ifitter.indata.procs,

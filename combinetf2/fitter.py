@@ -804,7 +804,9 @@ class Fitter:
         hist_axes = [axis for axis in channel_axes if axis.name in axes]
 
         if len(hist_axes) != len(axes):
-            raise ValueError("axis not found")
+            raise ValueError(
+                f"Hist axes {[h.name for h in hist_axes]} != {axes} not found"
+            )
 
         extra_axes = []
         if not inclusive:
