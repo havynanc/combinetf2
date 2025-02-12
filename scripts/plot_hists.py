@@ -10,10 +10,10 @@ import pandas as pd
 import scipy.stats
 from matplotlib import colormaps
 from matplotlib.lines import Line2D
-
-import combinetf2.io_tools
 from wums import boostHistHelpers as hh
 from wums import logging, output_tools, plot_tools
+
+import combinetf2.io_tools
 
 hep.style.use(hep.style.ROOT)
 
@@ -484,7 +484,6 @@ def make_plot(
                 yerr=True,
                 histtype=histtype_data,
                 color="black",
-                # label=args.dataName,
                 binwnorm=binwnorm,
                 capsize=2,
                 ax=ax1,
@@ -589,7 +588,6 @@ def make_plot(
                 h2,
                 histtype="errorbar",
                 color="black",
-                # label=args.dataName,
                 yerr=True if not args.logTransform else h2.variances() ** 0.5,
                 linewidth=2,
                 ax=ax2,
@@ -733,15 +731,6 @@ def make_plot(
                 ha="left",
                 va="top",
             )
-
-    # plot_tools.add_cms_decor(
-    #     ax1,
-    #     args.cmsDecor,
-    #     data=data or "Nonprompt" in labels,
-    #     lumi=lumi,  # if args.dataName == "Data" and not args.noData else None,
-    #     loc=args.logoPos,
-    #     text_size=args.legSize,
-    # )
 
     textsize = ax1.xaxis.label.get_size()
     if args.title:
