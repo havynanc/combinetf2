@@ -282,13 +282,6 @@ def parseArgs():
         "--correlatedVariations", action="store_true", help="Use correlated variations"
     )
     parser.add_argument(
-        "-t",
-        "--translate",
-        type=str,
-        default=None,
-        help="Specify .json file to translate labels",
-    )
-    parser.add_argument(
         "--unfoldedXsec", action="store_true", help="Plot unfolded cross sections"
     )
 
@@ -1010,27 +1003,11 @@ if __name__ == "__main__":
 
     outdir = output_tools.make_plot_dir(args.outpath, eoscp=args.eoscp)
 
-    translate_label = {}
-    # if args.translate:
-    #     with open(args.translate) as f:
-    #         translate_label = json.load(f)
-    #     translate = lambda x: styles.translate_html_to_latex(
-    #         translate_label.get(x, x).replace("resum. TNP ", "")
-    #     )
-    # else:
-    translate = lambda x: x
-
     varNames = args.varNames
     if varNames is not None:
         varLabels = args.varLabels
         varColors = args.varColors
-        if varLabels is None:
-            if args.translate:
-                varLabels = [translate(e) for e in varNames]
-            else:
-                # try to get labels from predefined styles
-                varLabels = varNames  # [styles.legend_labels_combine.get(e, e) for e in varNames]
-        elif len(varLabels) != len(varNames):
+        if len(varLabels) != len(varNames):
             raise ValueError(
                 "Must specify the same number of args for --varNames, and --varLabels"
                 f" found varNames={len(varNames)} and varLabels={len(varLabels)}"
@@ -1082,12 +1059,7 @@ if __name__ == "__main__":
 
     plt.rcParams["font.size"] = plt.rcParams["font.size"] * args.scaleTextSize
 
-    command = meta_info["command"]
-    asimov = False
-    if "-t-1" in command or "-t -1" in command or "-t" not in command:
-        asimov = True
-    meta_input = meta["meta_info_input"]
-    channel_info = meta_input["channel_info"]
+    channel_info = meta["meta_info_input"]["channel_info"]
 
     procs = meta["procs"].astype(str)[::-1]
     if args.filterProcs is not None:

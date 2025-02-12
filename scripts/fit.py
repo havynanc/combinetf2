@@ -217,6 +217,7 @@ def save_hists(args, fitter, ws, prefit=True):
         inclusive=True,
         compute_variance=args.computeHistErrors,
         compute_chi2=not args.noChi2,
+        compute_global_impacts=args.computeHistImpacts,
     )
 
     ws.add_expected_hists(
@@ -257,6 +258,7 @@ def save_hists(args, fitter, ws, prefit=True):
             inclusive=True,
             compute_variance=args.computeHistErrors,
             compute_chi2=not args.noChi2,
+            compute_global_impacts=args.computeHistImpacts,
         )
 
         channel_axes = fitter.indata.channel_info[channel]["axes"]
