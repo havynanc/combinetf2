@@ -4,7 +4,6 @@ import h5py
 import hist
 import numpy as np
 import tensorflow as tf
-
 from wums import ioutils
 
 axis_downUpVar = hist.axis.Regular(

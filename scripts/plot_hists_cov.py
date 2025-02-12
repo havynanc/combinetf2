@@ -6,10 +6,10 @@ import matplotlib.pyplot as plt
 import mplhep as hep
 import numpy as np
 import seaborn as sns
-
-import combinetf2.io_tools
 from wums import boostHistHelpers as hh
 from wums import logging, output_tools, plot_tools
+
+import combinetf2.io_tools
 
 hep.style.use(hep.style.ROOT)
 
@@ -216,11 +216,6 @@ if __name__ == "__main__":
     plt.rcParams["font.size"] = plt.rcParams["font.size"] * args.scaleTextSize
 
     channel_info = meta["meta_info_input"]["channel_info"]
-
-    if args.correlatedVariations:
-        correlated = "_correlated"
-    else:
-        correlated = ""
 
     projections = {p[0]: p[1:] for p in args.project}
 

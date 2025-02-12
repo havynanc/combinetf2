@@ -4,9 +4,9 @@ import time
 import h5py
 import numpy as np
 import tensorflow as tf
+from wums import ioutils, output_tools
 
 from combinetf2 import fitter, inputdata, workspace
-from wums import ioutils, output_tools
 
 
 def make_parser():

@@ -141,8 +141,8 @@ jobs:
         run: >- 
           python scripts/fit.py 
           $COMBINETF2_OUTDIR/test_tensor.hdf5 -o $COMBINETF2_OUTDIR/
-          -t 0 --binByBinStat --doImpacts --globalImpacts --computeHistErrors --computeHistCov --computeHistImpacts 
-          --saveHists --computeHistErrors --project ch1 a --project ch1 b 
+          -t 0 --binByBinStat --doImpacts --globalImpacts --project ch1 a --project ch1 b
+          --saveHists --computeHistErrors --computeHistCov --computeHistImpacts --computeVariations
 
       - name: sparse tensor fit 
         run: >- 
@@ -208,24 +208,24 @@ jobs:
 
       - name: plot prefit distributions
         run: >-
-          python scripts/plot_hists.py $COMBINETF2_OUTDIR/fitresults.hdf5 -o '$WEB_DIR/$PLOT_DIR 
+          python scripts/plot_hists.py $COMBINETF2_OUTDIR/fitresults.hdf5 -o $WEB_DIR/$PLOT_DIR 
           --extraTextLoc '0.05' '0.7' --legCols 1 --project ch1 a --project ch1 b --yscale '1.2' 
           --subtitle Preliminary --prefit
 
       - name: plot postfit distributions
         run: >-
-          python scripts/plot_hists.py $COMBINETF2_OUTDIR/fitresults.hdf5 -o '$WEB_DIR/$PLOT_DIR 
+          python scripts/plot_hists.py $COMBINETF2_OUTDIR/fitresults.hdf5 -o $WEB_DIR/$PLOT_DIR 
           --extraTextLoc '0.05' '0.7' --legCols 1 --project ch1 a --project ch1 b --yscale '1.2' 
           --subtitle Preliminary --varNames 'slope_signal' --varLabels 'slope signal' --varColors red
 
       - name: plot histogram covariance matrices
         run: >-
-          python scripts/plot_hists_cov.py $COMBINETF2_OUTDIR/fitresults.hdf5 -o '$WEB_DIR/$PLOT_DIR 
+          python scripts/plot_hists_cov.py $COMBINETF2_OUTDIR/fitresults.hdf5 -o $WEB_DIR/$PLOT_DIR 
           --subtitle Preliminary --project ch1 a --project ch1 b --subtitle Preliminary
 
       - name: plot histogram impacts
         run: >-
-          python scripts/plot_hists_uncertainties.py $COMBINETF2_OUTDIR/fitresults.hdf5 -o '$WEB_DIR/$PLOT_DIR 
+          python scripts/plot_hists_uncertainties.py $COMBINETF2_OUTDIR/fitresults.hdf5 -o $WEB_DIR/$PLOT_DIR 
           --extraTextLoc '0.05' '0.7' --legCols 1 --project ch1 a --project ch1 b --yscale '1.2' --subtitle Preliminary
 
       - name: copy index php file

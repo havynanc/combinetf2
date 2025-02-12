@@ -9,9 +9,9 @@ import pandas as pd
 import plotly.graph_objects as go
 import plotly.io as pio
 from plotly.subplots import make_subplots
+from wums import output_tools
 
 from combinetf2 import io_tools
-from wums import ioutils
 
 # prevent MathJax from bein loaded
 pio.kaleido.scope.mathjax = None
@@ -39,7 +39,7 @@ def writeOutput(fig, outfile, extensions=[], postfix=None, args=None, meta_info=
             output = (None, *output)
     if args is None and meta_info is None:
         return
-    ioutils.write_logfile(
+    output_tools.write_logfile(
         *output,
         args=args,
         meta_info=meta_info,
