@@ -136,7 +136,7 @@ class TensorWriter:
             name = f"ch{len(self.channels)}"
         print(f"Add new channel {name}")
         self.channels[name] = {"axes": axes}
-        ibins = np.product([len(a) for a in axes])
+        ibins = np.prod([len(a) for a in axes])
         self.nbinschan[name] = ibins
         self.dict_norm[name] = {}
         self.dict_sumw2[name] = np.zeros(ibins)

@@ -217,18 +217,13 @@ if __name__ == "__main__":
 
     channel_info = meta["meta_info_input"]["channel_info"]
 
-    if args.correlatedVariations:
-        correlated = "_correlated"
-    else:
-        correlated = ""
-
     projections = {p[0]: p[1:] for p in args.project}
 
     hist_cov = fitresult[
         f"hist_{'prefit' if args.prefit else 'postfit'}_inclusive_cov"
     ].get()
 
-    plot_matrix(hist_cov, args, meta=meta["meta_info"])
+    plot_matrix(hist_cov, args, meta=meta)
 
     for channel, info in channel_info.items():
         axes = info["axes"]
@@ -237,9 +232,7 @@ if __name__ == "__main__":
 
         h_cov = hist_cov[{"x": slice(start, stop), "y": slice(start, stop)}]
 
-        plot_matrix(
-            h_cov, args, channel, [a.name for a in axes], meta=meta["meta_info"]
-        )
+        plot_matrix(h_cov, args, channel, [a.name for a in axes], meta=meta)
 
         if len(args.project) and channel in [p[0] for p in args.project]:
             h1d = hist.Hist(*axes)
@@ -264,7 +257,7 @@ if __name__ == "__main__":
 
             h_cov = h2d.project(*projection_axes, *projection_axes_y)
 
-            plot_matrix(h_cov, args, channel, projection_axes, meta=meta["meta_info"])
+            plot_matrix(h_cov, args, channel, projection_axes, meta=meta)
 
     if output_tools.is_eosuser_path(args.outpath) and args.eoscp:
         output_tools.copy_to_eos(outdir, args.outpath, args.outfolder)
