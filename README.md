@@ -7,7 +7,7 @@ Implemted approximations in the limit of large sample size to simplify intensive
 ## Setup
 
 CombineTF2 can be run within a comprehensive singularity (recommended) or in an environment set up by yourself. 
-It makes use of the [narf-ioutils](https://pypi.org/project/narf-ioutils/0.1.1/) package for storing hdf5 files in compressed format.
+It makes use of the [wums.ioutils](https://pypi.org/project/wums.ioutils/0.1.1/) package for storing hdf5 files in compressed format.
 
 ### In a python virtual environment
 The simplest is to make a python virtual environment. It depends on the python version you are working with (tested with 3.9.18).
@@ -18,14 +18,14 @@ python -m venv env
 The activate it and install the necessary packages
 ```bash
 source env/bin/activate
-pip install tensorflow-io[tensorflow] numpy h5py hist scipy narf.ioutils matplotlib pandas plotly kaleido 
+pip install tensorflow-io[tensorflow] numpy h5py hist scipy wums.ioutils matplotlib pandas plotly kaleido 
 ```
 The packages `matplotlib`, `pandas`, `plotly`, and `kaleido` are only needed for the plotting scripts. 
 In case you want to contribute to the development, please also install the linters `isort` `flake8` `black` used in the pre-commit hooks and the github CI
 Deactivate the environment with `deactivate`.
 
 ### In singularity
-(Currently not working due to missing narf-ioutils package)
+(Currently not working due to missing wums.ioutils package)
 
 The singularity includes a comprehensive set of packages. 
 It also comes with custom optimized builds that for example enable numpy and scipy to be run with more than 64 threads (the limit in the standard build).

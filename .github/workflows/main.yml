@@ -195,14 +195,14 @@ jobs:
       - name: plot impacts
         run: >-
           python scripts/plot_pullsAndImpacts.py $COMBINETF2_OUTDIR/fitresults.hdf5 -o $WEB_DIR/$PLOT_DIR
-          --otherExtensions pdf png  -n 50
+          --otherExtensions pdf png -n 50 -t tests/nuisance_translate.json
           --subtitle Preliminary --groups Total slopes background_normalization binByBinStat stat 
 
       - name: plot global impacts
         run: >-
           python scripts/plot_pullsAndImpacts.py $COMBINETF2_OUTDIR/fitresults.hdf5 -o $WEB_DIR/$PLOT_DIR
           -r $COMBINETF2_OUTDIR/fitresults_pseudodata.hdf5 --refName "Pseudo data"
-          --otherExtensions pdf png  -n 50 --oneSidedImpacts --globalImpacts --diffPullAsym --showNumbers
+          --otherExtensions pdf png -n 50  -t tests/nuisance_translate.json --oneSidedImpacts --globalImpacts --diffPullAsym --showNumbers
           --groups Total slopes background_normalization binByBinStat stat 
           --subtitle Preliminary --postfix data_vs_pseudodata
 

@@ -87,7 +87,7 @@ class FitInputData:
             # reference meta data if available
             self.metadata = {}
             if "meta" in f.keys():
-                # from narf.ioutils import pickle_load_h5py
+                # from wums.ioutils import pickle_load_h5py
                 from patz.h5utilz import pickle_load_h5py
 
                 self.metadata = pickle_load_h5py(f["meta"])

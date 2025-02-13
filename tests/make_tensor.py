@@ -7,8 +7,13 @@ import numpy as np
 from combinetf2 import tensorwriter
 
 parser = argparse.ArgumentParser()
+parser.add_argument("-o", "--output", default="./", help="output directory")
+parser.add_argument("--outname", default="test_tensor", help="output file name")
 parser.add_argument(
-    "-o", "--output", default="./test_tensor.hdf5", help="output file name"
+    "--postfix",
+    default=None,
+    type=str,
+    help="Postfix to append on output file name",
 )
 parser.add_argument(
     "--sparse",
@@ -55,25 +60,25 @@ h2_pseudo = hist.Hist(ax_a, ax_b, storage=hist.storage.Weight())
 np.random.seed(42)  # For reproducibility
 
 
-def get_sig():
+def get_sig(factor=1):
     # gaussian distributed signal
-    x = np.random.normal(0, 1, 10000)
-    w_x = np.random.normal(1, 0.2, 10000)
+    x = np.random.normal(0, 1, 10000 * factor)
+    w_x = np.random.normal(1 / factor, 0.2, 10000 * factor)
 
-    a = np.random.normal(2, 1, 15000)
-    b = np.random.normal(10, 2.5, 15000)
-    w_ab = np.random.normal(1, 0.2, 15000)
+    a = np.random.normal(2, 1, 15000 * factor)
+    b = np.random.normal(10, 2.5, 15000 * factor)
+    w_ab = np.random.normal(1 / factor, 0.2, 15000 * factor)
     return x, w_x, a, b, w_ab
 
 
-def get_bkg():
+def get_bkg(factor=1):
     # uniform distributed background
-    x = np.random.uniform(-5, 5, 5000)
-    w_x = np.random.normal(1, 0.2, 5000)
+    x = np.random.uniform(-5, 5, 5000 * factor)
+    w_x = np.random.normal(1 / factor, 0.2, 5000 * factor)
 
-    a = np.random.uniform(0, 5, 7000)
-    b = np.random.uniform(0, 20, 7000)
-    w_ab = np.random.normal(1, 0.2, 7000)
+    a = np.random.uniform(0, 5, 7000 * factor)
+    b = np.random.uniform(0, 20, 7000 * factor)
+    w_ab = np.random.normal(1 / factor, 0.2, 7000 * factor)
     return x, w_x, a, b, w_ab
 
 
@@ -86,11 +91,11 @@ x, w_x, a, b, w_ab = get_bkg()
 h1_data.fill(x)
 h2_data.fill(a, b)
 
-x, w_x, a, b, w_ab = get_sig()
+x, w_x, a, b, w_ab = get_sig(3)
 h1_sig.fill(x, weight=w_x)
 h2_sig.fill(a, b, weight=w_ab)
 
-x, w_x, a, b, w_ab = get_bkg()
+x, w_x, a, b, w_ab = get_bkg(2)
 h1_bkg.fill(x, weight=w_x)
 h2_bkg.fill(a, b, weight=w_ab)
 
@@ -299,7 +304,10 @@ writer.add_systematic(
     symmetrize="quadratic" if args.symmetrizeAll else None,
 )
 
-directory, filename = os.path.split(args.output)
-if directory == "":
-    directory = "./"
-writer.write(outfolder=directory, outfilename=filename)
+directory, filename = os.path.split()
+if args.output == "":
+    args.output = "./"
+filename = args.outname
+if args.postfix:
+    filename += f"_{args.postfit}"
+writer.write(outfolder=args.output, outfilename=filename)
