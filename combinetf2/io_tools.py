@@ -1,7 +1,5 @@
 import h5py
 import numpy as np
-
-# from narf import ioutils
 from wums import ioutils
 
 
