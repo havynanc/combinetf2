@@ -4,7 +4,7 @@ import h5py
 import hist
 import numpy as np
 import tensorflow as tf
-import wums.ioutils
+from wums import ioutils
 
 axis_downUpVar = hist.axis.Regular(
     2, -2.0, 2.0, underflow=False, overflow=False, name="downUpVar"
@@ -129,7 +129,7 @@ class Workspace:
 
     def dump_hist(self, hist, channel=None, projection_axes=None):
         name = hist.name
-        h = wums.ioutils.H5PickleProxy(hist)
+        h = ioutils.H5PickleProxy(hist)
         self.dump_obj(h, name, channel, projection_axes)
 
     def hist(self, name, axes, values, variances=None, label=None):
@@ -333,7 +333,6 @@ class Workspace:
 
         var_axes = []
         if variations:
-            name += "_variations"
             axis_vars = hist.axis.StrCategory(self.parms, name="vars")
             var_axes = [axis_vars, axis_downUpVar]
 
@@ -489,10 +488,10 @@ class Workspace:
             self.add_value(chi2, "chi2" + postfix, channel, axes_names)
 
     def write_meta(self, meta):
-        wums.ioutils.pickle_dump_h5py("meta", meta, self.fout)
+        ioutils.pickle_dump_h5py("meta", meta, self.fout)
 
     def dump_and_flush(self, group):
-        wums.ioutils.pickle_dump_h5py(group, self.results, self.fout)
+        ioutils.pickle_dump_h5py(group, self.results, self.fout)
         self.results = {}
 
     def close(self):

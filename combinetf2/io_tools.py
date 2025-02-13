@@ -1,6 +1,6 @@
 import h5py
 import numpy as np
-import wums.ioutils
+from wums import ioutils
 
 
 def get_fitresult(fitresult_filename, result=None, meta=False):
@@ -10,9 +10,9 @@ def get_fitresult(fitresult_filename, result=None, meta=False):
         key = f"{key}_{result}"
     elif key not in h5file.keys():  # fallback in case only asimov was fit
         key = f"{key}_asimov"
-    h5results = wums.ioutils.pickle_load_h5py(h5file[key])
+    h5results = ioutils.pickle_load_h5py(h5file[key])
     if meta:
-        meta = wums.ioutils.pickle_load_h5py(h5file["meta"])
+        meta = ioutils.pickle_load_h5py(h5file["meta"])
         return h5results, meta
     return h5results
 

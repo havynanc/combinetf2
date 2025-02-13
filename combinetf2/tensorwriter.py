@@ -4,7 +4,7 @@ from collections import defaultdict
 
 import h5py
 import numpy as np
-import wums.ioutils
+from wums import ioutils, output_tools
 
 from combinetf2 import common, h5pyutils
 
@@ -643,7 +643,7 @@ class TensorWriter:
 
         # propagate meta info into result file
         meta = {
-            "meta_info": wums.ioutils.make_meta_info_dict(
+            "meta_info": output_tools.make_meta_info_dict(
                 args=args, wd=common.base_dir
             ),
             "channel_info": self.channels,
@@ -652,7 +652,7 @@ class TensorWriter:
             "exponential_transform_scale": self.exponential_transform_scale,
         }
 
-        wums.ioutils.pickle_dump_h5py("meta", meta, f)
+        ioutils.pickle_dump_h5py("meta", meta, f)
 
         systsnoprofile = self.get_systsnoprofile()
         systsnoconstraint = self.get_systsnoconstraint()

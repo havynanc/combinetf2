@@ -8,8 +8,8 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.io as pio
-from patz import ioutilz
 from plotly.subplots import make_subplots
+from wums import ioutils
 
 from combinetf2 import io_tools
 
@@ -39,7 +39,7 @@ def writeOutput(fig, outfile, extensions=[], postfix=None, args=None, meta_info=
             output = (None, *output)
     if args is None and meta_info is None:
         return
-    ioutilz.write_logfile(
+    ioutils.write_logfile(
         *output,
         args=args,
         meta_info=meta_info,
