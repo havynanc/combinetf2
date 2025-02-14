@@ -11,6 +11,7 @@ import plotly.io as pio
 from plotly.subplots import make_subplots
 from wums import output_tools
 
+from combinetf2.common import load_config
 from combinetf2 import io_tools
 
 # prevent MathJax from bein loaded
@@ -493,7 +494,6 @@ def readFitInfoFromFile(
         labels = labels[mask]
 
     df = pd.DataFrame(np.array(labels, dtype=str), columns=["label"])
-    df["label"] = df["label"].apply(lambda l: translate_label.get(l, l))
 
     if poi is not None:
         if apply_mask:
@@ -536,6 +536,8 @@ def readFitInfoFromFile(
 
     if poi:
         df = df.drop(df.loc[df["label"] == poi].index)
+
+    df["label"] = df["label"].apply(lambda l: translate_label.get(l, l))
 
     return df
 
@@ -637,11 +639,10 @@ def parseArgs():
         help="Select nuisance groups, either a list of strings or a txt file with the groups",
     )
     parser.add_argument(
-        "-t",
-        "--translate",
+        "--config",
         type=str,
         default=None,
-        help="Specify .json file to translate labels",
+        help="Path to config file for style formatting",
     )
     parser.add_argument(
         "--title",
@@ -698,6 +699,11 @@ def parseArgs():
         "-p", "--postfix", type=str, help="Postfix for output file name"
     )
     parser.add_argument(
+        "--eoscp",
+        action="store_true",
+        help="Override use of xrdcp and use the mount instead",
+    )
+    parser.add_argument(
         "--otherExtensions",
         default=[],
         type=str,
@@ -722,6 +728,7 @@ def parseArgs():
 def producePlots(
     fitresult,
     args,
+    outdir,
     outfile,
     poi=None,
     group=False,
@@ -803,7 +810,7 @@ def producePlots(
 
     df = df.fillna(0)
 
-    outfile = os.path.join(args.outpath, outfile)
+    outfile = os.path.join(outdir, outfile)
     extensions = [outfile.split(".")[-1], *args.otherExtensions]
 
     include_ref = "impact_ref" in df.keys() or "constraint_ref" in df.keys()
@@ -843,10 +850,9 @@ def producePlots(
 if __name__ == "__main__":
     args = parseArgs()
 
-    translate_label = {}
-    if args.translate:
-        with open(args.translate) as f:
-            translate_label = json.load(f)
+    config = load_config(args.config)
+
+    translate_label = getattr(config, "impact_labels", {})
 
     fitresult, meta = io_tools.get_fitresult(args.inputFile, args.result, meta=True)
     fitresult_ref = (
@@ -859,6 +865,8 @@ if __name__ == "__main__":
         "combinetf2": meta["meta_info"],
     }
 
+    outdir = output_tools.make_plot_dir(args.outpath, eoscp=args.eoscp)
+
     kwargs = dict(
         pullrange=args.pullrange,
         asym=args.asym,
@@ -869,7 +877,7 @@ if __name__ == "__main__":
 
     if args.noImpacts:
         # do one pulls plot, ungrouped
-        producePlots(fitresult, args, outfile="pulls.html", **kwargs)
+        producePlots(fitresult, args, outdir, outfile="pulls.html", **kwargs)
         exit()
 
     pois = [args.poi] if args.poi else io_tools.get_poi_names(fitresult)
@@ -894,14 +902,20 @@ if __name__ == "__main__":
             name = f"{impacts_name}_{poi}.html"
             if not args.noPulls:
                 name = f"pulls_and_{name}"
-            producePlots(fitresult, args, outfile=name, poi=poi, **kwargs)
+            producePlots(fitresult, args, outdir, outfile=name, poi=poi, **kwargs)
         if args.mode in ["both", "group"]:
             producePlots(
                 fitresult,
                 args,
+                outdir,
                 outfile=f"{impacts_name}_grouped_{poi}.html",
                 poi=poi,
                 group=True,
                 grouping=grouping,
                 **kwargs,
             )
+
+    output_tools.write_indexfile(outdir)
+
+    if output_tools.is_eosuser_path(args.outpath) and args.eoscp:
+        output_tools.copy_to_eos(outdir, args.outpath, args.outfolder)

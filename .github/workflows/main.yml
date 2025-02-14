@@ -116,11 +116,11 @@ jobs:
 
       - name: make tensor
         run: >-
-          python tests/make_tensor.py -o $COMBINETF2_OUTDIR/test_tensor.hdf5
+          python tests/make_tensor.py -o $COMBINETF2_OUTDIR/
 
       - name: make sparse tensor
         run: >-
-          python tests/make_tensor.py -o $COMBINETF2_OUTDIR/test_tensor_sparse.hdf5 --sparse
+          python tests/make_tensor.py -o $COMBINETF2_OUTDIR/ --sparse --postfix sparse
 
 
   fitting:
@@ -187,22 +187,22 @@ jobs:
         run: python scripts/printPullsAndConstraints.py $COMBINETF2_OUTDIR/fitresults.hdf5 
 
       - name: print impacts
-        run: python scripts/printImpacts.py $COMBINETF2_OUTDIR/fitresults.hdf5 -s
+        run: python scripts/printImpacts.py $COMBINETF2_OUTDIR/fitresults.hdf5 --config tests/style_config.py -s absImpacts
 
       - name: print global impacts
-        run: python scripts/printImpacts.py $COMBINETF2_OUTDIR/fitresults.hdf5 -s --globalImpacts
+        run: python scripts/printImpacts.py $COMBINETF2_OUTDIR/fitresults.hdf5 --config tests/style_config.py -s absImpacts --globalImpacts
 
       - name: plot impacts
         run: >-
           python scripts/plot_pullsAndImpacts.py $COMBINETF2_OUTDIR/fitresults.hdf5 -o $WEB_DIR/$PLOT_DIR
-          --otherExtensions pdf png -n 50 -t tests/nuisance_translate.json
+          --otherExtensions pdf png -n 50 --config tests/style_config.py -s absimpact
           --subtitle Preliminary --groups Total slopes background_normalization binByBinStat stat 
 
       - name: plot global impacts
         run: >-
           python scripts/plot_pullsAndImpacts.py $COMBINETF2_OUTDIR/fitresults.hdf5 -o $WEB_DIR/$PLOT_DIR
-          -r $COMBINETF2_OUTDIR/fitresults_pseudodata.hdf5 --refName "Pseudo data"
-          --otherExtensions pdf png -n 50  -t tests/nuisance_translate.json --oneSidedImpacts --globalImpacts --diffPullAsym --showNumbers
+          -r $COMBINETF2_OUTDIR/fitresults_pseudodata.hdf5 --refName "Pseudo data" -s absimpact
+          --otherExtensions pdf png -n 50  --config tests/style_config.py --oneSidedImpacts --globalImpacts --diffPullAsym --showNumbers
           --groups Total slopes background_normalization binByBinStat stat 
           --subtitle Preliminary --postfix data_vs_pseudodata
 
@@ -210,23 +210,23 @@ jobs:
         run: >-
           python scripts/plot_hists.py $COMBINETF2_OUTDIR/fitresults.hdf5 -o $WEB_DIR/$PLOT_DIR 
           --extraTextLoc '0.05' '0.7' --legCols 1 --project ch1 a --project ch1 b --yscale '1.2' 
-          --subtitle Preliminary --prefit
+          --subtitle Preliminary --prefit --config tests/style_config.py
 
       - name: plot postfit distributions
         run: >-
           python scripts/plot_hists.py $COMBINETF2_OUTDIR/fitresults.hdf5 -o $WEB_DIR/$PLOT_DIR 
           --extraTextLoc '0.05' '0.7' --legCols 1 --project ch1 a --project ch1 b --yscale '1.2' 
-          --subtitle Preliminary --varNames 'slope_signal' --varLabels 'slope signal' --varColors red
+          --subtitle Preliminary --varNames 'slope_signal' --varColors orange --config tests/style_config.py --rrange 0.8 1.2
 
       - name: plot histogram covariance matrices
         run: >-
           python scripts/plot_hists_cov.py $COMBINETF2_OUTDIR/fitresults.hdf5 -o $WEB_DIR/$PLOT_DIR 
-          --subtitle Preliminary --project ch1 a --project ch1 b --subtitle Preliminary
+          --subtitle Preliminary --project ch1 a --project ch1 b --subtitle Preliminary --config tests/style_config.py
 
       - name: plot histogram impacts
         run: >-
           python scripts/plot_hists_uncertainties.py $COMBINETF2_OUTDIR/fitresults.hdf5 -o $WEB_DIR/$PLOT_DIR 
-          --extraTextLoc '0.05' '0.7' --legCols 1 --project ch1 a --project ch1 b --yscale '1.2' --subtitle Preliminary
+          --extraTextLoc '0.05' '0.7' --legCols 1 --project ch1 a --project ch1 b --yscale '1.2' --subtitle Preliminary --config tests/style_config.py
 
       - name: copy index php file
         run: cp data/Templates/index_mit.php $WEB_DIR/$PLOT_DIR/index.php
