@@ -1,6 +1,7 @@
 import h5py
 import numpy as np
-from wums import ioutils
+
+from wums import ioutils  # isort: skip
 
 
 def get_fitresult(fitresult_filename, result=None, meta=False):

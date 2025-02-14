@@ -6,10 +6,13 @@ import matplotlib.pyplot as plt
 import mplhep as hep
 import numpy as np
 import seaborn as sns
-from wums import boostHistHelpers as hh
-from wums import logging, output_tools, plot_tools
 
 import combinetf2.io_tools
+from combinetf2.common import get_axis_label, load_config
+
+from wums import boostHistHelpers as hh  # isort: skip
+from wums import logging, output_tools, plot_tools  # isort: skip
+
 
 hep.style.use(hep.style.ROOT)
 
@@ -42,6 +45,12 @@ def parseArgs():
         "--eoscp",
         action="store_true",
         help="Override use of xrdcp and use the mount instead",
+    )
+    parser.add_argument(
+        "--config",
+        type=str,
+        default=None,
+        help="Path to config file for style formatting",
     )
     parser.add_argument(
         "-p", "--postfix", type=str, help="Postfix for output file name"
@@ -126,22 +135,11 @@ def plot_matrix(
         ax=ax,
     )
 
-    if axes is None:
-        label = "Bin index"
-    elif len(axes) > 1:
-        label = f"({','.join(axes)}) bin"
-    else:
-        label = f"{axes[0]} bin"
+    xlabel = get_axis_label(config, axes, args.xlabel, is_bin=True)
+    ylabel = get_axis_label(config, axes, args.ylabel, is_bin=True)
 
-    if args.xlabel:
-        ax.set_xlabel(args.xlabel)
-    else:
-        ax.set_xlabel(label)
-
-    if args.ylabel:
-        ax.set_ylabel(args.ylabel)
-    else:
-        ax.set_ylabel(label)
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
 
     textsize = ax.xaxis.label.get_size()
     if args.title:
@@ -166,7 +164,7 @@ def plot_matrix(
         )
 
     to_join = ["hist_cov"]
-    to_join.append("prefit" if args.prefit else "postfix")
+    to_join.append("prefit" if args.prefit else "postfit")
     if channel is not None:
         to_join.append(channel)
     if axes is not None:
@@ -205,6 +203,8 @@ if __name__ == "__main__":
     args = parseArgs()
 
     logger = logging.setup_logger(__file__, args.verbose, args.noColorLogger)
+
+    config = load_config(args.config)
 
     outdir = output_tools.make_plot_dir(args.outpath, eoscp=args.eoscp)
 

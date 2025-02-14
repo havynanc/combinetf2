@@ -10,10 +10,13 @@ import pandas as pd
 import scipy.stats
 from matplotlib import colormaps
 from matplotlib.lines import Line2D
-from wums import boostHistHelpers as hh
-from wums import logging, output_tools, plot_tools
 
 import combinetf2.io_tools
+from combinetf2.common import get_axis_label, load_config
+
+from wums import boostHistHelpers as hh  # isort: skip
+from wums import logging, output_tools, plot_tools  # isort: skip
+
 
 hep.style.use(hep.style.ROOT)
 
@@ -41,6 +44,12 @@ def parseArgs():
         type=str,
         default=os.path.expanduser("./test"),
         help="Base path for output",
+    )
+    parser.add_argument(
+        "--config",
+        type=str,
+        default=None,
+        help="Path to config file for style formatting",
     )
     parser.add_argument(
         "--eoscp",
@@ -295,6 +304,7 @@ def make_plot(
     h_inclusive,
     h_stack,
     axes,
+    outdir,
     colors=None,
     labels=None,
     args=None,
@@ -308,6 +318,7 @@ def make_plot(
     saturated_chi2=False,
     lumi=None,
     selection=None,
+    config=None,
 ):
     axes_names = [a.name for a in axes]
 
@@ -390,12 +401,8 @@ def make_plot(
         h_stack = [hh.scaleHist(h, scale) for h in h_stack]
         h_inclusive = hh.scaleHist(h_inclusive, scale)
 
-    if args.xlabel is not None:
-        xlabel = args.xlabel
-    elif len(axes_names) == 1:
-        xlabel = axes_names[0]
-    else:
-        xlabel = f"({', '.join(axes_names)}) bin"
+    xlabel = get_axis_label(config, axes_names, args.xlabel)
+
     if ratio or diff:
         if args.noData:
             rlabel = ("Diff." if diff else "Ratio") + " to nominal"
@@ -437,7 +444,7 @@ def make_plot(
             yerr=False,
             histtype=histtype_mc,
             color=c,
-            label=l,
+            label=getattr(config, "process_labels", {}).get(l, l),
             density=False,
             binwnorm=binwnorm,
             ax=ax1,
@@ -808,6 +815,7 @@ def make_plot(
 def make_plots(
     result,
     axes,
+    outdir,
     procs=None,
     labels=None,
     colors=None,
@@ -939,6 +947,7 @@ def make_plots(
                 h_inclusive,
                 h_stack,
                 other_axes,
+                outdir,
                 labels=labels,
                 colors=colors,
                 args=args,
@@ -957,6 +966,7 @@ def make_plots(
             hist_inclusive,
             hist_stack,
             axes,
+            outdir,
             labels=labels,
             colors=colors,
             args=args,
@@ -990,13 +1000,16 @@ if __name__ == "__main__":
 
     logger = logging.setup_logger(__file__, args.verbose, args.noColorLogger)
 
-    outdir = output_tools.make_plot_dir(args.outpath, eoscp=args.eoscp)
+    config = load_config(args.config)
 
     varNames = args.varNames
     if varNames is not None:
         varLabels = args.varLabels
         varColors = args.varColors
-        if len(varLabels) != len(varNames):
+        if varLabels is None:
+            syst_labels = getattr(config, "systematics_labels", {})
+            varLabels = [syst_labels.get(x, x) for x in varNames]
+        elif len(varLabels) != len(varNames):
             raise ValueError(
                 "Must specify the same number of args for --varNames, and --varLabels"
                 f" found varNames={len(varNames)} and varLabels={len(varLabels)}"
@@ -1054,10 +1067,11 @@ if __name__ == "__main__":
     if args.filterProcs is not None:
         procs = [p for p in procs if p in args.filterProcs]
 
-    cmap = plt.get_cmap("tab10")
-
     labels = procs[:]
-    colors = [cmap(i % cmap.N) for i in range(len(procs))]
+
+    cmap = plt.get_cmap("tab10")
+    proc_colors = getattr(config, "process_colors", {})
+    colors = [proc_colors.get(p, cmap(i % cmap.N)) for i, p in enumerate(procs)]
 
     # labels, colors, procs = styles.get_labels_colors_procs_sorted(procs)
 
@@ -1066,12 +1080,15 @@ if __name__ == "__main__":
     else:
         correlated = ""
 
+    outdir = output_tools.make_plot_dir(args.outpath, eoscp=args.eoscp)
+
     opts = dict(
         args=args,
         procs=procs,
         labels=labels,
         colors=colors,
         meta=meta,
+        config=config,
     )
 
     for projection in args.project:
@@ -1084,7 +1101,8 @@ if __name__ == "__main__":
 
         make_plots(
             result,
-            axes=[a for a in info["axes"] if a.name in axes],
+            [a for a in info["axes"] if a.name in axes],
+            outdir,
             channel=channel,
             chi2=[chi2, ndf],
             lumi=info.get("lumi", None),
@@ -1098,7 +1116,8 @@ if __name__ == "__main__":
 
             make_plots(
                 result,
-                axes=info["axes"],
+                info["axes"],
+                outdir,
                 channel=channel,
                 chi2=[chi2, ndf],
                 saturated_chi2=saturated_chi2,

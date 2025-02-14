@@ -4,9 +4,11 @@ import os
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy.stats import chi2
-from wums import output_tools
 
 from combinetf2 import io_tools
+
+from wums import output_tools  # isort: skip
+
 
 plt.rcParams.update({"font.size": 14})
 

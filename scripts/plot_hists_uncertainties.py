@@ -7,10 +7,13 @@ import matplotlib.pyplot as plt
 import mplhep as hep
 import numpy as np
 from matplotlib import colormaps
-from wums import boostHistHelpers as hh
-from wums import logging, output_tools, plot_tools
 
 import combinetf2.io_tools
+from combinetf2.common import get_axis_label, load_config
+
+from wums import boostHistHelpers as hh  # isort: skip
+from wums import logging, output_tools, plot_tools  # isort: skip
+
 
 hep.style.use(hep.style.ROOT)
 
@@ -46,6 +49,18 @@ def parseArgs():
     )
     parser.add_argument(
         "-p", "--postfix", type=str, help="Postfix for output file name"
+    )
+    parser.add_argument(
+        "--config",
+        type=str,
+        default=None,
+        help="Path to config file for style formatting",
+    )
+    parser.add_argument(
+        "--grouping",
+        type=str,
+        default=None,
+        help="Pre-defined grouping in config to select nuisance groups",
     )
     parser.add_argument(
         "--lumi",
@@ -235,6 +250,7 @@ def parseArgs():
 
 def make_plot(
     h_impacts,
+    h_total,
     axes,
     uncertainties,
     colors=None,
@@ -245,6 +261,7 @@ def make_plot(
     meta=None,
     lumi=None,
     selection=None,
+    config={},
 ):
     axes_names = [a.name for a in axes]
 
@@ -260,22 +277,22 @@ def make_plot(
             axes_names = axes_names[::-1]
             axes = axes[::-1]
 
-    if args.xlabel is not None:
-        xlabel = args.xlabel
-    elif len(axes_names) == 1:
-        xlabel = axes_names[0]
-    else:
-        xlabel = f"({', '.join(axes_names)}) bin"
+    xlabel = get_axis_label(config, axes_names, args.xlabel)
 
     fig, ax1 = plot_tools.figure(
         h_impacts, xlabel, ylabel, args.ylim, automatic_scale=False, width_scale=1.2
     )
 
+    translate_label = getattr(config, "systematics_labels", {})
+    grouping = getattr(config, "nuisance_grouping", {}).get(args.grouping, None)
     for (
         u,
         c,
         l,
     ) in zip(uncertainties, colors, labels):
+
+        if grouping is not None and l not in grouping:
+            continue
 
         h_impact = h_impacts[{"impacts": u}]
         if len(axes) > 1:
@@ -284,14 +301,33 @@ def make_plot(
                 h_impact, binwnorm=binwnorm, obs=[a.name for a in axes]
             )
 
-        # only for labels
         hep.histplot(
             h_impact,
             xerr=False,
             yerr=False,
             histtype="step",
             color=c,
-            label=l,
+            label=translate_label.get(l, l),
+            density=False,
+            binwnorm=binwnorm,
+            ax=ax1,
+            zorder=1,
+            flow="none",
+        )
+
+    if grouping is not None and "Total" in grouping:
+        if len(axes) > 1:
+            # unrolled ND histograms
+            h_total = hh.unrolledHist(
+                h_total, binwnorm=binwnorm, obs=[a.name for a in axes]
+            )
+        hep.histplot(
+            h_total,
+            xerr=False,
+            yerr=False,
+            histtype="step",
+            color="black",
+            label=translate_label.get("Total", "Total"),
             density=False,
             binwnorm=binwnorm,
             ax=ax1,
@@ -379,12 +415,17 @@ def make_plots(
     **kwopts,
 ):
     hist_impacts = result["hist_postfit_inclusive_global_impacts_grouped"].get()
+    hist_total = result["hist_postfit_inclusive"].get()
 
     if not args.absolute:
         # give impacts as relative uncertainty
-        hist_inclusive = result["hist_postfit_inclusive"].get()
-        hist_impacts = hh.divideHists(hist_impacts, hist_inclusive, rel_unc=True)
+        hist_impacts = hh.divideHists(hist_impacts, hist_total, rel_unc=True)
         hist_impacts = hh.scaleHist(hist_impacts, 100)  # impacts in %
+
+        hist_total = hh.divideHists(hist_total, hist_total, rel_unc=True)
+        hist_total = hh.scaleHist(hist_total, 100)
+
+    hist_total.values()[...] = hist_total.variances()[...] ** 0.5
 
     uncertainties = np.array(hist_impacts.axes["impacts"], dtype=str)
     if args.flterUncertainties is not None:
@@ -413,6 +454,7 @@ def make_plots(
             }
 
             h_impacts = hist_impacts[idxs]
+            h_total = hist_total[idxs]
 
             for a, i in idxs_centers.items():
                 print(a, i)
@@ -431,6 +473,7 @@ def make_plots(
             )
             make_plot(
                 h_impacts,
+                h_total,
                 other_axes,
                 uncertainties,
                 labels=labels,
@@ -445,6 +488,7 @@ def make_plots(
     else:
         make_plot(
             hist_impacts,
+            hist_total,
             axes,
             uncertainties,
             labels=labels,
@@ -464,6 +508,8 @@ if __name__ == "__main__":
     args = parseArgs()
 
     logger = logging.setup_logger(__file__, args.verbose, args.noColorLogger)
+
+    config = load_config(args.config)
 
     outdir = output_tools.make_plot_dir(args.outpath, eoscp=args.eoscp)
     varNames = args.varNames
@@ -524,6 +570,7 @@ if __name__ == "__main__":
     opts = dict(
         args=args,
         meta=meta,
+        config=config,
     )
 
     for projection in args.project:

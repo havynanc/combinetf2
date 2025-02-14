@@ -4,9 +4,10 @@ from collections import defaultdict
 
 import h5py
 import numpy as np
-from wums import ioutils, output_tools
 
 from combinetf2 import common, h5pyutils
+
+from wums import ioutils, output_tools  # isort: skip
 
 
 class TensorWriter:
