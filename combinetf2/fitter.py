@@ -233,16 +233,6 @@ class Fitter:
         v = tf.concat([cov_poi, cov_noi], axis=0)
         impacts = v / tf.reshape(tf.sqrt(tf.linalg.diag_part(self.cov)), [1, -1])
 
-        impacts_grouped = tf.map_fn(
-            lambda idxs: self._compute_impact_group(v[:, self.npoi :], idxs),
-            tf.ragged.constant(self.indata.systgroupidxs, dtype=tf.int32),
-            fn_output_signature=tf.TensorSpec(
-                shape=(impacts.shape[0],), dtype=tf.float64
-            ),
-        )
-
-        impacts_grouped = tf.transpose(impacts_grouped)
-
         # impact data stat # FIXME: This might not be correct in case noi != systsnoconstraint
         nstat = self.npoi + self.indata.nsystnoconstraint
         hess_stat = self.hess[:nstat, :nstat]
@@ -265,12 +255,22 @@ class Fitter:
             impacts_bbb = tf.sqrt(tf.nn.relu(impacts_bbb_sq))  # max(0,x)
             impacts_bbb = tf.reshape(impacts_bbb, (-1, 1))
             impacts_grouped = tf.concat(
-                [impacts_grouped, impacts_data_stat, impacts_bbb], axis=1
+                [impacts_data_stat, impacts_bbb], axis=1
             )
         else:
             impacts_data_stat = tf.sqrt(tf.linalg.diag_part(inv_hess_stat))
             impacts_data_stat = tf.reshape(impacts_data_stat, (-1, 1))
-            impacts_grouped = tf.concat([impacts_grouped, impacts_data_stat], axis=1)
+            impacts_grouped = impacts_data_stat
+
+        if len(self.indata.systgroupidxs):
+            impacts_grouped_syst = tf.map_fn(
+                lambda idxs: self._compute_impact_group(v[:, self.npoi :], idxs),
+                tf.ragged.constant(self.indata.systgroupidxs, dtype=tf.int32),
+                fn_output_signature=tf.TensorSpec(
+                    shape=(impacts.shape[0],), dtype=tf.float64
+                ),
+            )
+            impacts_grouped = tf.concat([impacts_grouped_syst, impacts_grouped], axis=1)
 
         return impacts, impacts_grouped
 
@@ -287,14 +287,7 @@ class Fitter:
         dxdtheta0_noi = tf.gather(self.dxdtheta0[self.npoi :], self.indata.noigroupidxs)
         dxdtheta0 = tf.concat([dxdtheta0_poi, dxdtheta0_noi], axis=0)
         dxdtheta0_squared = tf.square(dxdtheta0)
-        impacts_grouped = tf.map_fn(
-            lambda idxs: self._compute_global_impact_group(dxdtheta0_squared, idxs),
-            tf.ragged.constant(self.indata.systgroupidxs, dtype=tf.int32),
-            fn_output_signature=tf.TensorSpec(
-                shape=(dxdtheta0_squared.shape[0],), dtype=tf.float64
-            ),
-        )
-        impacts_grouped = tf.transpose(impacts_grouped)
+
 
         # global impact data stat
         dxdnobs_poi = self.dxdnobs[: self.npoi]
@@ -309,7 +302,6 @@ class Fitter:
 
         data_stat = tf.sqrt(data_stat)
         impacts_data_stat = tf.reshape(data_stat, (-1, 1))
-        impacts_grouped = tf.concat([impacts_grouped, impacts_data_stat], axis=1)
 
         if self.binByBinStat:
             # global impact bin-by-bin stat
@@ -325,7 +317,19 @@ class Fitter:
                 )
             )
             impacts_bbb = tf.reshape(impacts_bbb, (-1, 1))
-            impacts_grouped = tf.concat([impacts_grouped, impacts_bbb], axis=1)
+            impacts_grouped = tf.concat([impacts_data_stat, impacts_bbb], axis=1)
+        else:
+            impacts_grouped = impacts_data_stat
+
+        if len(self.indata.systgroupidxs):
+            impacts_grouped_syst = tf.map_fn(
+                lambda idxs: self._compute_global_impact_group(dxdtheta0_squared, idxs),
+                tf.ragged.constant(self.indata.systgroupidxs, dtype=tf.int32),
+                fn_output_signature=tf.TensorSpec(
+                    shape=(dxdtheta0_squared.shape[0],), dtype=tf.float64
+                ),
+            )
+            impacts_grouped = tf.concat([impacts_grouped_syst, impacts_grouped], axis=1)
 
         # global impacts of unconstrained parameters are always 0, only store impacts of constrained ones
         impacts = dxdtheta0[:, self.indata.nsystnoconstraint :]
@@ -387,27 +391,13 @@ class Fitter:
         expvar = tf.reshape(expvar, expected.shape)
 
         if compute_global_impacts:
-            dexpdtheta0_squared = tf.square(dexpdtheta0)
-            impacts_grouped = tf.map_fn(
-                lambda idxs: self._compute_global_impact_group(
-                    dexpdtheta0_squared, idxs
-                ),
-                tf.ragged.constant(self.indata.systgroupidxs, dtype=tf.int32),
-                fn_output_signature=tf.TensorSpec(
-                    shape=(dexpdtheta0_squared.shape[0],), dtype=tf.float64
-                ),
-            )
-
             # global impacts of unconstrained parameters are always 0, only store impacts of constrained ones
             impacts = dexpdtheta0[:, self.indata.nsystnoconstraint :]
-
-            impacts_grouped = tf.transpose(impacts_grouped)
 
             if compute_cov:
                 expvar_stat = tf.linalg.diag_part(expcov_stat)
             impacts_stat = tf.sqrt(expvar_stat)
             impacts_stat = tf.reshape(impacts_stat, (-1, 1))
-            impacts_grouped = tf.concat([impacts_grouped, impacts_stat], axis=1)
 
             if self.binByBinStat:
                 if compute_cov:
@@ -415,8 +405,24 @@ class Fitter:
                 impacts_binByBinStat = tf.sqrt(expvar_binByBinStat)
                 impacts_binByBinStat = tf.reshape(impacts_binByBinStat, (-1, 1))
                 impacts_grouped = tf.concat(
-                    [impacts_grouped, impacts_binByBinStat], axis=1
+                    [impacts_stat, impacts_binByBinStat], axis=1
                 )
+            else:
+                impacts_grouped = impacts_stat
+
+            if len(self.indata.systgroupidxs):
+                dexpdtheta0_squared = tf.square(dexpdtheta0)
+                impacts_grouped_syst = tf.map_fn(
+                    lambda idxs: self._compute_global_impact_group(
+                        dexpdtheta0_squared, idxs
+                    ),
+                    tf.ragged.constant(self.indata.systgroupidxs, dtype=tf.int32),
+                    fn_output_signature=tf.TensorSpec(
+                        shape=(dexpdtheta0_squared.shape[0],), dtype=tf.float64
+                    ),
+                )
+                impacts_grouped_syst = tf.transpose(impacts_grouped_syst)
+                impacts_grouped = tf.concat([impacts_grouped_syst, impacts_grouped], axis=1)
         else:
             impacts = None
             impacts_grouped = None
@@ -509,20 +515,9 @@ class Fitter:
             dexpdtheta0 *= dtheta0[None, :]
 
             dexpdtheta0_squared = tf.square(dexpdtheta0)
-            impacts_grouped = tf.map_fn(
-                lambda idxs: self._compute_global_impact_group(
-                    dexpdtheta0_squared, idxs
-                ),
-                tf.ragged.constant(self.indata.systgroupidxs, dtype=tf.int32),
-                fn_output_signature=tf.TensorSpec(
-                    shape=(dexpdtheta0_squared.shape[0],), dtype=tf.float64
-                ),
-            )
 
             # global impacts of unconstrained parameters are always 0, only store impacts of constrained ones
             impacts = dexpdtheta0[:, self.indata.nsystnoconstraint :]
-
-            impacts_grouped = tf.transpose(impacts_grouped)
 
             # stat global impact from all unconstrained parameters, not sure if this is correct TODO: check
             impacts_stat = tf.sqrt(
@@ -530,12 +525,26 @@ class Fitter:
                 - tf.reduce_sum(dexpdtheta0_squared, axis=-1)
             )
             impacts_stat = tf.reshape(impacts_stat, (-1, 1))
-            impacts_grouped = tf.concat([impacts_grouped, impacts_stat], axis=1)
-
+            
             if self.binByBinStat:
                 impacts_BBB_stat = tf.sqrt(tf.linalg.diag_part(exp_cov_BBB))
                 impacts_BBB_stat = tf.reshape(impacts_BBB_stat, (-1, 1))
-                impacts_grouped = tf.concat([impacts_grouped, impacts_BBB_stat], axis=1)
+                impacts_grouped = tf.concat([impacts_stat, impacts_BBB_stat], axis=1)
+            else:
+                impacts_grouped = impacts_stat
+
+            if len(self.indata.systgroupidxs):
+                impacts_grouped_syst = tf.map_fn(
+                    lambda idxs: self._compute_global_impact_group(
+                        dexpdtheta0_squared, idxs
+                    ),
+                    tf.ragged.constant(self.indata.systgroupidxs, dtype=tf.int32),
+                    fn_output_signature=tf.TensorSpec(
+                        shape=(dexpdtheta0_squared.shape[0],), dtype=tf.float64
+                    ),
+                )
+                impacts_grouped_syst = tf.transpose(impacts_grouped_syst)
+                impacts_grouped = tf.concat([impacts_grouped_syst, impacts_grouped], axis=1)
         else:
             impacts = None
             impacts_grouped = None

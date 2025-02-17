@@ -1,4 +1,5 @@
 import argparse
+import itertools
 import os
 
 import hist
@@ -89,6 +90,11 @@ def parseArgs():
         help="fitresults key in file (e.g. 'asimov'). Leave empty for data fit result.",
     )
     parser.add_argument(
+        "--correlation",
+        action="store_true",
+        help="Plot correlation instad of covariance",
+    )
+    parser.add_argument(
         "--project",
         nargs="+",
         action="append",
@@ -118,12 +124,21 @@ def parseArgs():
 def plot_matrix(
     hist_obj, args, channel=None, axes=None, cmap="coolwarm", annot=False, meta=None
 ):
-    cov_matrix = hist_obj.values()
 
+    matrix = hist_obj.values()
+
+    if len(matrix.shape) > 2:
+        flat = np.prod(matrix.shape[:len(matrix.shape)//2])
+        matrix = matrix.reshape((flat,flat))
+
+    if args.correlation:
+        std_dev = np.sqrt(np.diag(matrix)) 
+        matrix = matrix / np.outer(std_dev, std_dev)
+        
     fig, ax = plt.subplots(figsize=(8, 6))
 
     sns.heatmap(
-        cov_matrix,
+        matrix,
         cmap=cmap,
         annot=annot,
         fmt=".2g",
@@ -161,7 +176,7 @@ def plot_matrix(
             ha="right",
         )
 
-    to_join = ["hist_cov"]
+    to_join = [f"hist_{'corr' if args.correlation else 'cov'}"]
     to_join.append("prefit" if args.prefit else "postfit")
     if channel is not None:
         to_join.append(channel)
@@ -221,7 +236,9 @@ if __name__ == "__main__":
         f"hist_{'prefit' if args.prefit else 'postfit'}_inclusive_cov"
     ].get()
 
-    plot_matrix(hist_cov, args, meta=meta)
+    if len(channel_info) > 1:
+        # plot full covariance matrix only if it goes across multiple channels
+        plot_matrix(hist_cov, args, meta=meta)
 
     for channel, info in channel_info.items():
         axes = info["axes"]
@@ -232,7 +249,8 @@ if __name__ == "__main__":
 
         plot_matrix(h_cov, args, channel, [a.name for a in axes], meta=meta)
 
-        if len(args.project) and channel in [p[0] for p in args.project]:
+        if (len(args.project) and channel in [p[0] for p in args.project]) or len(selection_axes) > 0:
+            # reshape into original axes
             h1d = hist.Hist(*axes)
             h2d = hh.expand_hist_by_duplicate_axes(
                 h1d,
@@ -245,6 +263,33 @@ if __name__ == "__main__":
                 h_cov.values(), (h_cov.shape[0], *h2d.shape[: len(h2d.shape) // 2])
             )
             h2d.values()[...] = np.reshape(vals, h2d.shape)
+
+        selection_axes = [a for a in axes if a.name in args.selectionAxes]
+        if len(selection_axes) > 0:
+            selection_bins = [
+                np.arange(a.size) for a in axes if a.name in args.selectionAxes
+            ]
+            other_axes = [a.name for a in axes if a not in selection_axes]
+
+            for bins in itertools.product(*selection_bins):
+                idxs = {a.name: i for a, i in zip(selection_axes, bins)}
+                idxs.update({f"y_{a.name}": i for a, i in zip(selection_axes, bins)})
+                idxs_centers = {
+                    a.name: (
+                        a.centers[i]
+                        if isinstance(a, (hist.axis.Regular, hist.axis.Variable))
+                        else a.edges[i]
+                    )
+                    for a, i in zip(selection_axes, bins)
+                }
+                h_cov_i = h2d[idxs]
+                suffix = f"{channel}_" + "_".join(
+                    [
+                        f"{a}_{str(i).replace('.','p').replace('-','m')}"
+                        for a, i in idxs_centers.items()
+                    ]
+                )
+                plot_matrix(h_cov_i, args, suffix, other_axes, meta=meta)
 
         for projection in args.project:
             if channel != projection[0]:

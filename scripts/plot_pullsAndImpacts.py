@@ -632,11 +632,10 @@ def parseArgs():
         help="Filter regexes to select nuisances by name",
     )
     parser.add_argument(
-        "--groups",
+        "--grouping",
         type=str,
-        nargs="+",
         default=None,
-        help="Select nuisance groups, either a list of strings or a txt file with the groups",
+        help="Pre-defined grouping in config to select nuisance groups",
     )
     parser.add_argument(
         "--config",
@@ -710,7 +709,7 @@ def parseArgs():
         nargs="*",
         help="Additional output file types to write",
     )
-    parser.add_argument("-n", "--num", type=int, help="Number of nuisances to plot")
+    parser.add_argument("-n", "--num", type=int, default=50, help="Number of nuisances to plot")
     parser.add_argument(
         "--noPulls",
         action="store_true",
@@ -889,12 +888,8 @@ if __name__ == "__main__":
         impacts_name = f"global_{impacts_name}"
 
     grouping = None
-    if args.groups is not None:
-        if len(args.groups) == 1 and os.path.isfile(args.groups[0]):
-            with open(args.groups[0], "r") as file:
-                grouping = [line.strip() for line in file]
-        else:
-            grouping = args.groups
+    if args.grouping is not None:
+        grouping = getattr(config, "nuisance_grouping", {}).get(args.grouping, None)
 
     for poi in pois:
         print(f"Now at {poi}")

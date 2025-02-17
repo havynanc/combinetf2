@@ -263,8 +263,6 @@ def make_plot(
 ):
     axes_names = [a.name for a in axes]
 
-    binwnorm = 1.0
-
     if args.ylabel is not None:
         ylabel = args.ylabel
     else:
@@ -296,7 +294,8 @@ def make_plot(
         if len(axes) > 1:
             # unrolled ND histograms
             h_impact = hh.unrolledHist(
-                h_impact, binwnorm=binwnorm, obs=[a.name for a in axes]
+                h_impact, 
+                obs=[a.name for a in axes]
             )
 
         hep.histplot(
@@ -307,7 +306,6 @@ def make_plot(
             color=c,
             label=translate_label.get(l,l),
             density=False,
-            binwnorm=binwnorm,
             ax=ax1,
             zorder=1,
             flow="none",
@@ -317,7 +315,8 @@ def make_plot(
         if len(axes) > 1:
             # unrolled ND histograms
             h_total = hh.unrolledHist(
-                h_total, binwnorm=binwnorm, obs=[a.name for a in axes]
+                h_total, 
+                obs=[a.name for a in axes]
             )
         hep.histplot(
             h_total,
@@ -327,7 +326,6 @@ def make_plot(
             color="black",
             label=translate_label.get("Total", "Total"),
             density=False,
-            binwnorm=binwnorm,
             ax=ax1,
             zorder=1,
             flow="none",

@@ -4,7 +4,10 @@ from wums import ioutils
 
 
 def get_fitresult(fitresult_filename, result=None, meta=False):
-    h5file = h5py.File(fitresult_filename, mode="r")
+    if isinstance(fitresult_filename, str):
+        h5file = h5py.File(fitresult_filename, mode="r")
+    else:
+        h5file = fitresult_filename
     key = "results"
     if result is not None:
         key = f"{key}_{result}"

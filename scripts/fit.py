@@ -6,7 +6,7 @@ import numpy as np
 import tensorflow as tf
 from wums import ioutils, output_tools
 
-from combinetf2 import fitter, inputdata, workspace
+from combinetf2 import fitter, inputdata, workspace, io_tools
 
 
 def make_parser():
@@ -358,7 +358,7 @@ def fit(args, fitter, ws, dofit=True):
                 cov_ext = fext["cov"][...]
             else:
                 # fitresult from combinetf2
-                h5results_ext = ioutils.pickle_load_h5py(fext["results"])
+                h5results_ext = io_tools.get_fitresult(fext)
                 h_parms_ext = h5results_ext["parms"].get()
 
                 x_ext = h_parms_ext.values()
