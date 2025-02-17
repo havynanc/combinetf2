@@ -1155,55 +1155,79 @@ class Fitter:
             x_scans = dsigs
             y_scans = dsigs
 
+        best_fit = (scan_points + 1) // 2 - 1
         nlls = np.full((len(x_scans), len(y_scans)), np.nan)
-        for ix, ixval in enumerate(x_scans):
-            xval_init = xval.numpy()
-            xval_init[idx0] = ixval
+        nlls[best_fit, best_fit] = self.full_nll().numpy()
+        # scan in a spiral around the best fit point
+        dcol = -1
+        drow = 0
+        i = 0
+        j = 0
+        r = 1
+        while r - 1 < best_fit:
+            if i == r and drow == 1:
+                drow = 0
+                dcol = 1
+            if j == r and dcol == 1:
+                dcol = 0
+                drow = -1
+            elif i == -r and drow == -1:
+                dcol = -1
+                drow = 0
+            elif j == -r and dcol == -1:
+                drow = 1
+                dcol = 0
 
-            for iy, iyval in enumerate(y_scans):
-                print(f"Scan point ({ix},{iy})")
+            i += drow
+            j += dcol
 
-                xval_init[idx1] = iyval
+            if i == -r and j == -r:
+                r += 1
 
-                self.x.assign(
-                    tf.tensor_scatter_nd_update(
-                        self.x, [[idx0], [idx1]], [ixval, iyval]
-                    )
+            ix = best_fit - i
+            iy = best_fit + j
+
+            # print(f"i={i}, j={j}, r={r} drow={drow}, dcol={dcol} | ix={ix}, iy={iy}")
+
+            self.x.assign(
+                tf.tensor_scatter_nd_update(
+                    self.x, [[idx0], [idx1]], [x_scans[ix], y_scans[iy]]
                 )
+            )
 
-                def scipy_loss(xval):
-                    self.x.assign(xval)
-                    val, grad = self.loss_val_grad()
-                    grad = grad.numpy()
-                    grad[idx0] = 0
-                    grad[idx1] = 0
-                    return val.numpy(), grad
+            def scipy_loss(xval):
+                self.x.assign(xval)
+                val, grad = self.loss_val_grad()
+                grad = grad.numpy()
+                grad[idx0] = 0
+                grad[idx1] = 0
+                return val.numpy(), grad
 
-                def scipy_hessp(xval, pval):
-                    self.x.assign(xval)
-                    pval[idx0] = 0
-                    pval[idx1] = 0
-                    p = tf.convert_to_tensor(pval)
-                    val, grad, hessp = self.loss_val_grad_hessp(p)
-                    hessp = hessp.numpy()
-                    hessp[idx0] = 0
-                    hessp[idx1] = 0
+            def scipy_hessp(xval, pval):
+                self.x.assign(xval)
+                pval[idx0] = 0
+                pval[idx1] = 0
+                p = tf.convert_to_tensor(pval)
+                val, grad, hessp = self.loss_val_grad_hessp(p)
+                hessp = hessp.numpy()
+                hessp[idx0] = 0
+                hessp[idx1] = 0
 
-                    if np.allclose(hessp, 0, atol=1e-8):
-                        return np.zeros_like(hessp)
+                if np.allclose(hessp, 0, atol=1e-8):
+                    return np.zeros_like(hessp)
 
-                    return hessp
+                return hessp
 
-                res = scipy.optimize.minimize(
-                    scipy_loss,
-                    xval_init,
-                    method="trust-krylov",
-                    jac=True,
-                    hessp=scipy_hessp,
-                )
+            res = scipy.optimize.minimize(
+                scipy_loss,
+                self.x,
+                method="trust-krylov",
+                jac=True,
+                hessp=scipy_hessp,
+            )
 
-                if res["success"]:
-                    nlls[ix, iy] = self.full_nll().numpy()
+            if res["success"]:
+                nlls[ix, iy] = self.full_nll().numpy()
 
         self.x.assign(xval)
         return x_scans, y_scans, nlls

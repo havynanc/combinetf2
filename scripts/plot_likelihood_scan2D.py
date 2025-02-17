@@ -7,7 +7,7 @@ from scipy.stats import chi2
 
 from combinetf2 import io_tools
 
-from wums import output_tools  # isort: skip
+from wums import output_tools, plot_tools  # isort: skip
 
 
 plt.rcParams.update({"font.size": 14})
@@ -81,6 +81,22 @@ def parseArgs():
         type=str,
         help="Subtitle to be printed after title",
     )
+    parser.add_argument("--titlePos", type=int, default=2, help="title position")
+    parser.add_argument(
+        "--legPos", type=str, default="upper right", help="Set legend position"
+    )
+    parser.add_argument(
+        "--legSize",
+        type=str,
+        default="small",
+        help="Legend text size (small: axis ticks size, large: axis label size, number)",
+    )
+    parser.add_argument(
+        "--config",
+        type=str,
+        default=None,
+        help="Path to config file for style formatting",
+    )
     return parser.parse_args()
 
 
@@ -121,6 +137,7 @@ def plot_scan(
     n_points=100,
     title=None,
     subtitle=None,
+    titlePos=0,
 ):
 
     # Parameterize ellipse
@@ -200,19 +217,16 @@ def plot_scan(
             [], [], label="Likelihood scan", marker="none", color="black", linestyle="-"
         )
 
-    textsize = ax.xaxis.label.get_size()
-
-    if title:
-        ax.text(
-            0.0,
-            1.01,
-            title,
-            transform=ax.transAxes,
-            fontweight="bold",
-            fontsize=1.2 * textsize,
-        )
-    if subtitle:
-        ax.text(0.45, 1.01, subtitle, transform=ax.transAxes, fontstyle="italic")
+    plot_tools.add_decor(
+        ax,
+        title,
+        subtitle,
+        data=False,
+        lumi=False,
+        loc=titlePos,
+        no_energy=True,
+        # text_size=args.legSize,
+    )
 
     # Formatting
     ax.set_xlabel(xlabel)
@@ -220,7 +234,7 @@ def plot_scan(
     ax.axhline(py, color="gray", linestyle="--", alpha=0.5)
     ax.axvline(px, color="gray", linestyle="--", alpha=0.5)
 
-    ax.legend(loc="lower left")
+    ax.legend(loc=args.legPos)
 
     return fig
 
@@ -228,6 +242,8 @@ def plot_scan(
 if __name__ == "__main__":
     args = parseArgs()
     fitresult, meta = io_tools.get_fitresult(args.inputFile, args.result, meta=True)
+    config = plot_tools.load_config(args.config)
+    syst_labels = getattr(config, "systematics_labels", {})
 
     meta = {
         "tensorfit": meta["meta_info"],
@@ -265,10 +281,11 @@ if __name__ == "__main__":
             cov,
             h_scan,
             h_contour_params,
-            xlabel=px,
-            ylabel=py,
+            xlabel=syst_labels.get(px, px),
+            ylabel=syst_labels.get(py, py),
             title=args.title,
             subtitle=args.subtitle,
+            titlePos=args.titlePos,
         )
         os.makedirs(args.outpath, exist_ok=True)
         outfile = os.path.join(args.outpath, f"nll_scan2D_{px}_{py}")

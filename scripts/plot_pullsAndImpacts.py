@@ -586,7 +586,7 @@ def parseArgs():
     parser.add_argument(
         "-s",
         "--sort",
-        default=None,
+        default="absimpact",
         type=str,
         help="Sort mode for nuisances",
         choices=sort_choices,
@@ -807,7 +807,12 @@ def producePlots(
             else:
                 df[f"{key}_both"] = df[[key, f"{key}_ref"]].min(axis=1)
 
-        df = df.sort_values(by=args.sort, ascending=args.ascending)
+        if args.sort in df.keys():
+            df = df.sort_values(by=args.sort, ascending=args.ascending)
+        else:
+            print(
+                f"Trying to sort {args.sort} but not found in dataframe, continue without sorting"
+            )
 
     df = df.fillna(0)
 

@@ -6,7 +6,7 @@ import numpy as np
 
 from combinetf2 import io_tools
 
-from wums import output_tools  # isort: skip
+from wums import output_tools, plot_tools  # isort: skip
 
 
 plt.rcParams.update({"font.size": 14})
@@ -80,6 +80,7 @@ def parseArgs():
         type=str,
         help="Subtitle to be printed after title",
     )
+    parser.add_argument("--titlePos", type=int, default=2, help="title position")
     return parser.parse_args()
 
 
@@ -91,6 +92,7 @@ def plot_scan(
     param="x",
     title=None,
     subtitle=None,
+    titlePos=0,
 ):
 
     x = np.array(h_scan.axes["scan"]).astype(float)
@@ -137,19 +139,14 @@ def plot_scan(
 
     ax.legend(loc="upper right")
 
-    textsize = ax.xaxis.label.get_size()
-
-    if title:
-        ax.text(
-            0.1,
-            0.9,
-            title,
-            transform=ax.transAxes,
-            fontweight="bold",
-            fontsize=1.2 * textsize,
-        )
-    if subtitle:
-        ax.text(0.1, 0.82, subtitle, transform=ax.transAxes, fontstyle="italic")
+    plot_tools.add_decor(
+        ax,
+        title,
+        subtitle,
+        data=False,
+        lumi=None,
+        loc=titlePos,
+    )
 
     ax.set_xlabel(param)
     ax.set_ylabel(r"$-2\,\Delta \log L$")
@@ -191,6 +188,7 @@ if __name__ == "__main__":
             param=param,
             title=args.title,
             subtitle=args.subtitle,
+            titlePos=args.titlePos,
         )
         os.makedirs(args.outpath, exist_ok=True)
         outfile = os.path.join(args.outpath, f"nll_scan_{param}")

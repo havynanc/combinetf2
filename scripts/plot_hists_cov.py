@@ -73,6 +73,7 @@ def parseArgs():
         type=str,
         help="Subtitle to be printed after title",
     )
+    parser.add_argument("--titlePos", type=int, default=2, help="title position")
     parser.add_argument(
         "--scaleTextSize",
         type=float,
@@ -155,27 +156,14 @@ def plot_matrix(
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)
 
-    textsize = ax.xaxis.label.get_size()
-    if args.title:
-        ax.text(
-            0.0,
-            1,
-            args.title,
-            transform=ax.transAxes,
-            fontweight="bold",
-            fontsize=1.2 * textsize,
-            va="bottom",
-        )
-    if args.subtitle:
-        ax.text(
-            1,
-            1,
-            args.subtitle,
-            transform=ax.transAxes,
-            fontstyle="italic",
-            va="bottom",
-            ha="right",
-        )
+    plot_tools.add_decor(
+        ax,
+        args.title,
+        args.subtitle,
+        data=False,
+        lumi=None,
+        loc=args.titlePos,
+    )
 
     to_join = [f"hist_{'corr' if args.correlation else 'cov'}"]
     to_join.append("prefit" if args.prefit else "postfit")

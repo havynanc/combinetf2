@@ -41,6 +41,7 @@ impact_labels = {
     "slopes": "Slopes",
     "slopes_signal": "Signal slopes",
     "slopes_background": "Background slopes",
+    "sig": "Signal",
 }
 
 

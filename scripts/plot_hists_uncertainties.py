@@ -345,27 +345,15 @@ def make_plot(
         padding_loc=args.legPadding,
     )
 
-    textsize = ax1.xaxis.label.get_size()
-    if args.title:
-        ax1.text(
-            0.0,
-            1,
-            args.title,
-            transform=ax1.transAxes,
-            fontweight="bold",
-            fontsize=1.2 * textsize,
-            va="bottom",
-        )
-    if args.subtitle:
-        ax1.text(
-            1,
-            1,
-            args.subtitle,
-            transform=ax1.transAxes,
-            fontstyle="italic",
-            ha="right",
-            va="bottom",
-        )
+    plot_tools.add_decor(
+        ax1,
+        args.title,
+        args.subtitle,
+        data=False,
+        lumi=None,
+        loc=args.titlePos,
+        text_size=args.legSize,
+    )
 
     plot_tools.fix_axes(ax1, None, fig, yscale=args.yscale, noSci=True)
 

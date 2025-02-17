@@ -738,18 +738,15 @@ def make_plot(
                 va="top",
             )
 
-    textsize = ax1.xaxis.label.get_size()
-    if args.title:
-        ax1.text(
-            0.05,
-            0.88,
-            args.title,
-            transform=ax1.transAxes,
-            fontweight="bold",
-            fontsize=1.2 * textsize,
-        )
-    if args.subtitle:
-        ax1.text(0.05, 0.80, args.subtitle, transform=ax1.transAxes, fontstyle="italic")
+    plot_tools.add_decor(
+        ax1,
+        args.title,
+        args.subtitle,
+        data=data or "Nonprompt" in labels,
+        lumi=lumi,  # if args.dataName == "Data" and not args.noData else None,
+        loc=args.titlePos,
+        text_size=args.legSize,
+    )
 
     if len(h_stack) < 10:
         plot_tools.addLegend(
