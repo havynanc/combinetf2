@@ -122,6 +122,12 @@ def make_parser():
         help="save prefit and postfit histograms",
     )
     parser.add_argument(
+        "--saveHistsPerProcess",
+        default=False,
+        action="store_true",
+        help="save prefit and postfit histograms for each process",
+    )
+    parser.add_argument(
         "--computeHistErrors",
         default=False,
         action="store_true",
@@ -232,20 +238,21 @@ def save_hists(args, fitter, ws, prefit=True):
         prefit=prefit,
     )
 
-    print(f"Save - processes hist")
+    if args.saveHistsPerProcess:
+        print(f"Save - processes hist")
 
-    exp, aux = fitter.expected_events(
-        inclusive=False,
-        compute_variance=args.computeHistErrors,
-    )
+        exp, aux = fitter.expected_events(
+            inclusive=False,
+            compute_variance=args.computeHistErrors,
+        )
 
-    ws.add_expected_hists(
-        fitter.indata.channel_info,
-        exp,
-        var=aux[0],
-        process_axis=fitter.indata.axis_procs,
-        prefit=prefit,
-    )
+        ws.add_expected_hists(
+            fitter.indata.channel_info,
+            exp,
+            var=aux[0],
+            process_axis=fitter.indata.axis_procs,
+            prefit=prefit,
+        )
 
     for p in args.project:
         channel = p[0]
@@ -277,24 +284,25 @@ def save_hists(args, fitter, ws, prefit=True):
             prefit=prefit,
         )
 
-        print(f"Save projection for channel {channel} - processes")
+        if args.saveHistsPerProcess:
+            print(f"Save projection for channel {channel} - processes")
 
-        exp, aux = fitter.expected_events_projection(
-            channel=channel,
-            axes=axes,
-            inclusive=False,
-            compute_variance=args.computeHistErrors,
-        )
+            exp, aux = fitter.expected_events_projection(
+                channel=channel,
+                axes=axes,
+                inclusive=False,
+                compute_variance=args.computeHistErrors,
+            )
 
-        ws.add_expected_projection_hists(
-            channel,
-            axes,
-            channel_axes,
-            exp,
-            var=aux[0],
-            process_axis=fitter.indata.axis_procs,
-            prefit=prefit,
-        )
+            ws.add_expected_projection_hists(
+                channel,
+                axes,
+                channel_axes,
+                exp,
+                var=aux[0],
+                process_axis=fitter.indata.axis_procs,
+                prefit=prefit,
+            )
 
     if args.computeVariations:
         if prefit:

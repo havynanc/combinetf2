@@ -270,6 +270,7 @@ class Fitter:
                     shape=(impacts.shape[0],), dtype=tf.float64
                 ),
             )
+            impacts_grouped_syst = tf.transpose(impacts_grouped_syst)
             impacts_grouped = tf.concat([impacts_grouped_syst, impacts_grouped], axis=1)
 
         return impacts, impacts_grouped
@@ -329,6 +330,7 @@ class Fitter:
                     shape=(dxdtheta0_squared.shape[0],), dtype=tf.float64
                 ),
             )
+            impacts_grouped_syst = tf.transpose(impacts_grouped_syst)
             impacts_grouped = tf.concat([impacts_grouped_syst, impacts_grouped], axis=1)
 
         # global impacts of unconstrained parameters are always 0, only store impacts of constrained ones

@@ -11,7 +11,6 @@ from wums import boostHistHelpers as hh
 from wums import logging, output_tools, plot_tools
 
 import combinetf2.io_tools
-from combinetf2.common import load_config, get_axis_label
 
 hep.style.use(hep.style.ROOT)
 
@@ -273,7 +272,7 @@ def make_plot(
             axes_names = axes_names[::-1]
             axes = axes[::-1]
 
-    xlabel = get_axis_label(config, axes_names, args.xlabel)
+    xlabel = plot_tools.get_axis_label(config, axes_names, args.xlabel)
 
     fig, ax1 = plot_tools.figure(
         h_impacts, xlabel, ylabel, args.ylim, automatic_scale=False, width_scale=1.2
@@ -505,7 +504,7 @@ if __name__ == "__main__":
 
     logger = logging.setup_logger(__file__, args.verbose, args.noColorLogger)
 
-    config = load_config(args.config)
+    config = plot_tools.load_config(args.config)
 
     outdir = output_tools.make_plot_dir(args.outpath, eoscp=args.eoscp)
     varNames = args.varNames

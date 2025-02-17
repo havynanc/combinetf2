@@ -13,7 +13,6 @@ from matplotlib.lines import Line2D
 from wums import boostHistHelpers as hh
 from wums import logging, output_tools, plot_tools
 
-from combinetf2.common import load_config, get_axis_label
 import combinetf2.io_tools
 
 hep.style.use(hep.style.ROOT)
@@ -399,7 +398,7 @@ def make_plot(
         h_stack = [hh.scaleHist(h, scale) for h in h_stack]
         h_inclusive = hh.scaleHist(h_inclusive, scale)
 
-    xlabel = get_axis_label(config, axes_names, args.xlabel)
+    xlabel = plot_tools.get_axis_label(config, axes_names, args.xlabel)
 
     if ratio or diff:
         if args.noData:
@@ -998,7 +997,7 @@ if __name__ == "__main__":
 
     logger = logging.setup_logger(__file__, args.verbose, args.noColorLogger)
 
-    config = load_config(args.config)
+    config = plot_tools.load_config(args.config)
 
     varNames = args.varNames
     if varNames is not None:

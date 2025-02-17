@@ -11,7 +11,6 @@ import plotly.io as pio
 from plotly.subplots import make_subplots
 from wums import output_tools
 
-from combinetf2.common import load_config
 from combinetf2 import io_tools
 
 # prevent MathJax from bein loaded
@@ -849,7 +848,7 @@ def producePlots(
 if __name__ == "__main__":
     args = parseArgs()
 
-    config = load_config(args.config)
+    config = plot_tools.load_config(args.config)
 
     translate_label = getattr(config, "impact_labels", {})
 
