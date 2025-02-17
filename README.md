@@ -88,3 +88,7 @@ We use pre-commit hooks and linters in the CI. Activate git pre-commit hooks (on
 ```
 git config --local include.path ../.gitconfig
 ```
+I case combineTF2 is included as a submodule, use instead:
+```
+git config --local include.path "$(git rev-parse --show-superproject-working-tree)/.gitconfig"
+```

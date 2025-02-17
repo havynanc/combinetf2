@@ -12,7 +12,6 @@ from matplotlib import colormaps
 from matplotlib.lines import Line2D
 
 import combinetf2.io_tools
-from combinetf2.common import get_axis_label, load_config
 
 from wums import boostHistHelpers as hh  # isort: skip
 from wums import logging, output_tools, plot_tools  # isort: skip
@@ -444,7 +443,7 @@ def make_plot(
             yerr=False,
             histtype=histtype_mc,
             color=c,
-            label=getattr(config, "process_labels", {}).get(l,l),
+            label=getattr(config, "process_labels", {}).get(l, l),
             density=False,
             binwnorm=binwnorm,
             ax=ax1,
@@ -1067,9 +1066,8 @@ if __name__ == "__main__":
     if args.filterProcs is not None:
         procs = [p for p in procs if p in args.filterProcs]
 
-
     labels = procs[:]
-    
+
     cmap = plt.get_cmap("tab10")
     proc_colors = getattr(config, "process_colors", {})
     colors = [proc_colors.get(p, cmap(i % cmap.N)) for i, p in enumerate(procs)]

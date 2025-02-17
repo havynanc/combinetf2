@@ -10,9 +10,8 @@ import plotly.io as pio
 from plotly.subplots import make_subplots
 
 from combinetf2 import io_tools
-from combinetf2.common import load_config
 
-from wums import output_tools  # isort: skip
+from wums import output_tools, plot_tools  # isort: skip
 
 
 # prevent MathJax from bein loaded
@@ -710,7 +709,9 @@ def parseArgs():
         nargs="*",
         help="Additional output file types to write",
     )
-    parser.add_argument("-n", "--num", type=int, default=50, help="Number of nuisances to plot")
+    parser.add_argument(
+        "-n", "--num", type=int, default=50, help="Number of nuisances to plot"
+    )
     parser.add_argument(
         "--noPulls",
         action="store_true",
@@ -850,11 +851,7 @@ def producePlots(
 if __name__ == "__main__":
     args = parseArgs()
 
-<<<<<<< HEAD
     config = plot_tools.load_config(args.config)
-=======
-    config = load_config(args.config)
->>>>>>> 88b7c3e2eae61710006abbd25e398bf83916e1cf
 
     translate_label = getattr(config, "impact_labels", {})
 

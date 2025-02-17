@@ -9,7 +9,6 @@ import numpy as np
 import seaborn as sns
 
 import combinetf2.io_tools
-from combinetf2.common import get_axis_label, load_config
 
 from wums import boostHistHelpers as hh  # isort: skip
 from wums import logging, output_tools, plot_tools  # isort: skip
@@ -130,13 +129,13 @@ def plot_matrix(
     matrix = hist_obj.values()
 
     if len(matrix.shape) > 2:
-        flat = np.prod(matrix.shape[:len(matrix.shape)//2])
-        matrix = matrix.reshape((flat,flat))
+        flat = np.prod(matrix.shape[: len(matrix.shape) // 2])
+        matrix = matrix.reshape((flat, flat))
 
     if args.correlation:
-        std_dev = np.sqrt(np.diag(matrix)) 
+        std_dev = np.sqrt(np.diag(matrix))
         matrix = matrix / np.outer(std_dev, std_dev)
-        
+
     fig, ax = plt.subplots(figsize=(8, 6))
 
     sns.heatmap(
@@ -148,7 +147,7 @@ def plot_matrix(
         cbar=True,
         linewidths=0.5,
         ax=ax,
-    )       
+    )
 
     xlabel = plot_tools.get_axis_label(config, axes, args.xlabel, is_bin=True)
     ylabel = plot_tools.get_axis_label(config, axes, args.ylabel, is_bin=True)
@@ -251,7 +250,10 @@ if __name__ == "__main__":
 
         plot_matrix(h_cov, args, channel, [a.name for a in axes], meta=meta)
 
-        if (len(args.project) and channel in [p[0] for p in args.project]) or len(selection_axes) > 0:
+        selection_axes = [a for a in axes if a.name in args.selectionAxes]
+        if (len(args.project) and channel in [p[0] for p in args.project]) or len(
+            selection_axes
+        ) > 0:
             # reshape into original axes
             h1d = hist.Hist(*axes)
             h2d = hh.expand_hist_by_duplicate_axes(
@@ -266,7 +268,6 @@ if __name__ == "__main__":
             )
             h2d.values()[...] = np.reshape(vals, h2d.shape)
 
-        selection_axes = [a for a in axes if a.name in args.selectionAxes]
         if len(selection_axes) > 0:
             selection_bins = [
                 np.arange(a.size) for a in axes if a.name in args.selectionAxes

@@ -9,7 +9,6 @@ import numpy as np
 from matplotlib import colormaps
 
 import combinetf2.io_tools
-from combinetf2.common import get_axis_label, load_config
 
 from wums import boostHistHelpers as hh  # isort: skip
 from wums import logging, output_tools, plot_tools  # isort: skip
@@ -295,10 +294,7 @@ def make_plot(
         h_impact = h_impacts[{"impacts": u}]
         if len(axes) > 1:
             # unrolled ND histograms
-            h_impact = hh.unrolledHist(
-                h_impact, 
-                obs=[a.name for a in axes]
-            )
+            h_impact = hh.unrolledHist(h_impact, obs=[a.name for a in axes])
 
         hep.histplot(
             h_impact,
@@ -306,7 +302,7 @@ def make_plot(
             yerr=False,
             histtype="step",
             color=c,
-            label=translate_label.get(l,l),
+            label=translate_label.get(l, l),
             density=False,
             ax=ax1,
             zorder=1,
@@ -316,10 +312,7 @@ def make_plot(
     if grouping is not None and "Total" in grouping:
         if len(axes) > 1:
             # unrolled ND histograms
-            h_total = hh.unrolledHist(
-                h_total, 
-                obs=[a.name for a in axes]
-            )
+            h_total = hh.unrolledHist(h_total, obs=[a.name for a in axes])
         hep.histplot(
             h_total,
             xerr=False,
@@ -423,7 +416,7 @@ def make_plots(
         hist_total = hh.divideHists(hist_total, hist_total, rel_unc=True)
         hist_total = hh.scaleHist(hist_total, 100)
 
-    hist_total.values()[...] = hist_total.variances()[...]**0.5
+    hist_total.values()[...] = hist_total.variances()[...] ** 0.5
 
     uncertainties = np.array(hist_impacts.axes["impacts"], dtype=str)
     if args.flterUncertainties is not None:

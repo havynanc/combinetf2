@@ -142,14 +142,14 @@ jobs:
           python scripts/fit.py 
           $COMBINETF2_OUTDIR/test_tensor.hdf5 -o $COMBINETF2_OUTDIR/
           -t 0 --binByBinStat --doImpacts --globalImpacts --project ch1 a --project ch1 b
-          --saveHists --computeHistErrors --computeHistCov --computeHistImpacts --computeVariations
+          --saveHists --saveHistsPerProcess --computeHistErrors --computeHistCov --computeHistImpacts --computeVariations
 
       - name: sparse tensor fit 
         run: >- 
           python scripts/fit.py 
           $COMBINETF2_OUTDIR/test_tensor_sparse.hdf5 -o $COMBINETF2_OUTDIR/ --postfix sparse
           -t -0 --binByBinStat --doImpacts --globalImpacts --computeVariations
-          --saveHists --computeHistErrors --project ch1 a --project ch1 b 
+          --saveHists --saveHistsPerProcess --computeHistErrors --project ch1 a --project ch1 b 
 
       - name: pseudodata fit
         run: >- 
@@ -162,7 +162,7 @@ jobs:
           python scripts/fit.py 
           $COMBINETF2_OUTDIR/test_tensor.hdf5 -o $COMBINETF2_OUTDIR/ --postfix chi2
           -t -0 --chisqFit --externalCovariance --doImpacts --globalImpacts 
-          --saveHists --computeHistErrors --project ch1 a --project ch1 b 
+          --saveHists --saveHistsPerProcess --computeHistErrors --project ch1 a --project ch1 b 
 
 
   plotting:
@@ -187,24 +187,22 @@ jobs:
         run: python scripts/printPullsAndConstraints.py $COMBINETF2_OUTDIR/fitresults.hdf5 
 
       - name: print impacts
-        run: python scripts/printImpacts.py $COMBINETF2_OUTDIR/fitresults.hdf5 --config tests/style_config.py -s absImpacts
+        run: python scripts/printImpacts.py $COMBINETF2_OUTDIR/fitresults.hdf5 -s
 
       - name: print global impacts
-        run: python scripts/printImpacts.py $COMBINETF2_OUTDIR/fitresults.hdf5 --config tests/style_config.py -s absImpacts --globalImpacts
+        run: python scripts/printImpacts.py $COMBINETF2_OUTDIR/fitresults.hdf5 -s --globalImpacts
 
       - name: plot impacts
         run: >-
           python scripts/plot_pullsAndImpacts.py $COMBINETF2_OUTDIR/fitresults.hdf5 -o $WEB_DIR/$PLOT_DIR
-          --otherExtensions pdf png -n 50 --config tests/style_config.py -s absimpact
-          --subtitle Preliminary --groups Total slopes background_normalization binByBinStat stat 
+          --otherExtensions pdf png -n 50 --config tests/style_config.py -s absimpact --subtitle Preliminary --grouping max
 
       - name: plot global impacts
         run: >-
           python scripts/plot_pullsAndImpacts.py $COMBINETF2_OUTDIR/fitresults.hdf5 -o $WEB_DIR/$PLOT_DIR
           -r $COMBINETF2_OUTDIR/fitresults_pseudodata.hdf5 --refName "Pseudo data" -s absimpact
           --otherExtensions pdf png -n 50  --config tests/style_config.py --oneSidedImpacts --globalImpacts --diffPullAsym --showNumbers
-          --groups Total slopes background_normalization binByBinStat stat 
-          --subtitle Preliminary --postfix data_vs_pseudodata
+          --grouping max --subtitle Preliminary --postfix data_vs_pseudodata
 
       - name: plot prefit distributions
         run: >-

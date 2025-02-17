@@ -1,8 +1,5 @@
-import importlib.util
 import pathlib
 import re
-import importlib.util
-import sys
 
 base_dir = f"{pathlib.Path(__file__).parent}/../"
 
@@ -21,4 +18,3 @@ def natural_sort_dict(dictionary):
     sorted_keys = natural_sort(dictionary.keys())
     sorted_dict = {key: dictionary[key] for key in sorted_keys}
     return sorted_dict
-    

@@ -5,9 +5,9 @@ import h5py
 import numpy as np
 import tensorflow as tf
 
-from combinetf2 import fitter, inputdata, workspace, io_tools
+from combinetf2 import fitter, inputdata, io_tools, workspace
 
-from wums import ioutils, output_tools  # isort: skip
+from wums import output_tools  # isort: skip
 
 
 def make_parser():

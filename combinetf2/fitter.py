@@ -254,9 +254,7 @@ class Fitter:
             impacts_bbb_sq = tf.linalg.diag_part(inv_hess_stat - inv_hess_stat_no_bbb)
             impacts_bbb = tf.sqrt(tf.nn.relu(impacts_bbb_sq))  # max(0,x)
             impacts_bbb = tf.reshape(impacts_bbb, (-1, 1))
-            impacts_grouped = tf.concat(
-                [impacts_data_stat, impacts_bbb], axis=1
-            )
+            impacts_grouped = tf.concat([impacts_data_stat, impacts_bbb], axis=1)
         else:
             impacts_data_stat = tf.sqrt(tf.linalg.diag_part(inv_hess_stat))
             impacts_data_stat = tf.reshape(impacts_data_stat, (-1, 1))
@@ -288,7 +286,6 @@ class Fitter:
         dxdtheta0_noi = tf.gather(self.dxdtheta0[self.npoi :], self.indata.noigroupidxs)
         dxdtheta0 = tf.concat([dxdtheta0_poi, dxdtheta0_noi], axis=0)
         dxdtheta0_squared = tf.square(dxdtheta0)
-
 
         # global impact data stat
         dxdnobs_poi = self.dxdnobs[: self.npoi]
@@ -424,7 +421,9 @@ class Fitter:
                     ),
                 )
                 impacts_grouped_syst = tf.transpose(impacts_grouped_syst)
-                impacts_grouped = tf.concat([impacts_grouped_syst, impacts_grouped], axis=1)
+                impacts_grouped = tf.concat(
+                    [impacts_grouped_syst, impacts_grouped], axis=1
+                )
         else:
             impacts = None
             impacts_grouped = None
@@ -527,7 +526,7 @@ class Fitter:
                 - tf.reduce_sum(dexpdtheta0_squared, axis=-1)
             )
             impacts_stat = tf.reshape(impacts_stat, (-1, 1))
-            
+
             if self.binByBinStat:
                 impacts_BBB_stat = tf.sqrt(tf.linalg.diag_part(exp_cov_BBB))
                 impacts_BBB_stat = tf.reshape(impacts_BBB_stat, (-1, 1))
@@ -546,7 +545,9 @@ class Fitter:
                     ),
                 )
                 impacts_grouped_syst = tf.transpose(impacts_grouped_syst)
-                impacts_grouped = tf.concat([impacts_grouped_syst, impacts_grouped], axis=1)
+                impacts_grouped = tf.concat(
+                    [impacts_grouped_syst, impacts_grouped], axis=1
+                )
         else:
             impacts = None
             impacts_grouped = None
