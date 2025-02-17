@@ -1,5 +1,4 @@
 import argparse
-import json
 import math
 import os
 import re
@@ -9,9 +8,12 @@ import pandas as pd
 import plotly.graph_objects as go
 import plotly.io as pio
 from plotly.subplots import make_subplots
-from wums import output_tools
 
 from combinetf2 import io_tools
+from combinetf2.common import load_config
+
+from wums import output_tools  # isort: skip
+
 
 # prevent MathJax from bein loaded
 pio.kaleido.scope.mathjax = None
@@ -848,7 +850,11 @@ def producePlots(
 if __name__ == "__main__":
     args = parseArgs()
 
+<<<<<<< HEAD
     config = plot_tools.load_config(args.config)
+=======
+    config = load_config(args.config)
+>>>>>>> 88b7c3e2eae61710006abbd25e398bf83916e1cf
 
     translate_label = getattr(config, "impact_labels", {})
 

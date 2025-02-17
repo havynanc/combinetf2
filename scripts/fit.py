@@ -4,9 +4,10 @@ import time
 import h5py
 import numpy as np
 import tensorflow as tf
-from wums import ioutils, output_tools
 
 from combinetf2 import fitter, inputdata, workspace, io_tools
+
+from wums import ioutils, output_tools  # isort: skip
 
 
 def make_parser():

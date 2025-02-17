@@ -317,5 +317,5 @@ if directory == "":
     directory = "./"
 filename = args.outname
 if args.postfix:
-    filename += f"_{args.postfit}"
+    filename += f"_{args.postfix}"
 writer.write(outfolder=directory, outfilename=filename)

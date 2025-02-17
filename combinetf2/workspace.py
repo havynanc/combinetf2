@@ -4,7 +4,8 @@ import h5py
 import hist
 import numpy as np
 import tensorflow as tf
-from wums import ioutils
+
+from wums import ioutils  # isort: skip
 
 axis_downUpVar = hist.axis.Regular(
     2, -2.0, 2.0, underflow=False, overflow=False, name="downUpVar"

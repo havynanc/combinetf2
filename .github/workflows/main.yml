@@ -228,10 +228,6 @@ jobs:
           python scripts/plot_hists_uncertainties.py $COMBINETF2_OUTDIR/fitresults.hdf5 -o $WEB_DIR/$PLOT_DIR 
           --extraTextLoc '0.05' '0.7' --legCols 1 --project ch1 a --project ch1 b --yscale '1.2' --subtitle Preliminary --config tests/style_config.py
 
-      - name: copy index php file
-        run: cp data/Templates/index_mit.php $WEB_DIR/$PLOT_DIR/index.php
-
-
   likelihoodscans:
     runs-on: [self-hosted, linux, x64]
     needs: [setenv, make-tensor]
@@ -269,9 +265,6 @@ jobs:
         run: >-
           python scripts/plot_likelihood_scan2D.py $COMBINETF2_OUTDIR/fitresults_scans.hdf5 -o $WEB_DIR/$PLOT_DIR 
           --title CombineTF2 --subtitle Preliminary --params sig slope_signal
-
-      - name: copy index php file
-        run: cp data/Templates/index_mit.php $WEB_DIR/$PLOT_DIR/index.php
 
   copy-clean:
     runs-on: [self-hosted, linux, x64]

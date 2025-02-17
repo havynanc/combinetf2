@@ -60,7 +60,7 @@ def translate_html_to_latex(n):
 
 
 # same as impact labels but in latex format
-systematics_labels = {k: translate_html_to_latex(v) for k,v in impact_labels.items()}
+systematics_labels = {k: translate_html_to_latex(v) for k, v in impact_labels.items()}
 
 # predefined set of grouped impacts to be plotted
 nuisance_grouping = {

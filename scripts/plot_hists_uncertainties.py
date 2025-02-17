@@ -7,10 +7,13 @@ import matplotlib.pyplot as plt
 import mplhep as hep
 import numpy as np
 from matplotlib import colormaps
-from wums import boostHistHelpers as hh
-from wums import logging, output_tools, plot_tools
 
 import combinetf2.io_tools
+from combinetf2.common import get_axis_label, load_config
+
+from wums import boostHistHelpers as hh  # isort: skip
+from wums import logging, output_tools, plot_tools  # isort: skip
+
 
 hep.style.use(hep.style.ROOT)
 
