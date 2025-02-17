@@ -206,15 +206,6 @@ class Workspace:
         )
         self.add_hist(hist_name, [axis_parms_x, axis_parms_y], cov)
 
-    def add_dxdtheta0_hist(self, values, hist_name="dxdtheta0"):
-        axis_parms_x = hist.axis.StrCategory(
-            list(self.parms.astype(str)), name="parms_x"
-        )
-        axis_parms_theta0 = hist.axis.StrCategory(
-            list(self.parms[self.npoi :].astype(str)), name="parms_y"
-        )
-        self.add_hist(hist_name, [axis_parms_x, axis_parms_theta0], values)
-
     def add_nll_scan_hist(self, param, scan_values, nll_values, base_name="nll_scan"):
         axis_scan = hist.axis.StrCategory(
             np.array(scan_values).astype(str), name="scan"

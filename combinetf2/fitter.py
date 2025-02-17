@@ -102,17 +102,6 @@ class Fitter:
             dtype=self.indata.dtype,
         )
 
-        # parameter derivatives
-        self.dxdtheta0 = tf.zeros(
-            [self.npoi + self.indata.nsyst, self.indata.nsyst], dtype=self.indata.dtype
-        )
-        self.dxdnobs = tf.zeros(
-            [self.npoi + self.indata.nsyst, *self.nobs.shape], dtype=self.indata.dtype
-        )
-        self.dxdbeta0 = tf.zeros(
-            [self.npoi + self.indata.nsyst, *self.beta0.shape], dtype=self.indata.dtype
-        )
-
     def prefit_covariance(self, unconstrained_err=0.0):
         # free parameters are taken to have zero uncertainty for the purposes of prefit uncertainties
         var_poi = tf.zeros([self.npoi], dtype=self.indata.dtype)
@@ -282,14 +271,16 @@ class Fitter:
     @tf.function
     def global_impacts_parms(self):
         # compute impacts for pois and nois
-        dxdtheta0_poi = self.dxdtheta0[: self.npoi]
-        dxdtheta0_noi = tf.gather(self.dxdtheta0[self.npoi :], self.indata.noigroupidxs)
+        dxdtheta0, dxdnobs, dxdbeta0 = self._compute_derivatives_x()
+
+        dxdtheta0_poi = dxdtheta0[: self.npoi]
+        dxdtheta0_noi = tf.gather(dxdtheta0[self.npoi :], self.indata.noigroupidxs)
         dxdtheta0 = tf.concat([dxdtheta0_poi, dxdtheta0_noi], axis=0)
         dxdtheta0_squared = tf.square(dxdtheta0)
 
         # global impact data stat
-        dxdnobs_poi = self.dxdnobs[: self.npoi]
-        dxdnobs_noi = tf.gather(self.dxdnobs[self.npoi :], self.indata.noigroupidxs)
+        dxdnobs_poi = dxdnobs[: self.npoi]
+        dxdnobs_noi = tf.gather(dxdnobs[self.npoi :], self.indata.noigroupidxs)
         dxdnobs = tf.concat([dxdnobs_poi, dxdnobs_noi], axis=0)
 
         if self.externalCovariance:
@@ -303,10 +294,8 @@ class Fitter:
 
         if self.binByBinStat:
             # global impact bin-by-bin stat
-            dxdbeta0_poi = self.dxdbeta0[: self.npoi]
-            dxdbeta0_noi = tf.gather(
-                self.dxdbeta0[self.npoi :], self.indata.noigroupidxs
-            )
+            dxdbeta0_poi = dxdbeta0[: self.npoi]
+            dxdbeta0_noi = tf.gather(dxdbeta0[self.npoi :], self.indata.noigroupidxs)
             dxdbeta0 = tf.concat([dxdbeta0_poi, dxdbeta0_noi], axis=0)
 
             impacts_bbb = tf.sqrt(
@@ -351,9 +340,11 @@ class Fitter:
             unconnected_gradients="zero",
         )
 
-        dexpdtheta0 = pdexpdtheta0 + pdexpdx @ self.dxdtheta0
-        dexpdnobs = pdexpdnobs + pdexpdx @ self.dxdnobs
-        dexpdbeta0 = pdexpdbeta0 + pdexpdx @ self.dxdbeta0
+        dxdtheta0, dxdnobs, dxdbeta0 = self._compute_derivatives_x()
+
+        dexpdtheta0 = pdexpdtheta0 + pdexpdx @ dxdtheta0
+        dexpdnobs = pdexpdnobs + pdexpdx @ dxdnobs
+        dexpdbeta0 = pdexpdbeta0 + pdexpdx @ dxdbeta0
 
         # FIXME factorize this part better with the global impacts calculation
 
@@ -502,8 +493,10 @@ class Fitter:
                 "WARNING: Global impacts on observables without profiling is under development and probably wrong!"
             )
 
-            # dexpdtheta0 = pdexpdtheta0 + pdexpdx @ self.dxdtheta0 # TODO: pdexpdtheta0 not available?
-            dexpdtheta0 = pdexpdx @ self.dxdtheta0
+            dxdtheta0, dxdnobs, dxdbeta0 = self._compute_derivatives_x()
+
+            # dexpdtheta0 = pdexpdtheta0 + pdexpdx @ dxdtheta0 # TODO: pdexpdtheta0 not available?
+            dexpdtheta0 = pdexpdx @ dxdtheta0
 
             # TODO: including effect of beta0
 
@@ -903,9 +896,6 @@ class Fitter:
             aux.append(None)
 
         return exp, aux
-
-    def set_derivatives_x(self):
-        self.dxdtheta0, self.dxdnobs, self.dxdbeta0 = self._compute_derivatives_x()
 
     @tf.function
     def _compute_derivatives_x(self):

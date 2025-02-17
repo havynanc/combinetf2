@@ -358,7 +358,6 @@ def fit(args, fitter, ws, dofit=True):
 
     if args.externalPostfit is not None:
         # load results from external fit and set postfit value and covariance elements for common parameters
-        dxdtheta0_ext = None
         with h5py.File(args.externalPostfit, "r") as fext:
             if "x" in fext.keys():
                 # fitresult from combinetf
@@ -373,8 +372,6 @@ def fit(args, fitter, ws, dofit=True):
                 x_ext = h_parms_ext.values()
                 parms_ext = np.array(h_parms_ext.axes["parms"])
                 cov_ext = h5results_ext["cov"].get().values()
-                if "dxdtheta0" in h5results_ext.keys():
-                    dxdtheta0_ext = h5results_ext["dxdtheta0"].get().values()
 
         xvals = fitter.x.numpy()
         covval = fitter.cov.numpy()
@@ -389,23 +386,6 @@ def fit(args, fitter, ws, dofit=True):
 
         fitter.x.assign(xvals)
         fitter.cov.assign(tf.constant(covval))
-
-        if dxdtheta0_ext is not None:
-            # take global impacts dx/dtheta0 from external postfit
-            dxdtheta0 = fitter.dxdtheta0.numpy()
-
-            # systematic indices, exclude pois and shift by npois (assuming pois come first)
-            npoi = len(parms) - dxdtheta0.shape[1]
-            npoi_ext = len(parms_ext) - dxdtheta0_ext.shape[1]
-
-            idxs_systs = idxs[idxs >= npoi] - npoi
-            idxs_systs_ext = idxs_ext[idxs_ext >= npoi_ext] - npoi_ext
-
-            dxdtheta0[np.ix_(idxs, idxs_systs)] = dxdtheta0_ext[
-                np.ix_(idxs_ext, idxs_systs_ext)
-            ]
-            fitter.dxdtheta0 = tf.constant(dxdtheta0)
-
     else:
         fitter.profile = True
 
@@ -415,17 +395,6 @@ def fit(args, fitter, ws, dofit=True):
         val, grad, hess = fitter.loss_val_grad_hess()
         fitter.hess = hess
         fitter.cov.assign(tf.linalg.inv(hess))
-
-        if (args.doImpacts and args.globalImpacts) or (
-            args.saveHists
-            and (
-                args.computeHistErrors or args.computeHistCov or args.computeHistImpacts
-            )
-        ):
-            # compute derivatives of parameters needed later
-            fitter.set_derivatives_x()
-
-            ws.add_dxdtheta0_hist(values=ifitter.dxdtheta0)
 
     nllvalfull = fitter.full_nll().numpy()
     satnllvalfull, ndfsat = fitter.saturated_nll()
