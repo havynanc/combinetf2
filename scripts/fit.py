@@ -378,9 +378,9 @@ def fit(args, fitter, ws, dofit=True):
         parms = fitter.parms.astype(str)
 
         # Find common elements with their matching indices
-        idxs = np.nonzero(np.isin(parms, parms_ext))[0]
-        idxs_ext = np.nonzero(np.isin(parms_ext, parms))[0]
-
+        common_elements, idxs, idxs_ext = np.intersect1d(
+            parms, parms_ext, assume_unique=True, return_indices=True
+        )
         xvals[idxs] = x_ext[idxs_ext]
         covval[np.ix_(idxs, idxs)] = cov_ext[np.ix_(idxs_ext, idxs_ext)]
 

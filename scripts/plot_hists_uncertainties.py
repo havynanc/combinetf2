@@ -277,7 +277,7 @@ def make_plot(
     xlabel = plot_tools.get_axis_label(config, axes_names, args.xlabel)
 
     fig, ax1 = plot_tools.figure(
-        h_impacts, xlabel, ylabel, args.ylim, automatic_scale=False, width_scale=1.2
+        h_total, xlabel, ylabel, args.ylim, automatic_scale=False, width_scale=1.2
     )
 
     translate_label = getattr(config, "systematics_labels", {})
@@ -393,20 +393,27 @@ def make_plots(
     *opts,
     **kwopts,
 ):
-    hist_impacts = result["hist_postfit_inclusive_global_impacts_grouped"].get()
+    if "hist_postfit_inclusive_global_impacts_grouped" in result.keys():
+        hist_impacts = result["hist_postfit_inclusive_global_impacts_grouped"].get()
+    else:
+        hist_impacts = None
+
     hist_total = result["hist_postfit_inclusive"].get()
 
     if not args.absolute:
         # give impacts as relative uncertainty
-        hist_impacts = hh.divideHists(hist_impacts, hist_total, rel_unc=True)
-        hist_impacts = hh.scaleHist(hist_impacts, 100)  # impacts in %
+        if hist_impacts is not None:
+            hist_impacts = hh.divideHists(hist_impacts, hist_total, rel_unc=True)
+            hist_impacts = hh.scaleHist(hist_impacts, 100)  # impacts in %
+            uncertainties = np.array(hist_impacts.axes["impacts"], dtype=str)
+        else:
+            uncertainties = np.array([])
 
         hist_total = hh.divideHists(hist_total, hist_total, rel_unc=True)
         hist_total = hh.scaleHist(hist_total, 100)
 
     hist_total.values()[...] = hist_total.variances()[...] ** 0.5
 
-    uncertainties = np.array(hist_impacts.axes["impacts"], dtype=str)
     if args.flterUncertainties is not None:
         uncertainties = [p for p in uncertainties if p in args.flterUncertainties]
     cmap = plt.get_cmap("tab10" if len(uncertainties) <= 10 else "tab20")
@@ -432,7 +439,7 @@ def make_plots(
                 for a, i in zip(selection_axes, bins)
             }
 
-            h_impacts = hist_impacts[idxs]
+            h_impacts = hist_impacts[idxs] if hist_impacts else None
             h_total = hist_total[idxs]
 
             for a, i in idxs_centers.items():
