@@ -92,7 +92,7 @@ class Fitter:
             tf.ones_like(self.indata.data_obs), trainable=False, name="beta0"
         )
 
-        nexpfullcentral = self._compute_yields(inclusive=True)
+        nexpfullcentral = self.expected_yield()
         self.nexpnom = tf.Variable(nexpfullcentral, trainable=False, name="nexpnom")
 
         # parameter covariance matrix
@@ -194,7 +194,7 @@ class Fitter:
             # randomize from expectation
             self.nobs.assign(
                 tf.random.poisson(
-                    lam=self._compute_yields(inclusive=True),
+                    lam=self.expected_yield(),
                     shape=[],
                     dtype=self.nobs.dtype,
                 )
@@ -203,9 +203,8 @@ class Fitter:
         # assign start values for nuisance parameters to constraint minima
         self.xdefaultassign()
         # set likelihood offset
-        self.nexpnom.assign(self._compute_yields(inclusive=True))
+        self.nexpnom.assign(self.expected_yield())
 
-    @tf.function(reduce_retracing=True)
     def _compute_impact_group(self, v, idxs):
         cov_reduced = tf.gather(self.cov[self.npoi :, self.npoi :], idxs, axis=0)
         cov_reduced = tf.gather(cov_reduced, idxs, axis=1)
@@ -262,7 +261,6 @@ class Fitter:
 
         return impacts, impacts_grouped
 
-    @tf.function(reduce_retracing=True)
     def _compute_global_impact_group(self, d_squared, idxs):
         gathered = tf.gather(d_squared, idxs, axis=-1)
         d_squared_summed = tf.reduce_sum(gathered, axis=-1)
@@ -324,7 +322,6 @@ class Fitter:
 
         return impacts, impacts_grouped
 
-    @tf.function
     def _expvar_profiled(
         self, fun_exp, compute_cov=False, compute_global_impacts=False
     ):
@@ -452,7 +449,6 @@ class Fitter:
             sRJ2 = sRJ2 + sumw2
         return expected, sRJ2
 
-    @tf.function
     def _chi2(self, res, rescov):
         resv = tf.reshape(res, (-1, 1))
 
@@ -460,7 +456,6 @@ class Fitter:
 
         return chi_square_value[0, 0]
 
-    @tf.function
     def _expvar(self, fun_exp, compute_cov=False, compute_global_impacts=False):
         # compute uncertainty on expectation propagating through uncertainty on fit parameters using full covariance matrix
         # FIXME switch back to optimized version at some point?
@@ -550,7 +545,6 @@ class Fitter:
 
         return expected, expvar, expcov, impacts, impacts_grouped
 
-    @tf.function
     def _expvariations(self, fun_exp, correlations):
         with tf.GradientTape() as t:
             expected = fun_exp()
@@ -582,10 +576,8 @@ class Fitter:
 
         if self.allowNegativePOI:
             poi = xpoi
-            gradr = tf.ones_like(poi)
         else:
             poi = tf.square(xpoi)
-            gradr = 2.0 * xpoi
 
         rnorm = tf.concat(
             [poi, tf.ones([self.indata.nproc - poi.shape[0]], dtype=self.indata.dtype)],
@@ -637,6 +629,7 @@ class Fitter:
                     self.indata.logk,
                     [self.indata.nbins * self.indata.nproc, 2 * self.indata.nsyst],
                 )
+
             logsnorm = tf.matmul(mlogk, mthetaalpha)
             logsnorm = tf.reshape(logsnorm, [self.indata.nbins, self.indata.nproc])
 
@@ -680,7 +673,7 @@ class Fitter:
                 beta = self.beta0
             nexpfull = beta * nexpfullcentral
             if compute_normfull:
-                normfull *= beta[..., None]
+                normfull = beta[..., None] * normfullcentral
 
             if self.normalize:
                 # FIXME this is probably not fully consistent when combined with the binByBinStat
@@ -699,7 +692,6 @@ class Fitter:
 
         return nexpfull, normfull, beta
 
-    @tf.function
     def _compute_yields(self, inclusive=True, profile_grad=True):
         nexpfullcentral, normfullcentral, beta = self._compute_yields_with_beta(
             profile_grad=profile_grad, compute_normfull=not inclusive
@@ -742,8 +734,9 @@ class Fitter:
         ):
             raise NotImplementedError()
 
-        aux = []
+        aux = [None] * 4
         if compute_cov or compute_variance or compute_global_impacts:
+            # exp, var = self.expected_with_variance(fun, cov, profile=profile)
             exp, expvar, expcov, exp_impacts, exp_impacts_grouped = (
                 self.expected_with_variance(
                     fun,
@@ -856,7 +849,7 @@ class Fitter:
         ):
             raise NotImplementedError()
 
-        aux = []
+        aux = [None] * 4
         if compute_variance or compute_cov or compute_global_impacts:
             exp, expvar, expcov, exp_impacts, exp_impacts_grouped = (
                 self.expected_with_variance(
@@ -897,7 +890,6 @@ class Fitter:
 
         return exp, aux
 
-    @tf.function
     def _compute_derivatives_x(self):
         with tf.GradientTape() as t2:
             t2.watch([self.theta0, self.nobs, self.beta0])
@@ -914,6 +906,10 @@ class Fitter:
         dxdbeta0 = -self.cov @ pd2ldxdbeta0
 
         return dxdtheta0, dxdnobs, dxdbeta0
+
+    @tf.function
+    def expected_yield(self):
+        return self._compute_yields(inclusive=True)
 
     @tf.function
     def chi2(self, res, rescov):

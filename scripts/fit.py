@@ -529,7 +529,7 @@ if __name__ == "__main__":
             group = "results"
             if ifit == -1:
                 group += "_asimov"
-                ifitter.nobs.assign(ifitter._compute_yields(inclusive=True))
+                ifitter.nobs.assign(ifitter.expected_yield())
             if ifit == 0:
                 ifitter.nobs.assign(ifitter.indata.data_obs)
             elif ifit >= 1:
