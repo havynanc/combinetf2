@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import argparse
 import itertools
 import os
@@ -15,6 +17,23 @@ from wums import logging, output_tools, plot_tools  # isort: skip
 
 
 hep.style.use(hep.style.ROOT)
+
+logger = None
+
+translate_selection = {
+    "charge": r"$\mathit{q}^\mu$ = ",
+    "qGen": r"$\mathit{q}^\mu$ = ",
+}
+translate_selection_value = {
+    "charge": {
+        -1.0: "-1",
+        1.0: "+1",
+    },
+    "qGen": {
+        -1.0: "-1",
+        1.0: "+1",
+    },
+}
 
 
 def parseArgs():
@@ -248,6 +267,7 @@ def parseArgs():
 
 
 def make_plot(
+    outdir,
     h_impacts,
     h_total,
     axes,
@@ -385,6 +405,7 @@ def make_plot(
 
 
 def make_plots(
+    outdir,
     result,
     axes,
     args=None,
@@ -458,6 +479,7 @@ def make_plots(
                 f"Make plot for axes {[a.name for a in other_axes]}, in bins {idxs}"
             )
             make_plot(
+                outdir,
                 h_impacts,
                 h_total,
                 other_axes,
@@ -473,6 +495,7 @@ def make_plots(
             )
     else:
         make_plot(
+            outdir,
             hist_impacts,
             hist_total,
             axes,
@@ -487,12 +510,12 @@ def make_plots(
         )
 
 
-if __name__ == "__main__":
+def main():
     """
     Plot the uncertainty breakdown of the histogram bins based on global impacts
     """
     args = parseArgs()
-
+    global logger
     logger = logging.setup_logger(__file__, args.verbose, args.noColorLogger)
 
     config = plot_tools.load_config(args.config)
@@ -529,21 +552,6 @@ if __name__ == "__main__":
 
     meta_info = meta["meta_info"]
 
-    translate_selection = {
-        "charge": r"$\mathit{q}^\mu$ = ",
-        "qGen": r"$\mathit{q}^\mu$ = ",
-    }
-    translate_selection_value = {
-        "charge": {
-            -1.0: "-1",
-            1.0: "+1",
-        },
-        "qGen": {
-            -1.0: "-1",
-            1.0: "+1",
-        },
-    }
-
     plt.rcParams["font.size"] = plt.rcParams["font.size"] * args.scaleTextSize
 
     channel_info = meta["meta_info_input"]["channel_info"]
@@ -567,6 +575,7 @@ if __name__ == "__main__":
         result = fitresult["channels"][channel]["projections"]["_".join(axes)]
 
         make_plots(
+            outdir,
             result,
             axes=[a for a in info["axes"] if a.name in axes],
             channel=channel,
@@ -579,6 +588,7 @@ if __name__ == "__main__":
             result = fitresult[f"channels"][channel]
 
             make_plots(
+                outdir,
                 result,
                 axes=info["axes"],
                 channel=channel,
@@ -588,3 +598,7 @@ if __name__ == "__main__":
 
     if output_tools.is_eosuser_path(args.outpath) and args.eoscp:
         output_tools.copy_to_eos(outdir, args.outpath, args.outfolder)
+
+
+if __name__ == "__main__":
+    main()

@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import argparse
 import os
 
@@ -123,6 +125,7 @@ def ellipse(cov, mu0, mu1, cl, cartesian_angle=False):
 
 
 def plot_scan(
+    args,
     px,
     py,
     cov,
@@ -239,7 +242,7 @@ def plot_scan(
     return fig
 
 
-if __name__ == "__main__":
+def main():
     args = parseArgs()
     fitresult, meta = io_tools.get_fitresult(args.inputFile, args.result, meta=True)
     config = plot_tools.load_config(args.config)
@@ -276,6 +279,7 @@ if __name__ == "__main__":
             h_scan = fitresult[f"nll_scan2D_{px}_{py}"].get()
 
         fig = plot_scan(
+            args,
             px_value,
             py_value,
             cov,
@@ -297,3 +301,7 @@ if __name__ == "__main__":
             args=args,
             postfix=args.postfix,
         )
+
+
+if __name__ == "__main__":
+    main()

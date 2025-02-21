@@ -97,10 +97,6 @@ class Fitter:
 
         # parameter covariance matrix
         self.cov = tf.Variable(self.prefit_covariance(), trainable=False, name="cov")
-        self.hess = tf.zeros(
-            [self.npoi + self.indata.nsyst, self.npoi + self.indata.nsyst],
-            dtype=self.indata.dtype,
-        )
 
     def prefit_covariance(self, unconstrained_err=0.0):
         # free parameters are taken to have zero uncertainty for the purposes of prefit uncertainties
@@ -126,6 +122,7 @@ class Fitter:
         return val, jac
 
     def theta0defaultassign(self):
+        self.profile = False
         self.theta0.assign(tf.zeros([self.indata.nsyst], dtype=self.theta0.dtype))
 
     def xdefaultassign(self):
@@ -144,13 +141,24 @@ class Fitter:
         self.xdefaultassign()
 
     def bayesassign(self):
-        if self.npoi > 0:
-            raise NotImplementedError(
-                "Assignment for Bayesian toys is not currently supported in the presence of explicit POIs"
+        if self.npoi == 0:
+            self.x.assign(
+                self.theta0
+                + tf.random.normal(shape=self.theta0.shape, dtype=self.theta0.dtype)
             )
-        self.x.assign(
-            tf.random.normal(shape=self.theta0.shape, dtype=self.theta0.dtype)
-        )
+        else:
+            self.x.assign(
+                tf.concat(
+                    [
+                        self.xpoidefault,
+                        self.theta0
+                        + tf.random.normal(
+                            shape=self.theta0.shape, dtype=self.theta0.dtype
+                        ),
+                    ],
+                    axis=0,
+                )
+            )
 
     def frequentistassign(self):
         self.theta0.assign(
@@ -214,18 +222,16 @@ class Fitter:
         return tf.sqrt(v_invC_v)
 
     @tf.function
-    def impacts_parms(self):
+    def impacts_parms(self, hess):
         # impact for poi at index i in covariance matrix from nuisance with index j is C_ij/sqrt(C_jj) = <deltax deltatheta>/sqrt(<deltatheta^2>)
         cov_poi = self.cov[: self.npoi]
         cov_noi = tf.gather(self.cov[self.npoi :], self.indata.noigroupidxs)
         v = tf.concat([cov_poi, cov_noi], axis=0)
         impacts = v / tf.reshape(tf.sqrt(tf.linalg.diag_part(self.cov)), [1, -1])
 
-        # impact data stat # FIXME: This might not be correct in case noi != systsnoconstraint
         nstat = self.npoi + self.indata.nsystnoconstraint
-        hess_stat = self.hess[:nstat, :nstat]
-        identity = tf.eye(nstat, dtype=hess_stat.dtype)
-        inv_hess_stat = tf.linalg.solve(hess_stat, identity)  # Solves H * X = I
+        hess_stat = hess[:nstat, :nstat]
+        inv_hess_stat = tf.linalg.inv(hess_stat)
 
         if self.binByBinStat:
             # impact bin-by-bin stat
@@ -234,7 +240,7 @@ class Fitter:
             )
 
             hess_stat_no_bbb = hess_no_bbb[:nstat, :nstat]
-            inv_hess_stat_no_bbb = tf.linalg.solve(hess_stat_no_bbb, identity)
+            inv_hess_stat_no_bbb = tf.linalg.inv(hess_stat_no_bbb)
 
             impacts_data_stat = tf.sqrt(tf.linalg.diag_part(inv_hess_stat_no_bbb))
             impacts_data_stat = tf.reshape(impacts_data_stat, (-1, 1))
@@ -283,6 +289,7 @@ class Fitter:
 
         if self.externalCovariance:
             data_cov = tf.linalg.inv(self.data_cov_inv)
+            # equivalent to tf.linalg.diag_part(dxdnobs @ data_cov @ tf.transpose(dxdnobs)) but avoiding computing full matrix
             data_stat = tf.einsum("ij,jk,ik->i", dxdnobs, data_cov, dxdnobs)
         else:
             data_stat = tf.reduce_sum(tf.square(dxdnobs) * self.nobs, axis=-1)
@@ -483,10 +490,10 @@ class Fitter:
             expcov += exp_cov_BBB
 
         if compute_global_impacts:
-            # FIXME This is not correct
-            print(
-                "WARNING: Global impacts on observables without profiling is under development and probably wrong!"
+            raise NotImplementedError(
+                "WARNING: Global impacts on observables without profiling is under development!"
             )
+            # FIXME This is not correct
 
             dxdtheta0, dxdnobs, dxdbeta0 = self._compute_derivatives_x()
 

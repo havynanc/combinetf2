@@ -2,11 +2,38 @@
 
 Perform complex profile binned maximum likelihood fits by exploiting state-of-the-art differential programming. 
 Computations are based on the tensorflow 2 library and scipy minimizers with multithreading support on CPU (FIXME: and GPU).
-Implemted approximations in the limit of large sample size to simplify intensive computations.
+Implemented approximations in the limit of large sample size to simplify intensive computations.
 
-## Setup
+## Install
 
-CombineTF2 can be run within a comprehensive singularity (recommended) or in an environment set up by yourself. 
+You can install combinetf2 via pip. It can be installed with the core functionality:
+```bash
+pip install combinetf2
+```
+Or with optional dependencies to use the plotting scripts
+```bash
+pip install combinetf2[plotting]
+```
+
+
+### Get the code
+
+If you want to have more control or want to develop CombineTF2 you can check it our as (sub) module.
+
+```bash
+MY_GIT_USER=$(git config user.github)
+git clone git@github.com:$MY_GIT_USER/combinetf2.git
+cd combinetf2/
+git remote add upstream git@github.com:WMass/combinetf2.git
+```
+
+Get updates from the central repository (and main branch)
+```bash
+git pull upstream main
+git push origin main
+```
+
+It can be run within a comprehensive singularity (recommended) or in an environment set up by yourself. 
 It makes use of the [wums](https://pypi.org/project/wums) package for storing hdf5 files in compressed format.
 
 ### In a python virtual environment
@@ -25,27 +52,12 @@ In case you want to contribute to the development, please also install the linte
 Deactivate the environment with `deactivate`.
 
 ### In singularity
-(Currently not working due to missing `wums` package)
-
 The singularity includes a comprehensive set of packages. 
+But the singularity is missing the `wums` package, you have to check it our as a submodule.
 It also comes with custom optimized builds that for example enable numpy and scipy to be run with more than 64 threads (the limit in the standard build).
 Activate the singularity image (to be done every time before running code). 
 ```bash
 singularity run /cvmfs/unpacked.cern.ch/gitlab-registry.cern.ch/bendavid/cmswmassdocker/wmassdevrolling\:latest
-```
-
-### Get the code
-```bash
-MY_GIT_USER=$(git config user.github)
-git clone git@github.com:$MY_GIT_USER/combinetf2.git
-cd combinetf2/
-git remote add upstream git@github.com:WMass/combinetf2.git
-```
-
-Get updates from the central repository (and main branch)
-```bash
-git pull upstream main
-git push origin main
 ```
 
 ### Run the code

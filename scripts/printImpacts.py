@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import argparse
 
 import numpy as np
@@ -73,8 +75,12 @@ def printImpacts(args, fitresult, poi):
         print("\n".join([f"   {k}: {fimpact(v)}" for k, v in zip(labels, impacts)]))
 
 
-if __name__ == "__main__":
+def main():
     args = parseArgs()
-    fitresult = io_tools.get_fitresult(args.inputFile, args.result)
-    for poi in io_tools.get_poi_names(fitresult):
+    fitresult, meta = io_tools.get_fitresult(args.inputFile, args.result, meta=True)
+    for poi in io_tools.get_poi_names(meta):
         printImpacts(args, fitresult, poi)
+
+
+if __name__ == "__main__":
+    main()

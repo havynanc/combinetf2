@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import argparse
 import math
 import os
@@ -537,8 +539,6 @@ def readFitInfoFromFile(
     if poi:
         df = df.drop(df.loc[df["label"] == poi].index)
 
-    df["label"] = df["label"].apply(lambda l: translate_label.get(l, l))
-
     return df
 
 
@@ -741,6 +741,7 @@ def producePlots(
     meta=None,
     postfix=None,
     impact_title=None,
+    translate_label={},
 ):
     poi_type = poi.split("_")[-1] if poi else None
 
@@ -783,6 +784,8 @@ def producePlots(
             scale=args.scaleImpacts,
         )
         df = df.merge(df_ref, how="outer", on="label", suffixes=("", "_ref"))
+
+    df["label"] = df["label"].apply(lambda l: translate_label.get(l, l))
 
     if df.empty:
         print("WARNING: Empty dataframe")
@@ -853,7 +856,7 @@ def producePlots(
     writeOutput(fig, outfile, extensions, postfix=postfix, args=args, meta_info=meta)
 
 
-if __name__ == "__main__":
+def main():
     args = parseArgs()
 
     config = plot_tools.load_config(args.config)
@@ -867,7 +870,7 @@ if __name__ == "__main__":
         else None
     )
 
-    meta = {
+    meta_out = {
         "combinetf2": meta["meta_info"],
     }
 
@@ -877,8 +880,9 @@ if __name__ == "__main__":
         pullrange=args.pullrange,
         asym=args.asym,
         fitresult_ref=fitresult_ref,
-        meta=meta,
+        meta=meta_out,
         postfix=args.postfix,
+        translate_label=translate_label,
     )
 
     if args.noImpacts:
@@ -886,7 +890,7 @@ if __name__ == "__main__":
         producePlots(fitresult, args, outdir, outfile="pulls.html", **kwargs)
         exit()
 
-    pois = [args.poi] if args.poi else io_tools.get_poi_names(fitresult)
+    pois = [args.poi] if args.poi else io_tools.get_poi_names(meta)
 
     kwargs.update(dict(normalize=args.normalize, impact_title=args.impactTitle))
 
@@ -921,3 +925,7 @@ if __name__ == "__main__":
 
     if output_tools.is_eosuser_path(args.outpath) and args.eoscp:
         output_tools.copy_to_eos(outdir, args.outpath)
+
+
+if __name__ == "__main__":
+    main()

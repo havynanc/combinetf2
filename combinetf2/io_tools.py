@@ -21,13 +21,8 @@ def get_fitresult(fitresult_filename, result=None, meta=False):
     return h5results
 
 
-def get_poi_names(fitresult):
-    if "impacts" in fitresult.keys():
-        h = fitresult["impacts"].get()
-    elif "contour_scans" in fitresult.keys():
-        h = fitresult["contour_scans"].get()
-
-    return np.array(h.axes["parms"])
+def get_poi_names(meta):
+    return np.concatenate((meta["signals"], meta["nois"])).astype(str)
 
 
 def get_syst_labels(fitresult):

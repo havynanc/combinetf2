@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import argparse
 import os
 
@@ -154,7 +156,7 @@ def plot_scan(
     return fig
 
 
-if __name__ == "__main__":
+def main():
     args = parseArgs()
     fitresult, meta = io_tools.get_fitresult(args.inputFile, args.result, meta=True)
 
@@ -200,3 +202,7 @@ if __name__ == "__main__":
             args=args,
             postfix=args.postfix,
         )
+
+
+if __name__ == "__main__":
+    main()

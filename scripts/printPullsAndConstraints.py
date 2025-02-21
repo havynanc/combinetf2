@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import argparse
 
 import numpy as np
@@ -52,7 +54,7 @@ def parseArgs():
     return parser.parse_args()
 
 
-if __name__ == "__main__":
+def main():
     args = parseArgs()
     fitresult = io_tools.get_fitresult(args.inputFile, args.result)
 
@@ -132,3 +134,7 @@ if __name__ == "__main__":
                 ]
             )
         )
+
+
+if __name__ == "__main__":
+    main()

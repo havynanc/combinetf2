@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import argparse
 import itertools
 import os
@@ -18,6 +20,23 @@ from wums import logging, output_tools, plot_tools  # isort: skip
 
 
 hep.style.use(hep.style.ROOT)
+
+logger = None
+
+translate_selection = {
+    "charge": r"$\mathit{q}^\mu$ = ",
+    "qGen": r"$\mathit{q}^\mu$ = ",
+}
+translate_selection_value = {
+    "charge": {
+        -1.0: "-1",
+        1.0: "+1",
+    },
+    "qGen": {
+        -1.0: "-1",
+        1.0: "+1",
+    },
+}
 
 
 def parseArgs():
@@ -318,7 +337,16 @@ def make_plot(
     lumi=None,
     selection=None,
     config=None,
+    fittype="postfit",
+    varNames=None,
+    varLabels=None,
+    varColors=None,
+    is_normalized=False,
 ):
+    ratio = not args.noLowerPanel and not args.logTransform
+    diff = not args.noLowerPanel and args.logTransform
+    data = not args.noData
+
     axes_names = [a.name for a in axes]
 
     binwnorm = 1.0
@@ -337,11 +365,9 @@ def make_plot(
     if args.ylabel is not None:
         ylabel = args.ylabel
 
-    yield_tables = {}
-
     # compute event yield table before dividing by bin width
     yield_tables = {
-        "Stacked processes": pd.DataFrame(
+        "stacked": pd.DataFrame(
             [
                 (
                     k,
@@ -352,7 +378,7 @@ def make_plot(
             ],
             columns=["Process", "Yield", "Uncertainty"],
         ),
-        "Unstacked processes": pd.DataFrame(
+        "unstacked": pd.DataFrame(
             [
                 (
                     k,
@@ -379,7 +405,7 @@ def make_plot(
             axes = axes[::-1]
 
         # make unrolled 1D histograms
-        if binwnorm is not None:
+        if binwnorm is not None and not args.unfoldedXsec:
             # need hist with variances to handle bin width normaliztion
             h_data_tmp = hist.Hist(
                 *[a for a in h_data.axes], storage=hist.storage.Weight()
@@ -668,6 +694,14 @@ def make_plot(
 
         if hup is not None:
             linewidth = 2
+            scaleVariation = [
+                args.scaleVariation[i] if i < len(args.scaleVariation) else 1
+                for i in range(len(varNames))
+            ]
+            varOneSided = [
+                args.varOneSided[i] if i < len(args.varOneSided) else 0
+                for i in range(len(varNames))
+            ]
             for i, (hu, hd) in enumerate(zip(hup, hdown)):
 
                 if scaleVariation[i] != 1:
@@ -801,19 +835,15 @@ def make_plot(
         else:
             analysis_meta_info = {"AnalysisOutput": meta["meta_info"]}
 
-    # plot_tools.write_index_and_log(
-    #     outdir,
-    #     outfile,
-    #     yield_tables=yield_tables,
-    #     args=args,
-    #     **kwargs,
-    # )
-
-    output_tools.write_logfile(
+    output_tools.write_index_and_log(
         outdir,
         outfile,
+        analysis_meta_info={
+            "Stacked processes": yield_tables["stacked"],
+            "Unstacked processes": yield_tables["unstacked"],
+            **analysis_meta_info,
+        },
         args=args,
-        meta_info=analysis_meta_info,
     )
 
 
@@ -827,6 +857,10 @@ def make_plots(
     args=None,
     channel="",
     lumi=1,
+    fittype="postit",
+    varNames=None,
+    varLabels=None,
+    varColors=None,
     *opts,
     **kwopts,
 ):
@@ -848,7 +882,9 @@ def make_plots(
 
     # vary poi by postfit uncertainty
     if varNames is not None:
-        hist_var = result[f"hist_{fittype}_inclusive_variations{correlated}"].get()
+        hist_var = result[
+            f"hist_{fittype}_inclusive_variations{'_correlated' if args.correlatedVariations else ''}"
+        ].get()
     else:
         hist_var = None
 
@@ -962,6 +998,10 @@ def make_plots(
                 h_data_stat=h_data_stat,
                 selection=selection,
                 lumi=lumi,
+                fittype=fittype,
+                varNames=varNames,
+                varLabels=varLabels,
+                varColors=varColors,
                 *opts,
                 **kwopts,
             )
@@ -980,12 +1020,16 @@ def make_plots(
             hdown=hists_down,
             h_data_stat=hist_data_stat,
             lumi=lumi,
+            fittype=fittype,
+            varNames=varNames,
+            varLabels=varLabels,
+            varColors=varColors,
             *opts,
             **kwopts,
         )
 
 
-def get_chi2(result, no_chi2=True):
+def get_chi2(result, no_chi2=True, fittype="postfit"):
     if fittype == "postfit" and result.get("postfit_profile", False) and not no_chi2:
         # use saturated likelihood test if relevant
         nllvalfull = result["nllvalfull"]
@@ -1000,17 +1044,17 @@ def get_chi2(result, no_chi2=True):
         return None, None, False
 
 
-if __name__ == "__main__":
+def main():
     args = parseArgs()
-
+    global logger
     logger = logging.setup_logger(__file__, args.verbose, args.noColorLogger)
 
     config = plot_tools.load_config(args.config)
 
     varNames = args.varNames
+    varLabels = args.varLabels
+    varColors = args.varColors
     if varNames is not None:
-        varLabels = args.varLabels
-        varColors = args.varColors
         if varLabels is None:
             syst_labels = getattr(config, "systematics_labels", {})
             varLabels = [syst_labels.get(x, x) for x in varNames]
@@ -1025,19 +1069,7 @@ if __name__ == "__main__":
                 for i in range(len(varNames))
             ]
 
-        varOneSided = [
-            args.varOneSided[i] if i < len(args.varOneSided) else 0
-            for i in range(len(varNames))
-        ]
-        scaleVariation = [
-            args.scaleVariation[i] if i < len(args.scaleVariation) else 1
-            for i in range(len(varNames))
-        ]
-
     fittype = "prefit" if args.prefit else "postfit"
-    ratio = not args.noLowerPanel and not args.logTransform
-    diff = not args.noLowerPanel and args.logTransform
-    data = not args.noData
 
     # load .hdf5 file first, must exist in combinetf and combinetf2
     fitresult, meta = combinetf2.io_tools.get_fitresult(
@@ -1049,21 +1081,6 @@ if __name__ == "__main__":
         meta_info["args"].get("normalize", False) if meta is not None else False
     )
 
-    translate_selection = {
-        "charge": r"$\mathit{q}^\mu$ = ",
-        "qGen": r"$\mathit{q}^\mu$ = ",
-    }
-    translate_selection_value = {
-        "charge": {
-            -1.0: "-1",
-            1.0: "+1",
-        },
-        "qGen": {
-            -1.0: "-1",
-            1.0: "+1",
-        },
-    }
-
     plt.rcParams["font.size"] = plt.rcParams["font.size"] * args.scaleTextSize
 
     channel_info = meta["meta_info_input"]["channel_info"]
@@ -1072,18 +1089,13 @@ if __name__ == "__main__":
     if args.filterProcs is not None:
         procs = [p for p in procs if p in args.filterProcs]
 
-    labels = procs[:]
-
-    cmap = plt.get_cmap("tab10")
-    proc_colors = getattr(config, "process_colors", {})
-    colors = [proc_colors.get(p, cmap(i % cmap.N)) for i, p in enumerate(procs)]
-
-    # labels, colors, procs = styles.get_labels_colors_procs_sorted(procs)
-
-    if args.correlatedVariations:
-        correlated = "_correlated"
+    if hasattr(config, "get_labels_colors_procs_sorted"):
+        labels, colors, procs = config.get_labels_colors_procs_sorted(procs)
     else:
-        correlated = ""
+        labels = procs[:]
+        cmap = plt.get_cmap("tab10")
+        proc_colors = getattr(config, "process_colors", {})
+        colors = [proc_colors.get(p, cmap(i % cmap.N)) for i, p in enumerate(procs)]
 
     outdir = output_tools.make_plot_dir(args.outpath, eoscp=args.eoscp)
 
@@ -1094,6 +1106,11 @@ if __name__ == "__main__":
         colors=colors,
         meta=meta,
         config=config,
+        fittype=fittype,
+        varNames=varNames,
+        varLabels=varLabels,
+        varColors=varColors,
+        is_normalized=is_normalized,
     )
 
     for projection in args.project:
@@ -1102,7 +1119,7 @@ if __name__ == "__main__":
         info = channel_info[channel]
 
         result = fitresult["channels"][channel]["projections"]["_".join(axes)]
-        chi2, ndf, _ = get_chi2(result, args.noChisq)
+        chi2, ndf, _ = get_chi2(result, args.noChisq, fittype)
 
         make_plots(
             result,
@@ -1117,7 +1134,7 @@ if __name__ == "__main__":
     if len(args.project) == 0:
         for channel, info in channel_info.items():
             result = fitresult[f"channels"][channel]
-            chi2, ndf, saturated_chi2 = get_chi2(fitresult, args.noChisq)
+            chi2, ndf, saturated_chi2 = get_chi2(fitresult, args.noChisq, fittype)
 
             make_plots(
                 result,
@@ -1132,3 +1149,7 @@ if __name__ == "__main__":
 
     if output_tools.is_eosuser_path(args.outpath) and args.eoscp:
         output_tools.copy_to_eos(outdir, args.outpath, args.outfolder)
+
+
+if __name__ == "__main__":
+    main()

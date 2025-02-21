@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import argparse
 import itertools
 import os
@@ -124,7 +126,15 @@ def parseArgs():
 
 
 def plot_matrix(
-    hist_obj, args, channel=None, axes=None, cmap="coolwarm", annot=False, meta=None
+    outdir,
+    hist_obj,
+    args,
+    channel=None,
+    axes=None,
+    cmap="coolwarm",
+    annot=False,
+    config={},
+    meta=None,
 ):
 
     matrix = hist_obj.values()
@@ -199,7 +209,7 @@ def plot_matrix(
     )
 
 
-if __name__ == "__main__":
+def main():
     """
     Plot the covariance matrix of the histogram bins
     """
@@ -229,7 +239,7 @@ if __name__ == "__main__":
 
     if len(channel_info) > 1:
         # plot full covariance matrix only if it goes across multiple channels
-        plot_matrix(hist_cov, args, meta=meta)
+        plot_matrix(outdir, hist_cov, args, config=config, meta=meta)
 
     for channel, info in channel_info.items():
         axes = info["axes"]
@@ -238,7 +248,15 @@ if __name__ == "__main__":
 
         h_cov = hist_cov[{"x": slice(start, stop), "y": slice(start, stop)}]
 
-        plot_matrix(h_cov, args, channel, [a.name for a in axes], meta=meta)
+        plot_matrix(
+            outdir,
+            h_cov,
+            args,
+            channel,
+            [a.name for a in axes],
+            config=config,
+            meta=meta,
+        )
 
         selection_axes = [a for a in axes if a.name in args.selectionAxes]
         if (len(args.project) and channel in [p[0] for p in args.project]) or len(
@@ -282,7 +300,9 @@ if __name__ == "__main__":
                         for a, i in idxs_centers.items()
                     ]
                 )
-                plot_matrix(h_cov_i, args, suffix, other_axes, meta=meta)
+                plot_matrix(
+                    outdir, h_cov_i, args, suffix, other_axes, config=config, meta=meta
+                )
 
         for projection in args.project:
             if channel != projection[0]:
@@ -293,7 +313,13 @@ if __name__ == "__main__":
 
             h_cov = h2d.project(*projection_axes, *projection_axes_y)
 
-            plot_matrix(h_cov, args, channel, projection_axes, meta=meta)
+            plot_matrix(
+                outdir, h_cov, args, channel, projection_axes, config=config, meta=meta
+            )
 
     if output_tools.is_eosuser_path(args.outpath) and args.eoscp:
         output_tools.copy_to_eos(outdir, args.outpath, args.outfolder)
+
+
+if __name__ == "__main__":
+    main()

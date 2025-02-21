@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import argparse
 import time
 
@@ -224,7 +226,7 @@ def save_hists(args, fitter, ws, prefit=True):
         inclusive=True,
         compute_variance=args.computeHistErrors,
         compute_chi2=not args.noChi2,
-        compute_global_impacts=args.computeHistImpacts,
+        compute_global_impacts=args.computeHistImpacts and not prefit,
     )
 
     ws.add_expected_hists(
@@ -266,7 +268,7 @@ def save_hists(args, fitter, ws, prefit=True):
             inclusive=True,
             compute_variance=args.computeHistErrors,
             compute_chi2=not args.noChi2,
-            compute_global_impacts=args.computeHistImpacts,
+            compute_global_impacts=args.computeHistImpacts and not prefit,
         )
 
         channel_axes = fitter.indata.channel_info[channel]["axes"]
@@ -393,8 +395,13 @@ def fit(args, fitter, ws, dofit=True):
             fitter.minimize()
 
         val, grad, hess = fitter.loss_val_grad_hess()
-        fitter.hess = hess
         fitter.cov.assign(tf.linalg.inv(hess))
+
+        if args.doImpacts:
+            ws.add_impacts_hists(*fitter.impacts_parms(hess))
+
+        if args.globalImpacts:
+            ws.add_global_impacts_hists(*fitter.global_impacts_parms())
 
     nllvalfull = fitter.full_nll().numpy()
     satnllvalfull, ndfsat = fitter.saturated_nll()
@@ -412,18 +419,12 @@ def fit(args, fitter, ws, dofit=True):
     )
 
     ws.add_parms_hist(
-        values=ifitter.x,
-        variances=tf.linalg.diag_part(ifitter.cov),
+        values=fitter.x,
+        variances=tf.linalg.diag_part(fitter.cov),
         hist_name="parms",
     )
 
     ws.add_cov_hist(fitter.cov)
-
-    if args.doImpacts:
-        ws.add_impacts_hists(*ifitter.impacts_parms())
-
-        if args.globalImpacts:
-            ws.add_global_impacts_hists(*ifitter.global_impacts_parms())
 
     if args.scan is not None:
         parms = np.array(fitter.parms).astype(str) if len(args.scan) == 0 else args.scan
@@ -488,12 +489,26 @@ def fit(args, fitter, ws, dofit=True):
         ws.contour_scan2D_hist(args.contourScan2D, contours, args.contourLevels)
 
 
-if __name__ == "__main__":
+def main():
     start_time = time.time()
     args = make_parser()
 
-    indata = inputdata.FitInputData(args.filename, args.pseudoData)
+    indata = inputdata.FitInputData(
+        args.filename, args.pseudoData, normalize=args.normalize
+    )
     ifitter = fitter.Fitter(indata, args)
+
+    np.random.seed(args.seed)
+    tf.random.set_seed(args.seed)
+
+    # pass meta data into output file
+    meta = {
+        "meta_info": output_tools.make_meta_info_dict(args=args),
+        "meta_info_input": ifitter.indata.metadata,
+        "signals": ifitter.indata.signals,
+        "procs": ifitter.indata.procs,
+        "nois": ifitter.parms[ifitter.npoi :][indata.noigroupidxs],
+    }
 
     with workspace.Workspace(
         args.output,
@@ -503,17 +518,7 @@ if __name__ == "__main__":
         projections=args.project,
     ) as ws:
 
-        # pass meta data into output file
-        meta = {
-            "meta_info": output_tools.make_meta_info_dict(args=args),
-            "meta_info_input": ifitter.indata.metadata,
-            "signals": ifitter.indata.signals,
-            "procs": ifitter.indata.procs,
-        }
         ws.write_meta(meta=meta)
-
-        np.random.seed(args.seed)
-        tf.random.set_seed(args.seed)
 
         # make list of fits with -1: asimov; 0: fit to data; >=1: toy
         fits = np.concatenate(
@@ -562,3 +567,7 @@ if __name__ == "__main__":
     end_time = time.time()
     elapsed_time = end_time - start_time
     print(f"Total time: {elapsed_time:.2f} seconds")
+
+
+if __name__ == "__main__":
+    main()
