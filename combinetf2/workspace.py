@@ -78,16 +78,16 @@ class Workspace:
 
         self.extension = "hdf5"
         self.file_path = self.get_file_path(outdir, outname, postfix)
+        self.fout = h5py.File(self.file_path, "w")
 
     def __enter__(self):
         """Open the file when entering the context."""
-        print(f"Write results in file {self.file_path}")
-        self.fout = h5py.File(self.file_path, "w")
         return self  # Allows `with Workspace(...) as ws:` usage
 
     def __exit__(self, exc_type, exc_value, traceback):
         """Ensure the file is closed when exiting the context."""
         if self.fout:
+            print(f"Results written in file {self.file_path}")
             self.fout.close()
             self.fout = None
 

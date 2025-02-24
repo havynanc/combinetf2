@@ -1120,6 +1120,9 @@ class Fitter:
                     p = tf.convert_to_tensor(pval)
                     val, grad, hessp = self.loss_val_grad_hessp(p)
                     hessp = hessp.numpy()
+                    # TODO: worth testing modifying the loss/grad/hess functions to imply 1
+                    # for the corresponding hessian element instead of 0,
+                    # since this might allow the minimizer to converge more efficiently
                     hessp[idx] = (
                         0  # Zero out Hessian-vector product at the frozen index
                     )
