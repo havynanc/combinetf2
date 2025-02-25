@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "combinetf2"
+version = "0.1.0"
+description = "."
+readme = { file = "README.md", content-type = "text/markdown" }
+license = { text = "MIT" }
+authors = [
+    {name = "David Walter", email = "david.walter@cern.ch"},
+    {name = "Josh Bendavid", email = "josh.bendavid@cern.ch"},
+    {name = "Kenneth Long", email = "kenneth.long@cern.ch"},
+]
+urls = {Homepage = "https://github.com/WMass/combinetf2"}
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent"
+]
+requires-python = ">=3.8"
+
+dependencies = [
+    "tensorflow",
+    "wums",
+    "numpy",
+    "h5py",
+    "hist",
+    "scipy",
+]
+
+[project.optional-dependencies]
+plotting = ["matplotlib","mplhep", "seaborn", "pandas", "plotly", "kaleido"]
+
+[project.scripts]
+combinetf2 = "scripts.fit:main"
+combinetf2-plot-hists = "scripts.plot_hists:main"
+combinetf2-plot-cov = "scripts.plot_hists_cov:main"
+combinetf2-plot-uncertainties = "scripts.plot_hists_uncertainties:main"
+combinetf2-plot-nllscan = "scripts.plot_likelihood_scan:main"
+combinetf2-plot-nllscan2D = "scripts.plot_likelihood_scan2D:main"
+combinetf2-plot-impacts = "scripts.plot_pullsAndImpacts:main"
+combinetf2-print-impacts = "scripts.printImpacts:main"
+combinetf2-print-pulls = "scripts.printPullsAndConstraints:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
