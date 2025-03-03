@@ -124,7 +124,7 @@ jobs:
 
       - name: make symmetric tensor
         run: >-
-          python tests/make_tensor.py -o $COMBINETF2_OUTDIR/
+          python tests/make_tensor.py -o $COMBINETF2_OUTDIR/ --symmetrizeAll --postfix symmetric 
 
       - name: make sparse tensor
         run: >-
