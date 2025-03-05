@@ -70,9 +70,10 @@ class FitDebugData:
                 self.axis_procs,
                 self.axis_systs,
                 self.axis_downup,
-                data=np.stack((syst_down, syst_up), axis=-1),
                 name=f"{channel}_syst",
             )
+            syst_hist[{"DownUp": "Down"}] = syst_down
+            syst_hist[{"DownUp": "Up"}] = syst_up
 
             syst_active_hist = hist.Hist(
                 self.axis_procs,

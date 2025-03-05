@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=42", "wheel"]
+requires = ["setuptools>=61", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "combinetf2"
-version = "0.1.0"
+version = "0.1.1"
 description = "."
 readme = { file = "README.md", content-type = "text/markdown" }
 license = { text = "MIT" }
@@ -35,16 +35,17 @@ dependencies = [
 plotting = ["matplotlib","mplhep", "seaborn", "pandas", "plotly", "kaleido"]
 
 [project.scripts]
-combinetf2 = "scripts.fit:main"
-combinetf2-plot-inputdata = "scripts.plot_inputdata:main"
-combinetf2-plot-hists = "scripts.plot_hists:main"
-combinetf2-plot-cov = "scripts.plot_hists_cov:main"
-combinetf2-plot-uncertainties = "scripts.plot_hists_uncertainties:main"
-combinetf2-plot-nllscan = "scripts.plot_likelihood_scan:main"
-combinetf2-plot-nllscan2D = "scripts.plot_likelihood_scan2D:main"
-combinetf2-plot-impacts = "scripts.plot_pullsAndImpacts:main"
-combinetf2-print-impacts = "scripts.printImpacts:main"
-combinetf2-print-pulls = "scripts.printPullsAndConstraints:main"
+combinetf2 = "bin.combinetf2:main"
+combinetf2_plot_inputdata = "bin.combinetf2_plot_inputdata:main"
+combinetf2_plot_hists = "bin.combinetf2_plot_hists:main"
+combinetf2_plot_hists_cov = "bin.combinetf2_plot_hists_cov:main"
+combinetf2_plot_hists_uncertainties = "bin.combinetf2_plot_hists_uncertainties:main"
+combinetf2_plot_likelihood_scan = "bin.combinetf2_plot_likelihood_scan:main"
+combinetf2_plot_likelihood_scan2D = "bin.combinetf2_plot_likelihood_scan2D:main"
+combinetf2_plot_pulls_and_impacts = "bin.combinetf2_plot_pulls_and_impacts:main"
+combinetf2_print_impacts = "bin.combinetf2_print_impacts:main"
+combinetf2_print_pulls_and_constraints = "bin.combinetf2_print_pulls_and_constraints:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
+
