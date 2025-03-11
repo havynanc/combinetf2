@@ -92,8 +92,9 @@ class Fitter:
             tf.ones_like(self.indata.data_obs), trainable=False, name="beta0"
         )
 
-        nexpfullcentral = self.expected_yield()
-        self.nexpnom = tf.Variable(nexpfullcentral, trainable=False, name="nexpnom")
+        self.nexpnom = tf.Variable(
+            self.expected_yield(), trainable=False, name="nexpnom"
+        )
 
         # parameter covariance matrix
         self.cov = tf.Variable(self.prefit_covariance(), trainable=False, name="cov")
@@ -577,7 +578,9 @@ class Fitter:
 
         return expvars
 
-    def _compute_yields_noBBB(self, compute_normfull=False):
+    def _compute_yields_noBBB(self, compute_norm=False, full=True):
+        # compute_norm: compute yields for each process, otherwise inclusive
+        # full: compute yields inclduing masked channels
         xpoi = self.x[: self.npoi]
         theta = self.x[self.npoi :]
 
@@ -610,6 +613,7 @@ class Fitter:
             mthetaalpha = tf.reshape(mthetaalpha, [2 * self.indata.nsyst, 1])
 
         if self.indata.sparse:
+            # TODO: clipping of masked channels
             logsnorm = tf.sparse.sparse_dense_matmul(
                 self.indata.logk_sparse, mthetaalpha
             )
@@ -619,94 +623,100 @@ class Fitter:
             snormnorm_sparse = self.indata.norm_sparse.with_values(
                 snorm * self.indata.norm_sparse.values
             )
-            nexpfullcentral = tf.sparse.sparse_dense_matmul(snormnorm_sparse, mrnorm)
-            nexpfullcentral = tf.squeeze(nexpfullcentral, -1)
+            nexpcentral = tf.sparse.sparse_dense_matmul(snormnorm_sparse, mrnorm)
+            nexpcentral = tf.squeeze(nexpcentral, -1)
 
-            if compute_normfull:
+            if compute_norm:
                 snormnorm = tf.sparse.to_dense(snormnorm_sparse)
 
         else:
+            if full:
+                logk = self.indata.logk
+                nbins = self.indata.nbinsfull
+                norm = self.indata.norm
+            else:
+                nbins = self.indata.nbins
+                logk = self.indata.logk[:nbins]
+                norm = self.indata.norm[:nbins]
+
             if self.indata.symmetric_tensor:
                 mlogk = tf.reshape(
-                    self.indata.logk,
-                    [self.indata.nbins * self.indata.nproc, self.indata.nsyst],
+                    logk,
+                    [nbins * self.indata.nproc, self.indata.nsyst],
                 )
             else:
                 mlogk = tf.reshape(
-                    self.indata.logk,
-                    [self.indata.nbins * self.indata.nproc, 2 * self.indata.nsyst],
+                    logk,
+                    [nbins * self.indata.nproc, 2 * self.indata.nsyst],
                 )
 
             logsnorm = tf.matmul(mlogk, mthetaalpha)
-            logsnorm = tf.reshape(logsnorm, [self.indata.nbins, self.indata.nproc])
+            logsnorm = tf.reshape(logsnorm, [nbins, self.indata.nproc])
 
             snorm = tf.exp(logsnorm)
 
-            snormnorm = snorm * self.indata.norm
-            nexpfullcentral = tf.matmul(snormnorm, mrnorm)
-            nexpfullcentral = tf.squeeze(nexpfullcentral, -1)
+            snormnorm = snorm * norm
+            nexpcentral = tf.matmul(snormnorm, mrnorm)
+            nexpcentral = tf.squeeze(nexpcentral, -1)
 
-        # if options.saveHists:
-        if compute_normfull:
-            normfullcentral = ernorm * snormnorm
+        if compute_norm:
+            normcentral = ernorm * snormnorm
         else:
-            normfullcentral = None
+            normcentral = None
 
         if self.normalize:
             # FIXME this should be done per-channel ideally
-            normscale = tf.reduce_sum(self.nobs) / tf.reduce_sum(nexpfullcentral)
+            nexpcentral = nexpcentral[:nbins]
+            normscale = tf.reduce_sum(self.nobs) / tf.reduce_sum(nexpcentral)
 
-            nexpfullcentral *= normscale
-            if compute_normfull:
-                normfullcentral *= normscale
+            nexpcentral *= normscale
+            if compute_norm:
+                normcentral *= normscale
 
-        return nexpfullcentral, normfullcentral
+        return nexpcentral, normcentral
 
-    def _compute_yields_with_beta(self, profile_grad=True, compute_normfull=False):
-        nexpfullcentral, normfullcentral = self._compute_yields_noBBB(compute_normfull)
+    def _compute_yields_with_beta(
+        self, profile_grad=True, compute_norm=False, full=True
+    ):
+        nexpcentral, normcentral = self._compute_yields_noBBB(compute_norm, full=full)
 
-        nexpfull = nexpfullcentral
-        normfull = normfullcentral
-
-        beta = None
         if self.binByBinStat:
             if self.profile:
+                nexpcentral = nexpcentral[: self.indata.nbins]
                 beta = (self.nobs + self.indata.kstat) / (
-                    nexpfullcentral + self.indata.kstat
+                    nexpcentral + self.indata.kstat
                 )
                 if not profile_grad:
                     beta = tf.stop_gradient(beta)
             else:
                 beta = self.beta0
-            nexpfull = beta * nexpfullcentral
-            if compute_normfull:
-                normfull = beta[..., None] * normfullcentral
 
-            if self.normalize:
-                # FIXME this is probably not fully consistent when combined with the binByBinStat
-                normscale = tf.reduce_sum(self.nobs) / tf.reduce_sum(nexpfull)
+            if full:
+                beta = tf.concat([beta, tf.ones(self.indata.nbinsmasked)], axis=0)
+                nexp = beta * nexpcentral
 
-                nexpfull *= normscale
-                if compute_normfull:
-                    normfull *= normscale
+            if compute_norm:
+                norm = beta[..., None] * normcentral
+        else:
+            beta = None
+            nexp = nexpcentral
+            norm = normcentral
 
         if self.indata.exponential_transform:
-            nexpfull = self.indata.exponential_transform_scale * tf.math.log(nexpfull)
-            if compute_normfull:
-                normfull = self.indata.exponential_transform_scale * tf.math.log(
-                    normfull
-                )
+            nexp = self.indata.exponential_transform_scale * tf.math.log(nexp)
+            if compute_norm:
+                norm = self.indata.exponential_transform_scale * tf.math.log(norm)
 
-        return nexpfull, normfull, beta
+        return nexp, norm, beta
 
-    def _compute_yields(self, inclusive=True, profile_grad=True):
-        nexpfullcentral, normfullcentral, beta = self._compute_yields_with_beta(
-            profile_grad=profile_grad, compute_normfull=not inclusive
+    def _compute_yields(self, inclusive=True, profile_grad=True, full=True):
+        nexpcentral, normcentral, beta = self._compute_yields_with_beta(
+            profile_grad=profile_grad, compute_norm=not inclusive, full=full
         )
         if inclusive:
-            return nexpfullcentral
+            return nexpcentral
         else:
-            return normfullcentral
+            return normcentral
 
     @tf.function
     def expected_with_variance(
@@ -760,7 +770,12 @@ class Fitter:
         if compute_chi2:
 
             def fun_residual():
-                return fun() - self.nobs
+                return (
+                    self._compute_yields(
+                        inclusive=inclusive, profile_grad=profile_grad, full=False
+                    )
+                    - self.nobs
+                )
 
             if self.profile:
                 res, resvar, rescov, _1, _2 = self._expvar_profiled(
@@ -794,10 +809,13 @@ class Fitter:
         correlated_variations=False,
         profile_grad=True,
         compute_chi2=False,
+        masked=False,
     ):
 
         def fun():
-            return self._compute_yields(inclusive=inclusive, profile_grad=profile_grad)
+            return self._compute_yields(
+                inclusive=inclusive, profile_grad=profile_grad, full=masked
+            )
 
         info = self.indata.channel_info[channel]
         start = info["start"]
@@ -873,7 +891,7 @@ class Fitter:
         else:
             exp = tf.function(projection_fun)()
 
-        if compute_chi2:
+        if compute_chi2 and not masked:
 
             def fun_residual():
                 return fun() - self.nobs
@@ -916,7 +934,7 @@ class Fitter:
 
     @tf.function
     def expected_yield(self):
-        return self._compute_yields(inclusive=True)
+        return self._compute_yields(inclusive=True, full=False)
 
     @tf.function
     def chi2(self, res, rescov):
@@ -954,7 +972,9 @@ class Fitter:
         theta = self.x[self.npoi :]
 
         nexpfullcentral, _, beta = self._compute_yields_with_beta(
-            profile_grad=profile_grad, compute_normfull=False
+            profile_grad=profile_grad,
+            compute_norm=False,
+            full=False,
         )
 
         nexp = nexpfullcentral
