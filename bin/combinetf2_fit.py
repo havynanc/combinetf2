@@ -195,7 +195,11 @@ def make_parser():
         nargs="+",
         action="append",
         default=[],
-        help='add projection for the prefit and postfit histograms, specifying the channel name followed by the axis names, e.g. "--project ch0 eta pt".  This argument can be called multiple times',
+        help="""
+        add projection for the prefit and postfit histograms, specifying the channel name followed by the axis names, 
+        e.g. "--project ch0 eta pt" or "--project ch0" to get the total yield.  
+        This argument can be called multiple times
+        """,
     )
     parser.add_argument(
         "--doImpacts",
