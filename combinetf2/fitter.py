@@ -2,6 +2,8 @@ import numpy as np
 import scipy
 import tensorflow as tf
 
+from combinetf2.h5pyutils import simple_sparse_slice0end
+
 
 class Fitter:
     def __init__(self, indata, options):
@@ -613,22 +615,24 @@ class Fitter:
             mthetaalpha = tf.reshape(mthetaalpha, [2 * self.indata.nsyst, 1])
 
         if self.indata.sparse:
-            # TODO: clipping of masked channels
-            logsnorm = tf.sparse.sparse_dense_matmul(
-                self.indata.logk_sparse, mthetaalpha
-            )
+            logsnorm = tf.sparse.sparse_dense_matmul(self.indata.logk, mthetaalpha)
             logsnorm = tf.squeeze(logsnorm, -1)
             snorm = tf.exp(logsnorm)
 
-            snormnorm_sparse = self.indata.norm_sparse.with_values(
-                snorm * self.indata.norm_sparse.values
+            snormnorm_sparse = self.indata.norm.with_values(
+                snorm * self.indata.norm.values
             )
+
+            if not full:
+                snormnorm_sparse = simple_sparse_slice0end(
+                    snormnorm_sparse, self.indata.nbins
+                )
+
             nexpcentral = tf.sparse.sparse_dense_matmul(snormnorm_sparse, mrnorm)
             nexpcentral = tf.squeeze(nexpcentral, -1)
 
             if compute_norm:
                 snormnorm = tf.sparse.to_dense(snormnorm_sparse)
-
         else:
             if full:
                 logk = self.indata.logk
@@ -932,7 +936,7 @@ class Fitter:
 
         return dxdtheta0, dxdnobs, dxdbeta0
 
-    @tf.function
+    # @tf.function
     def expected_yield(self):
         return self._compute_yields(inclusive=True, full=False)
 
@@ -1032,12 +1036,12 @@ class Fitter:
         l, lfull = self._compute_nll(profile_grad=profile_grad)
         return l
 
-    @tf.function
+    # @tf.function
     def loss_val(self):
         val = self._compute_loss()
         return val
 
-    @tf.function
+    # @tf.function
     def loss_val_grad(self):
         with tf.GradientTape() as t:
             val = self._compute_loss()
@@ -1045,7 +1049,7 @@ class Fitter:
 
         return val, grad
 
-    @tf.function
+    # @tf.function
     def loss_val_grad_hessp(self, p):
         with tf.autodiff.ForwardAccumulator(self.x, p) as acc:
             with tf.GradientTape() as grad_tape:
@@ -1055,7 +1059,7 @@ class Fitter:
 
         return val, grad, hessp
 
-    @tf.function
+    # @tf.function
     def loss_val_grad_hess(self, profile_grad=True):
         with tf.GradientTape() as t2:
             with tf.GradientTape() as t1:

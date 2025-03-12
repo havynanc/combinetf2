@@ -64,8 +64,8 @@ class FitInputData:
                 print(
                     "WARNING: The sparse tensor implementation is experimental and probably slower than with a dense tensor!"
                 )
-                self.norm_sparse = makesparsetensor(f["hnorm_sparse"])
-                self.logk_sparse = makesparsetensor(f["hlogk_sparse"])
+                self.norm = makesparsetensor(f["hnorm_sparse"])
+                self.logk = makesparsetensor(f["hlogk_sparse"])
             else:
                 self.norm = maketensor(f["hnorm"])
                 self.logk = maketensor(f["hlogk"])
