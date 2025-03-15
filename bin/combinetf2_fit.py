@@ -9,12 +9,24 @@ import tensorflow as tf
 
 from combinetf2 import fitter, inputdata, io_tools, workspace
 
-from wums import output_tools  # isort: skip
+from wums import output_tools, logging  # isort: skip
+
+logger = None
 
 
 def make_parser():
     parser = argparse.ArgumentParser()
-
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        type=int,
+        default=3,
+        choices=[0, 1, 2, 3, 4],
+        help="Set verbosity level with logging, the larger the more verbose",
+    )
+    parser.add_argument(
+        "--noColorLogger", action="store_true", help="Do not use logging with colors"
+    )
     parser.add_argument("filename", help="filename of the main hdf5 input")
     parser.add_argument("-o", "--output", default="./", help="output directory")
     parser.add_argument("--outname", default="fitresults.hdf5", help="output file name")
@@ -227,7 +239,7 @@ def make_parser():
 
 def save_hists(args, fitter, ws, prefit=True):
 
-    print(f"Save - inclusive hist")
+    logger.info(f"Save - inclusive hist")
 
     exp, aux = fitter.expected_events(
         inclusive=True,
@@ -250,7 +262,7 @@ def save_hists(args, fitter, ws, prefit=True):
     )
 
     if args.saveHistsPerProcess:
-        print(f"Save - processes hist")
+        logger.info(f"Save - processes hist")
 
         exp, aux = fitter.expected_events(
             inclusive=False,
@@ -268,7 +280,7 @@ def save_hists(args, fitter, ws, prefit=True):
     for p in args.project:
         channel = p[0]
         axes = p[1:]
-        print(f"Save projection for channel {channel} - inclusive")
+        logger.info(f"Save projection for channel {channel} - inclusive")
 
         exp, aux = fitter.expected_events_projection(
             channel=channel,
@@ -297,7 +309,7 @@ def save_hists(args, fitter, ws, prefit=True):
         )
 
         if args.saveHistsPerProcess:
-            print(f"Save projection for channel {channel} - processes")
+            logger.info(f"Save projection for channel {channel} - processes")
 
             exp, aux = fitter.expected_events_projection(
                 channel=channel,
@@ -502,6 +514,9 @@ def main():
     start_time = time.time()
     args = make_parser()
 
+    global logger
+    logger = logging.setup_logger(__file__, args.verbose, args.noColorLogger)
+
     indata = inputdata.FitInputData(
         args.filename, args.pseudoData, normalize=args.normalize
     )
@@ -536,6 +551,11 @@ def main():
                 for x in args.toys
             ]
         )
+
+        init_time = time.time()
+        prefit_time = []
+        postfit_time = []
+        fit_time = []
         for ifit in fits:
             ifitter.defaultassign()
             ws.reset_results(ifitter.indata.channel_info.keys())
@@ -565,17 +585,29 @@ def main():
                     ifitter.nobs.value(),
                 )
                 save_hists(args, ifitter, ws, prefit=True)
+            prefit_time.append(time.time())
 
             fit(args, ifitter, ws, dofit=ifit >= 0)
+            fit_time.append(time.time())
 
             if args.saveHists:
                 save_hists(args, ifitter, ws, prefit=False)
 
             ws.dump_and_flush(group)
+            postfit_time.append(time.time())
 
     end_time = time.time()
-    elapsed_time = end_time - start_time
-    print(f"Total time: {elapsed_time:.2f} seconds")
+    logger.info(f"{end_time - start_time:.2f} seconds total time")
+    logger.debug(f"{init_time - start_time:.2f} seconds initialization time")
+    for i, ifit in enumerate(fits):
+        logger.debug(f"For fit {ifit}:")
+        dt = init_time if i == 0 else fit_time[i - 1]
+        t0 = prefit_time[i] - dt
+        t1 = fit_time[i] - prefit_time[i]
+        t2 = postfit_time[i] - fit_time[i]
+        logger.debug(f"{t0:.2f} seconds for prefit")
+        logger.debug(f"{t1:.2f} seconds for fit")
+        logger.debug(f"{t2:.2f} seconds for postfit")
 
 
 if __name__ == "__main__":
