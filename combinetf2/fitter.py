@@ -684,11 +684,20 @@ class Fitter:
     ):
         nexpcentral, normcentral = self._compute_yields_noBBB(compute_norm, full=full)
 
+        if full:
+            nexp = nexpcentral
+            norm = normcentral
+        else:
+            nexp = nexpcentral[: self.indata.nbins]
+            if compute_norm:
+                norm = normcentral[: self.indata.nbins]
+            else:
+                norm = None
+
         if self.binByBinStat:
             if self.profile:
-                nexpcentral = nexpcentral[: self.indata.nbins]
                 beta = (self.nobs + self.indata.kstat) / (
-                    nexpcentral + self.indata.kstat
+                    nexpcentral[: self.indata.nbins] + self.indata.kstat
                 )
                 if not profile_grad:
                     beta = tf.stop_gradient(beta)
@@ -696,15 +705,15 @@ class Fitter:
                 beta = self.beta0
 
             if full:
-                beta = tf.concat([beta, tf.ones(self.indata.nbinsmasked)], axis=0)
-                nexp = beta * nexpcentral
+                beta = tf.concat(
+                    [beta, tf.ones(self.indata.nbinsmasked, dtype=beta.dtype)], axis=0
+                )
 
+            nexp = beta * nexp
             if compute_norm:
-                norm = beta[..., None] * normcentral
+                norm = beta[..., None] * norm
         else:
             beta = None
-            nexp = nexpcentral
-            norm = normcentral
 
         if self.indata.exponential_transform:
             nexp = self.indata.exponential_transform_scale * tf.math.log(nexp)
@@ -936,7 +945,7 @@ class Fitter:
 
         return dxdtheta0, dxdnobs, dxdbeta0
 
-    # @tf.function
+    @tf.function
     def expected_yield(self):
         return self._compute_yields(inclusive=True, full=False)
 
@@ -1036,12 +1045,12 @@ class Fitter:
         l, lfull = self._compute_nll(profile_grad=profile_grad)
         return l
 
-    # @tf.function
+    @tf.function
     def loss_val(self):
         val = self._compute_loss()
         return val
 
-    # @tf.function
+    @tf.function
     def loss_val_grad(self):
         with tf.GradientTape() as t:
             val = self._compute_loss()
@@ -1049,7 +1058,7 @@ class Fitter:
 
         return val, grad
 
-    # @tf.function
+    @tf.function
     def loss_val_grad_hessp(self, p):
         with tf.autodiff.ForwardAccumulator(self.x, p) as acc:
             with tf.GradientTape() as grad_tape:
@@ -1059,7 +1068,7 @@ class Fitter:
 
         return val, grad, hessp
 
-    # @tf.function
+    @tf.function
     def loss_val_grad_hess(self, profile_grad=True):
         with tf.GradientTape() as t2:
             with tf.GradientTape() as t1:
