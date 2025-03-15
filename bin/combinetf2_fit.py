@@ -27,6 +27,12 @@ def make_parser():
     parser.add_argument(
         "--noColorLogger", action="store_true", help="Do not use logging with colors"
     )
+    parser.add_argument(
+        "--eager",
+        action="store_true",
+        default=False,
+        help="Run tensorflow in eager mode (for debugging)",
+    )
     parser.add_argument("filename", help="filename of the main hdf5 input")
     parser.add_argument("-o", "--output", default="./", help="output directory")
     parser.add_argument("--outname", default="fitresults.hdf5", help="output file name")
@@ -516,6 +522,9 @@ def fit(args, fitter, ws, dofit=True):
 def main():
     start_time = time.time()
     args = make_parser()
+
+    if args.eager:
+        tf.config.run_functions_eagerly(True)
 
     global logger
     logger = logging.setup_logger(__file__, args.verbose, args.noColorLogger)
