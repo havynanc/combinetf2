@@ -623,7 +623,7 @@ class Fitter:
                 snorm * self.indata.norm.values
             )
 
-            if not full:
+            if not full and self.indata.nbinsmasked:
                 snormnorm_sparse = simple_sparse_slice0end(
                     snormnorm_sparse, self.indata.nbins
                 )
@@ -634,9 +634,9 @@ class Fitter:
             if compute_norm:
                 snormnorm = tf.sparse.to_dense(snormnorm_sparse)
         else:
-            if full:
-                logk = self.indata.logk
+            if full or self.indata.nbinsmasked == 0:
                 nbins = self.indata.nbinsfull
+                logk = self.indata.logk
                 norm = self.indata.norm
             else:
                 nbins = self.indata.nbins
@@ -682,29 +682,19 @@ class Fitter:
     def _compute_yields_with_beta(
         self, profile_grad=True, compute_norm=False, full=True
     ):
-        nexpcentral, normcentral = self._compute_yields_noBBB(compute_norm, full=full)
-
-        if full:
-            nexp = nexpcentral
-            norm = normcentral
-        else:
-            nexp = nexpcentral[: self.indata.nbins]
-            if compute_norm:
-                norm = normcentral[: self.indata.nbins]
-            else:
-                norm = None
+        nexp, norm = self._compute_yields_noBBB(compute_norm, full=full)
 
         if self.binByBinStat:
             if self.profile:
                 beta = (self.nobs + self.indata.kstat) / (
-                    nexpcentral[: self.indata.nbins] + self.indata.kstat
+                    nexp[: self.indata.nbins] + self.indata.kstat
                 )
                 if not profile_grad:
                     beta = tf.stop_gradient(beta)
             else:
                 beta = self.beta0
 
-            if full:
+            if full and self.indata.nbinsmasked:
                 beta = tf.concat(
                     [beta, tf.ones(self.indata.nbinsmasked, dtype=beta.dtype)], axis=0
                 )
