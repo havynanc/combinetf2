@@ -289,24 +289,26 @@ def save_hists(args, fitter, ws, prefit=True):
 
     for p in args.project:
         channel = p[0]
-        axes = p[1:]
+        axes_names = p[1:]
+        channel_info = fitter.indata.channel_info[channel]
+        channel_axes = channel_info["axes"]
+
         logger.info(f"Save projection for channel {channel} - inclusive")
 
         exp, aux = fitter.expected_events_projection(
             channel=channel,
-            axes=axes,
+            axes=axes_names,
             inclusive=True,
             compute_variance=args.computeHistErrors,
             compute_cov=args.computeHistCov,
             compute_chi2=not args.noChi2,
             compute_global_impacts=args.computeHistImpacts and not prefit,
+            masked=channel_info["masked"],
         )
-
-        channel_axes = fitter.indata.channel_info[channel]["axes"]
 
         ws.add_expected_projection_hists(
             channel,
-            axes,
+            axes_names,
             channel_axes,
             exp,
             var=aux[0],
@@ -323,14 +325,15 @@ def save_hists(args, fitter, ws, prefit=True):
 
             exp, aux = fitter.expected_events_projection(
                 channel=channel,
-                axes=axes,
+                axes=axes_names,
                 inclusive=False,
                 compute_variance=args.computeHistErrors,
+                masked=channel_info["masked"],
             )
 
             ws.add_expected_projection_hists(
                 channel,
-                axes,
+                axes_names,
                 channel_axes,
                 exp,
                 var=aux[0],
