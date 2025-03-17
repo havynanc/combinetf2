@@ -27,9 +27,6 @@ class Fitter:
         self.chisqFit = options.chisqFit
         self.externalCovariance = options.externalCovariance
 
-        # if quantities are computed with profiling, usually set to true after the fit
-        self.profile = False
-
         self.nsystgroupsfull = len(self.systgroupsfull)
 
         self.pois = []
@@ -125,7 +122,6 @@ class Fitter:
         return val, jac
 
     def theta0defaultassign(self):
-        self.profile = False
         self.theta0.assign(tf.zeros([self.indata.nsyst], dtype=self.theta0.dtype))
 
     def xdefaultassign(self):
@@ -680,12 +676,12 @@ class Fitter:
         return nexpcentral, normcentral
 
     def _compute_yields_with_beta(
-        self, profile_grad=True, compute_norm=False, full=True
+        self, profile=True, profile_grad=True, compute_norm=False, full=True
     ):
         nexp, norm = self._compute_yields_noBBB(compute_norm, full=full)
 
         if self.binByBinStat:
-            if self.profile:
+            if profile:
                 beta = (self.nobs + self.indata.kstat[: self.indata.nbins]) / (
                     nexp[: self.indata.nbins] + self.indata.kstat[: self.indata.nbins]
                 )
@@ -710,9 +706,14 @@ class Fitter:
 
         return nexp, norm, beta
 
-    def _compute_yields(self, inclusive=True, profile_grad=True, full=True):
+    def _compute_yields(
+        self, inclusive=True, profile=True, profile_grad=True, full=True
+    ):
         nexpcentral, normcentral, beta = self._compute_yields_with_beta(
-            profile_grad=profile_grad, compute_norm=not inclusive, full=full
+            profile=profile,
+            profile_grad=profile_grad,
+            compute_norm=not inclusive,
+            full=full,
         )
         if inclusive:
             return nexpcentral
@@ -721,9 +722,9 @@ class Fitter:
 
     @tf.function
     def expected_with_variance(
-        self, fun, compute_cov=False, compute_global_impacts=False
+        self, fun, profile=False, compute_cov=False, compute_global_impacts=False
     ):
-        if self.profile:
+        if profile:
             return self._expvar_profiled(fun, compute_cov, compute_global_impacts)
         else:
             return self._expvar(fun, compute_cov, compute_global_impacts)
@@ -740,12 +741,15 @@ class Fitter:
         compute_global_impacts=False,
         compute_variations=False,
         correlated_variations=False,
+        profile=True,
         profile_grad=True,
         compute_chi2=False,
     ):
 
         def fun():
-            return self._compute_yields(inclusive=inclusive, profile_grad=profile_grad)
+            return self._compute_yields(
+                inclusive=inclusive, profile=profile, profile_grad=profile_grad
+            )
 
         if compute_variations and (
             compute_variance or compute_cov or compute_global_impacts
@@ -754,10 +758,10 @@ class Fitter:
 
         aux = [None] * 4
         if compute_cov or compute_variance or compute_global_impacts:
-            # exp, var = self.expected_with_variance(fun, cov, profile=profile)
             exp, expvar, expcov, exp_impacts, exp_impacts_grouped = (
                 self.expected_with_variance(
                     fun,
+                    profile=profile,
                     compute_cov=compute_cov,
                     compute_global_impacts=compute_global_impacts,
                 )
@@ -773,12 +777,15 @@ class Fitter:
             def fun_residual():
                 return (
                     self._compute_yields(
-                        inclusive=inclusive, profile_grad=profile_grad, full=False
+                        inclusive=inclusive,
+                        profile=profile,
+                        profile_grad=profile_grad,
+                        full=False,
                     )
                     - self.nobs
                 )
 
-            if self.profile:
+            if profile:
                 res, resvar, rescov, _1, _2 = self._expvar_profiled(
                     fun_residual, compute_cov=True
                 )
@@ -808,6 +815,7 @@ class Fitter:
         compute_global_impacts=False,
         compute_variations=False,
         correlated_variations=False,
+        profile=True,
         profile_grad=True,
         compute_chi2=False,
         masked=False,
@@ -815,7 +823,10 @@ class Fitter:
 
         def fun():
             return self._compute_yields(
-                inclusive=inclusive, profile_grad=profile_grad, full=masked
+                inclusive=inclusive,
+                profile=profile,
+                profile_grad=profile_grad,
+                full=masked,
             )
 
         info = self.indata.channel_info[channel]
@@ -880,6 +891,7 @@ class Fitter:
             exp, expvar, expcov, exp_impacts, exp_impacts_grouped = (
                 self.expected_with_variance(
                     projection_fun,
+                    profile=profile,
                     compute_cov=compute_cov,
                     compute_global_impacts=compute_global_impacts,
                 )
@@ -899,7 +911,7 @@ class Fitter:
 
             projection_fun_residual = make_projection_fun(fun_residual)
 
-            if self.profile:
+            if profile:
                 res, resvar, rescov, _1, _2 = self._expvar_profiled(
                     projection_fun_residual, compute_cov=True
                 )
@@ -934,8 +946,10 @@ class Fitter:
         return dxdtheta0, dxdnobs, dxdbeta0
 
     @tf.function
-    def expected_yield(self):
-        return self._compute_yields(inclusive=True, full=False)
+    def expected_yield(self, profile=False):
+        return self._compute_yields(
+            inclusive=True, profile=profile, profile_grad=False, full=False
+        )
 
     @tf.function
     def chi2(self, res, rescov):
@@ -969,10 +983,11 @@ class Fitter:
         l, lfull = self._compute_nll()
         return l
 
-    def _compute_nll(self, profile_grad=True):
+    def _compute_nll(self, profile=True, profile_grad=True):
         theta = self.x[self.npoi :]
 
         nexpfullcentral, _, beta = self._compute_yields_with_beta(
+            profile=profile,
             profile_grad=profile_grad,
             compute_norm=False,
             full=False,
@@ -1032,8 +1047,8 @@ class Fitter:
 
         return l, lfull
 
-    def _compute_loss(self, profile_grad=True):
-        l, lfull = self._compute_nll(profile_grad=profile_grad)
+    def _compute_loss(self, profile=True, profile_grad=True):
+        l, lfull = self._compute_nll(profile=profile, profile_grad=profile_grad)
         return l
 
     @tf.function
