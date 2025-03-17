@@ -303,7 +303,7 @@ def save_hists(args, fitter, ws, prefit=True):
             compute_cov=args.computeHistCov,
             compute_chi2=not args.noChi2,
             compute_global_impacts=args.computeHistImpacts and not prefit,
-            masked=channel_info["masked"],
+            masked=channel_info.get("masked", False),
         )
 
         ws.add_expected_projection_hists(
@@ -328,7 +328,7 @@ def save_hists(args, fitter, ws, prefit=True):
                 axes=axes_names,
                 inclusive=False,
                 compute_variance=args.computeHistErrors,
-                masked=channel_info["masked"],
+                masked=channel_info.get("masked", False),
             )
 
             ws.add_expected_projection_hists(
@@ -364,6 +364,8 @@ def save_hists(args, fitter, ws, prefit=True):
         for p in args.project:
             channel = p[0]
             axes = p[1:]
+            channel_info = fitter.indata.channel_info[channel]
+            channel_axes = channel_info["axes"]
 
             exp, aux = fitter.expected_events_projection(
                 channel=channel,
@@ -372,9 +374,8 @@ def save_hists(args, fitter, ws, prefit=True):
                 compute_variance=False,
                 compute_variations=True,
                 profile_grad=False,
+                masked=channel_info.get("masked", False),
             )
-
-            channel_axes = fitter.indata.channel_info[channel]["axes"]
 
             ws.add_expected_projection_hists(
                 channel,

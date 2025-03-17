@@ -70,7 +70,7 @@ def read_impacts_poi(
             fitresult, asym=asym
         )
         pulls_labels, pulls_prefit, constraints_prefit = get_pulls_and_constraints(
-            fitresult, prefit=True
+            fitresult, asym=asym, prefit=True
         )
         if len(pulls_labels) != len(labels):
             mask = [l in labels for l in pulls_labels]

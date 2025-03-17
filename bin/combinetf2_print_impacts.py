@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
+import itertools
 
 import numpy as np
 
@@ -37,10 +38,48 @@ def parseArgs():
         type=str,
         help="fitresults key in file (e.g. 'asimov'). Leave empty for data fit result.",
     )
+    parser.add_argument(
+        "--hist",
+        default=None,
+        type=str,
+        nargs="+",
+        help="Print impacts on observables use '--hist channel' or for projections '--hist channel ax0 ax1'.",
+    )
+    parser.add_argument(
+        "--relative",
+        action="store_true",
+        help="Print relative uncertainty, only for '--hist'",
+    )
     return parser.parse_args()
 
 
-def printImpacts(args, fitresult, poi):
+def printImpactsHist(args, hist_bin, hist_total_bin, ibin, lumi=None):
+    labels = np.array(hist_bin.axes["impacts"])
+    impacts = hist_bin.values()
+
+    total = np.sqrt(hist_total_bin.variance)
+    impacts = np.append(impacts, total)
+    labels = np.append(labels, "Total")
+
+    if args.relative:
+        unit = "rel. unc. in %"
+        impacts /= hist_total_bin.value
+        scale = 100
+    elif lumi is not None:
+        unit = "bin/lumi unc. in /pb"
+        impacts /= lumi
+        scale = 1
+    else:
+        unit = "bin unc."
+        scale = 1
+
+    printImpacts(args, impacts, labels, ibin, scale=scale, unit=unit)
+
+
+def printImpactsParm(args, fitresult, poi):
+    if args.relative:
+        raise NotImplementedError("Relative uncertainty for POIs not implemented")
+
     impacts, labels = io_tools.read_impacts_poi(
         fitresult,
         poi,
@@ -48,8 +87,10 @@ def printImpacts(args, fitresult, poi):
         grouped=not args.ungroup,
         global_impacts=args.globalImpacts,
     )
-    unit = "n.u. %"
+    printImpacts(args, impacts, labels, poi)
 
+
+def printImpacts(args, impacts, labels, poi, scale=100, unit="nuisance unc. %"):
     if args.sort:
 
         def is_scalar(val):
@@ -61,9 +102,11 @@ def printImpacts(args, fitresult, poi):
 
     nround = 5
     if args.asymImpacts:
-        fimpact = lambda x: f"{round(max(x)*100, nround)} / {round(min(x)*100, nround)}"
+        fimpact = (
+            lambda x: f"{round(max(x)*scale, nround)} / {round(min(x)*100, nround)}"
+        )
     else:
-        fimpact = lambda x: round(x * 100, nround)
+        fimpact = lambda x: round(x * scale, nround)
 
     if args.nuisance:
         if args.nuisance not in labels:
@@ -72,15 +115,59 @@ def printImpacts(args, fitresult, poi):
             f"Impact of nuisance {args.nuisance} on {poi} is {fimpact(impacts[list(labels).index(args.nuisance)])} {unit}"
         )
     else:
-        print(f"Impact of all systematics on {poi} (in {unit})")
+        print(f"Impact of all systematics on {poi} ({unit})")
         print("\n".join([f"   {k}: {fimpact(v)}" for k, v in zip(labels, impacts)]))
 
 
 def main():
     args = parseArgs()
     fitresult, meta = io_tools.get_fitresult(args.inputFile, args.result, meta=True)
-    for poi in io_tools.get_poi_names(meta):
-        printImpacts(args, fitresult, poi)
+
+    if args.hist is not None:
+        if args.asymImpacts:
+            raise NotImplementedError(
+                "Asymetric impacts on observables is not yet implemented"
+            )
+        if not args.globalImpacts:
+            raise NotImplementedError(
+                "Only global impacts on observables is implemented (use --globalImpacts)"
+            )
+
+        channel = args.hist[0]
+        projection_axes = args.hist[1:]
+        channel_hists = fitresult["channels"][channel]
+
+        if len(projection_axes) > 0:
+            projection_hists = channel_hists["projections"]
+            key = "_".join(projection_axes)
+            if key not in projection_hists.keys():
+                available = [k.split("_") for k in projection_hists.keys()]
+                raise ValueError(
+                    f"Histogram projection with axes {projection_axes} not found! Available histograms: {available}"
+                )
+            hists = projection_hists[key]
+        else:
+            hists = channel_hists
+
+        key = "hist_postfit_inclusive_global_impacts"
+        if not args.ungroup:
+            key += "_grouped"
+
+        hist_total = hists["hist_postfit_inclusive"].get()
+
+        hist = hists[key].get()
+
+        # lumi in pb-1
+        lumi = meta["meta_info_input"]["channel_info"]["ch0"].get("lumi", 0.001) * 1000
+
+        for idxs in itertools.product(*[np.arange(a.size) for a in hist_total.axes]):
+            ibin = {a: i for a, i in zip(hist_total.axes.name, idxs)}
+            print(f"Now at {ibin}")
+            printImpactsHist(args, hist[ibin], hist_total[ibin], ibin, lumi)
+    else:
+        for poi in io_tools.get_poi_names(meta):
+            print(f"Now at {poi}")
+            printImpactsParm(args, fitresult, poi)
 
 
 if __name__ == "__main__":

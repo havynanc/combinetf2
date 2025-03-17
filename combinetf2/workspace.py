@@ -170,7 +170,7 @@ class Workspace:
         hists_nobs = {}
 
         for channel, info in channel_info.items():
-            if info["masked"]:
+            if info.get("masked", False):
                 continue
             axes = info["axes"]
 
