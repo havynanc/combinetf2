@@ -91,7 +91,7 @@ class Fitter:
 
         # global observables for mc stat uncertainty
         self.beta0 = tf.Variable(
-            tf.ones_like(self.indata.data_obs), trainable=False, name="beta0"
+            tf.ones_like(self.indata.kstat), trainable=False, name="beta0"
         )
 
         self.nexpnom = tf.Variable(
@@ -135,7 +135,7 @@ class Fitter:
             self.x.assign(tf.concat([self.xpoidefault, self.theta0], axis=0))
 
     def beta0defaultassign(self):
-        self.beta0.assign(tf.ones_like(self.indata.data_obs, dtype=self.beta0.dtype))
+        self.beta0.assign(tf.ones_like(self.indata.kstat, dtype=self.beta0.dtype))
 
     def defaultassign(self):
         self.cov.assign(self.prefit_covariance())
@@ -686,18 +686,16 @@ class Fitter:
 
         if self.binByBinStat:
             if self.profile:
-                beta = (self.nobs + self.indata.kstat) / (
-                    nexp[: self.indata.nbins] + self.indata.kstat
+                beta = (self.nobs + self.indata.kstat[: self.indata.nbins]) / (
+                    nexp[: self.indata.nbins] + self.indata.kstat[: self.indata.nbins]
                 )
                 if not profile_grad:
                     beta = tf.stop_gradient(beta)
             else:
-                beta = self.beta0
+                beta = self.beta0[: self.indata.nbins]
 
             if full and self.indata.nbinsmasked:
-                beta = tf.concat(
-                    [beta, tf.ones(self.indata.nbinsmasked, dtype=beta.dtype)], axis=0
-                )
+                beta = tf.concat([beta, self.beta0[self.indata.nbins :]], axis=0)
 
             nexp = beta * nexp
             if compute_norm:
@@ -1019,11 +1017,14 @@ class Fitter:
 
         if self.binByBinStat:
             lbetavfull = (
-                -self.indata.kstat * tf.math.log(beta / self.beta0)
-                + self.indata.kstat * beta / self.beta0
+                -self.indata.kstat[: self.indata.nbins]
+                * tf.math.log(beta / self.beta0[: self.indata.nbins])
+                + self.indata.kstat[: self.indata.nbins]
+                * beta
+                / self.beta0[: self.indata.nbins]
             )
 
-            lbetav = lbetavfull - self.indata.kstat
+            lbetav = lbetavfull - self.indata.kstat[: self.indata.nbins]
             lbeta = tf.reduce_sum(lbetav)
 
             l = l + lbeta
