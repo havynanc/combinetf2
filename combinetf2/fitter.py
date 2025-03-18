@@ -2,7 +2,7 @@ import numpy as np
 import scipy
 import tensorflow as tf
 
-from combinetf2.h5pyutils import simple_sparse_slice0end
+from combinetf2.tfhelpers import simple_sparse_slice0end
 
 
 class Fitter:
@@ -381,7 +381,7 @@ class Fitter:
                 expvar_binByBinStat = tf.reduce_sum(tf.square(dexpdbeta0), axis=-1)
                 expvar += expvar_binByBinStat
 
-        expvar = tf.reshape(expvar, expected.shape)
+        expvar = tf.reshape(expvar, tf.shape(expected))
 
         if compute_global_impacts:
             # global impacts of unconstrained parameters are always 0, only store impacts of constrained ones
@@ -448,7 +448,7 @@ class Fitter:
             RJu = tf.reshape(RJu, [-1])
         RJ = t1.jacobian(RJu, u)
         sRJ2 = tf.reduce_sum(RJ**2, axis=0)
-        sRJ2 = tf.reshape(sRJ2, expected.shape)
+        sRJ2 = tf.reshape(sRJ2, tf.shape(expected))
         if self.binByBinStat and not skipBinByBinStat:
             # add MC stat uncertainty on variance
             sumw2 = tf.square(expected) / self.indata.kstat
@@ -547,7 +547,7 @@ class Fitter:
             impacts_grouped = None
 
         expvar = tf.linalg.diag_part(expcov)
-        expvar = tf.reshape(expvar, expected.shape)
+        expvar = tf.reshape(expvar, tf.shape(expected))
 
         return expected, expvar, expcov, impacts, impacts_grouped
 
@@ -567,7 +567,8 @@ class Fitter:
         else:
             dexp = dexpdx * tf.math.sqrt(tf.linalg.diag_part(self.cov))[None, :]
 
-        dexp = tf.reshape(dexp, (*expected.shape, -1))
+        new_shape = tf.concat([tf.shape(expected), [-1]], axis=0)
+        dexp = tf.reshape(dexp, new_shape)
 
         down = expected[..., None] - dexp
         up = expected[..., None] + dexp

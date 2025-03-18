@@ -87,7 +87,7 @@ If a systematic variation is added by providing a single histogram, the variatio
 
 ### Masked channels
 Masked channels can be added that don't contribute to the likelihood but are evaluated as any other channel. 
-This is done by defining `masked=True` in the `tensorwriter` `add_channel` or `add_process` functions. 
+This is done by defining `masked=True` in the `tensorwriter` `add_channel` function. 
 (Pseudo) Data histograms for masked channels are not supported.
 This is useful for example to compute unfolded (differential) cross sections and their uncertainties, including global impacts, taking into account all nuisance parameters that affect these channels.
 

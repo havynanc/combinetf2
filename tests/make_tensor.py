@@ -177,6 +177,9 @@ writer = tensorwriter.TensorWriter(
     exponential_transform=args.exponentialTransform,
 )
 
+writer.add_channel(h1_data.axes, "ch0")
+writer.add_channel(h2_data.axes, "ch1")
+
 writer.add_data(h1_data, "ch0")
 writer.add_data(h2_data, "ch1")
 
@@ -195,7 +198,8 @@ writer.add_process(h1_bkg_2, "bkg_2", "ch0")
 
 if not args.skipMaskedChannels:
     # add masked channel
-    writer.add_process(h1_sig_masked, "sig", "ch0_masked", signal=True, masked=True)
+    writer.add_channel(h1_sig_masked.axes, "ch0_masked", masked=True)
+    writer.add_process(h1_sig_masked, "sig", "ch0_masked", signal=True)
 
 # systematic uncertainties
 

@@ -96,8 +96,8 @@ class TensorWriter:
             )
         self.dict_pseudodata[channel][name] = self.get_flat_values(h)
 
-    def add_process(self, h, name, channel="ch0", signal=False, masked=False):
-        self._check_hist_and_channel(h, channel, masked=masked)
+    def add_process(self, h, name, channel="ch0", signal=False):
+        self._check_hist_and_channel(h, channel)
 
         if name in self.dict_norm[channel].keys():
             raise RuntimeError(
@@ -142,7 +142,7 @@ class TensorWriter:
         self.dict_sumw2[name] = np.zeros(ibins)
 
         # add masked channels last and not masked channels first
-        this_channel = {"axes": axes, "masked": masked}
+        this_channel = {"axes": [a for a in axes], "masked": masked}
         if masked:
             self.channels[name] = this_channel
         else:
@@ -154,13 +154,10 @@ class TensorWriter:
             self.dict_logkavg_indices[name] = {}
             self.dict_logkhalfdiff_indices[name] = {}
 
-    def _check_hist_and_channel(self, h, channel, add=True, masked=False):
+    def _check_hist_and_channel(self, h, channel):
         axes = [a for a in h.axes]
         if channel not in self.channels.keys():
-            if add:
-                self.add_channel(axes, channel, masked=masked)
-            else:
-                raise RuntimeError(f"Channel {channel} not known!")
+            raise RuntimeError(f"Channel {channel} not known!")
         elif axes != self.channels[channel]["axes"]:
             raise RuntimeError(
                 f"""
@@ -218,8 +215,8 @@ class TensorWriter:
         var_name_out = name
 
         if isinstance(h, (list, tuple, np.ndarray)):
-            self._check_hist_and_channel(h[0], channel, add=False)
-            self._check_hist_and_channel(h[1], channel, add=False)
+            self._check_hist_and_channel(h[0], channel)
+            self._check_hist_and_channel(h[1], channel)
 
             syst_up = self.get_flat_values(h[0])
             syst_down = self.get_flat_values(h[1])
@@ -267,7 +264,7 @@ class TensorWriter:
             logkup_proc = None
             logkdown_proc = None
         elif mirror:
-            self._check_hist_and_channel(h, channel, add=False)
+            self._check_hist_and_channel(h, channel)
             syst = self.get_flat_values(h)
             logkavg_proc = self.get_logk(syst, norm, kfactor)
         else:
