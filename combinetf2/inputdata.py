@@ -90,7 +90,6 @@ class FitInputData:
 
                 self.metadata = pickle_load_h5py(f["meta"])
                 self.channel_info = self.metadata["channel_info"]
-
             else:
                 self.channel_info = {
                     "ch0": {
@@ -103,8 +102,10 @@ class FitInputData:
                                 name="obs",
                             )
                         ]
-                    },
-                    "ch1": {
+                    }
+                }
+                if self.nbinsmasked:
+                    self.channel_info["ch1_masked"] = {
                         "axes": [
                             hist.axis.Integer(
                                 0,
@@ -114,8 +115,7 @@ class FitInputData:
                                 name="masked",
                             )
                         ]
-                    },
-                }
+                    }
 
             self.symmetric_tensor = self.metadata.get("symmetric_tensor", False)
             self.exponential_transform = self.metadata.get(
@@ -130,7 +130,7 @@ class FitInputData:
             for channel, info in self.channel_info.items():
                 axes = info["axes"]
                 shape = tuple([len(a) for a in axes])
-                size = np.prod(shape)
+                size = int(np.prod(shape))
 
                 start = ibin
                 stop = start + size

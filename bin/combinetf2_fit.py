@@ -247,7 +247,7 @@ def make_parser():
     return parser.parse_args()
 
 
-def save_hists(args, fitter, ws, prefit=True):
+def save_hists(args, fitter, ws, prefit=True, profile=False):
 
     logger.info(f"Save - inclusive hist")
 
@@ -257,6 +257,7 @@ def save_hists(args, fitter, ws, prefit=True):
         compute_cov=args.computeHistCov,
         compute_chi2=not args.noChi2,
         compute_global_impacts=args.computeHistImpacts and not prefit,
+        profile=profile,
     )
 
     ws.add_expected_hists(
@@ -277,6 +278,7 @@ def save_hists(args, fitter, ws, prefit=True):
         exp, aux = fitter.expected_events(
             inclusive=False,
             compute_variance=args.computeHistErrors,
+            profile=profile,
         )
 
         ws.add_expected_hists(
@@ -304,6 +306,7 @@ def save_hists(args, fitter, ws, prefit=True):
             compute_chi2=not args.noChi2,
             compute_global_impacts=args.computeHistImpacts and not prefit,
             masked=channel_info.get("masked", False),
+            profile=profile,
         )
 
         ws.add_expected_projection_hists(
@@ -329,6 +332,7 @@ def save_hists(args, fitter, ws, prefit=True):
                 inclusive=False,
                 compute_variance=args.computeHistErrors,
                 masked=channel_info.get("masked", False),
+                profile=profile,
             )
 
             ws.add_expected_projection_hists(
@@ -350,6 +354,7 @@ def save_hists(args, fitter, ws, prefit=True):
             inclusive=True,
             compute_variance=False,
             compute_variations=True,
+            profile=profile,
             profile_grad=False,
         )
 
@@ -373,6 +378,7 @@ def save_hists(args, fitter, ws, prefit=True):
                 inclusive=True,
                 compute_variance=False,
                 compute_variations=True,
+                profile=profile,
                 profile_grad=False,
                 masked=channel_info.get("masked", False),
             )
@@ -424,8 +430,6 @@ def fit(args, fitter, ws, dofit=True):
         fitter.x.assign(xvals)
         fitter.cov.assign(tf.constant(covval))
     else:
-        fitter.profile = True
-
         if dofit:
             fitter.minimize()
 
@@ -449,7 +453,7 @@ def fit(args, fitter, ws, dofit=True):
             "nllvalfull": nllvalfull,
             "satnllvalfull": satnllvalfull,
             "ndfsat": ndfsat,
-            "postfit_profile": fitter.profile,
+            "postfit_profile": args.externalPostfit is None,
         }
     )
 
@@ -608,7 +612,13 @@ def main():
             fit_time.append(time.time())
 
             if args.saveHists:
-                save_hists(args, ifitter, ws, prefit=False)
+                save_hists(
+                    args,
+                    ifitter,
+                    ws,
+                    prefit=False,
+                    profile=args.externalPostfit is None,
+                )
 
             ws.dump_and_flush(group)
             postfit_time.append(time.time())
