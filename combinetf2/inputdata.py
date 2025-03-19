@@ -27,94 +27,12 @@ class FitInputData:
                 self.pseudodatanames = []
 
             # load arrays from file
-            hconstraintweights = f["hconstraintweights"]
-            hdata_obs = f["hdata_obs"]
 
             if "hdata_cov_inv" in f.keys():
                 hdata_cov_inv = f["hdata_cov_inv"]
                 self.data_cov_inv = maketensor(hdata_cov_inv)
             else:
                 self.data_cov_inv = None
-
-            self.sparse = not "hnorm" in f
-
-            if self.sparse:
-                print(
-                    "WARNING: The sparse tensor implementation is experimental and probably slower than with a dense tensor!"
-                )
-                hnorm_sparse = f["hnorm_sparse"]
-                hlogk_sparse = f["hlogk_sparse"]
-            else:
-                hnorm = f["hnorm"]
-                hlogk = f["hlogk"]
-
-            # infer some metadata from loaded information
-            self.dtype = hdata_obs.dtype
-            self.nbins = hdata_obs.shape[-1]
-            self.nproc = len(self.procs)
-            self.nsyst = len(self.systs)
-            self.nsystnoprofile = len(self.systsnoprofile)
-            self.nsystnoconstraint = len(self.systsnoconstraint)
-            self.nsignals = len(self.signals)
-            self.nsystgroups = len(self.systgroups)
-            self.nnoigroups = len(self.noigroups)
-
-            # reference meta data if available
-            self.metadata = {}
-            if "meta" in f.keys():
-                # from narf.ioutils import pickle_load_h5py
-                from wums.ioutils import pickle_load_h5py
-
-                self.metadata = pickle_load_h5py(f["meta"])
-                self.channel_info = self.metadata["channel_info"]
-
-            else:
-                self.channel_info = {
-                    "ch0": {
-                        "axes": [
-                            hist.axis.Integer(
-                                0,
-                                self.nbins,
-                                underflow=False,
-                                overflow=False,
-                                name="obs",
-                            )
-                        ]
-                    }
-                }
-
-            self.symmetric_tensor = self.metadata.get("symmetric_tensor", False)
-            self.exponential_transform = self.metadata.get(
-                "exponential_transform", False
-            )
-            self.exponential_transform_scale = self.metadata.get(
-                "exponential_transform_scale", 1000000
-            )
-
-            # compute indices for channels
-            ibin = 0
-            for channel, info in self.channel_info.items():
-                axes = info["axes"]
-                shape = tuple([len(a) for a in axes])
-                size = np.prod(shape)
-
-                start = ibin
-                stop = start + size
-
-                info["start"] = start
-                info["stop"] = stop
-
-                ibin = stop
-
-            for channel, info in self.channel_info.items():
-                print(channel, info)
-
-            self.axis_procs = hist.axis.StrCategory(self.procs, name="processes")
-
-            # build tensorflow graph for likelihood calculation
-
-            # start by creating tensors which read in the hdf5 arrays (optimized for memory consumption)
-            self.constraintweights = maketensor(hconstraintweights)
 
             # load data/pseudodata
             if pseudodata is not None:
@@ -132,17 +50,100 @@ class FitInputData:
                 data_obs = maketensor(hdata_obs)
                 self.data_obs = data_obs[:, pseudodata_idx]
             else:
-                self.data_obs = maketensor(hdata_obs)
+                self.data_obs = maketensor(f["hdata_obs"])
 
             hkstat = f["hkstat"]
             self.kstat = maketensor(hkstat)
 
+            # start by creating tensors which read in the hdf5 arrays (optimized for memory consumption)
+            self.constraintweights = maketensor(f["hconstraintweights"])
+
+            self.sparse = not "hnorm" in f
+
             if self.sparse:
-                self.norm_sparse = makesparsetensor(hnorm_sparse)
-                self.logk_sparse = makesparsetensor(hlogk_sparse)
+                print(
+                    "WARNING: The sparse tensor implementation is experimental and probably slower than with a dense tensor!"
+                )
+                self.norm = makesparsetensor(f["hnorm_sparse"])
+                self.logk = makesparsetensor(f["hlogk_sparse"])
             else:
-                self.norm = maketensor(hnorm)
-                self.logk = maketensor(hlogk)
+                self.norm = maketensor(f["hnorm"])
+                self.logk = maketensor(f["hlogk"])
+
+            # infer some metadata from loaded information
+            self.dtype = self.data_obs.dtype
+            self.nbins = self.data_obs.shape[-1]
+            self.nbinsfull = self.norm.shape[0]
+            self.nbinsmasked = self.nbinsfull - self.nbins
+            self.nproc = len(self.procs)
+            self.nsyst = len(self.systs)
+            self.nsystnoprofile = len(self.systsnoprofile)
+            self.nsystnoconstraint = len(self.systsnoconstraint)
+            self.nsignals = len(self.signals)
+            self.nsystgroups = len(self.systgroups)
+            self.nnoigroups = len(self.noigroups)
+
+            # reference meta data if available
+            self.metadata = {}
+            if "meta" in f.keys():
+                from wums.ioutils import pickle_load_h5py
+
+                self.metadata = pickle_load_h5py(f["meta"])
+                self.channel_info = self.metadata["channel_info"]
+            else:
+                self.channel_info = {
+                    "ch0": {
+                        "axes": [
+                            hist.axis.Integer(
+                                0,
+                                self.nbins,
+                                underflow=False,
+                                overflow=False,
+                                name="obs",
+                            )
+                        ]
+                    }
+                }
+                if self.nbinsmasked:
+                    self.channel_info["ch1_masked"] = {
+                        "axes": [
+                            hist.axis.Integer(
+                                0,
+                                self.nbinsmasked,
+                                underflow=False,
+                                overflow=False,
+                                name="masked",
+                            )
+                        ]
+                    }
+
+            self.symmetric_tensor = self.metadata.get("symmetric_tensor", False)
+            self.exponential_transform = self.metadata.get(
+                "exponential_transform", False
+            )
+            self.exponential_transform_scale = self.metadata.get(
+                "exponential_transform_scale", 1000000
+            )
+
+            # compute indices for channels
+            ibin = 0
+            for channel, info in self.channel_info.items():
+                axes = info["axes"]
+                shape = tuple([len(a) for a in axes])
+                size = int(np.prod(shape))
+
+                start = ibin
+                stop = start + size
+
+                info["start"] = start
+                info["stop"] = stop
+
+                ibin = stop
+
+            for channel, info in self.channel_info.items():
+                print(channel, info)
+
+            self.axis_procs = hist.axis.StrCategory(self.procs, name="processes")
 
             self.normalize = normalize
             if self.normalize:
