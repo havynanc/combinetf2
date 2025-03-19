@@ -165,7 +165,7 @@ jobs:
       - name: nominal fit
         run: >- 
           combinetf2_fit.py $COMBINETF2_OUTDIR/test_tensor.hdf5 -o $COMBINETF2_OUTDIR/
-          -t 0 --binByBinStat --doImpacts --globalImpacts --project ch1 a --project ch1 b
+          -t 0 --binByBinStat --doImpacts --globalImpacts --project ch1 a --project ch1 b --project ch0_masked
           --saveHists --saveHistsPerProcess --computeHistErrors --computeHistCov --computeHistImpacts --computeVariations
 
       - name: sparse tensor fit 
@@ -215,6 +215,9 @@ jobs:
       - name: print global impacts
         run: combinetf2_print_impacts.py $COMBINETF2_OUTDIR/fitresults.hdf5 -s --globalImpacts
 
+      - name: print global impacts of observable
+        run: combinetf2_print_impacts.py $COMBINETF2_OUTDIR/fitresults.hdf5 --globalImpacts --hist ch0_masked yield --ungroup --sort
+
       - name: plot impacts
         run: >-
           combinetf2_plot_pulls_and_impacts.py $COMBINETF2_OUTDIR/fitresults.hdf5 -o $WEB_DIR/$PLOT_DIR
@@ -226,6 +229,13 @@ jobs:
           -r $COMBINETF2_OUTDIR/fitresults_pseudodata.hdf5 --refName "Pseudo data" -s absimpact
           --otherExtensions pdf png -n 50  --config tests/style_config.py --oneSidedImpacts --globalImpacts --diffPullAsym --showNumbers
           --grouping max --subtitle Preliminary --postfix data_vs_pseudodata
+
+      - name: plot global impacts on observable
+        run: >-
+          combinetf2_plot_pulls_and_impacts.py $COMBINETF2_OUTDIR/fitresults.hdf5 -o $WEB_DIR/$PLOT_DIR
+          -s absimpact --hist ch0_masked yield
+          --otherExtensions pdf png -n 50  --config tests/style_config.py --oneSidedImpacts --globalImpacts --showNumbers
+          --grouping max --subtitle Preliminary --postfix ch0_masked
 
       - name: plot prefit distributions
         run: >-

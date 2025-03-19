@@ -348,6 +348,8 @@ def make_plot(
     data = not args.noData and h_data is not None
 
     axes_names = [a.name for a in axes]
+    if len(axes_names) == 0:
+        axes_names = ["yield"]
 
     binwnorm = 1.0
 
@@ -1130,7 +1132,8 @@ def main():
         channel = projection[0]
         axes = projection[1:]
         info = channel_info[channel]
-
+        if len(axes) == 0:
+            axes = ["yield"]
         result = fitresult["channels"][channel]["projections"]["_".join(axes)]
         chi2, ndf, _ = get_chi2(result, args.noChisq, fittype)
 

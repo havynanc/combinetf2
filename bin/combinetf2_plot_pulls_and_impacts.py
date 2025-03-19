@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
+import itertools
 import math
 import os
 import re
@@ -542,6 +543,122 @@ def readFitInfoFromFile(
     return df
 
 
+def readHistImpacts(
+    fitresult,
+    hist_impacts,
+    hist_total,
+    group=False,
+    global_impacts=False,
+    grouping=None,
+    asym=False,
+    filters=[],
+    stat=0.0,
+    normalize=False,
+    scale=1,
+):
+    labels_pulls, pulls, constraints = io_tools.get_pulls_and_constraints(
+        fitresult, asym=asym
+    )
+    labels_pulls_prefit, pulls_prefit, constraints_prefit = (
+        io_tools.get_pulls_and_constraints(fitresult, asym=asym, prefit=True)
+    )
+
+    labels = np.array(hist_impacts.axes["impacts"])
+    impacts = hist_impacts.values()
+
+    labels, idxs, idxs_pulls = np.intersect1d(
+        labels, labels_pulls, assume_unique=True, return_indices=True
+    )
+
+    pulls = pulls[idxs_pulls]
+    constraints = constraints[idxs_pulls]
+    pulls_prefit = pulls_prefit[idxs_pulls]
+    constraints_prefit = constraints_prefit[idxs_pulls]
+
+    impacts = impacts[idxs]
+
+    total = np.sqrt(hist_total.variance)
+    if group:
+        impacts = np.append(impacts, total)
+        labels = np.append(labels, "Total")
+
+    # if args.relative:
+    #     unit = "rel. unc. in %"
+    #     impacts /= hist_total.value
+    #     scale=100
+    # elif lumi is not None:
+    #     unit = "bin/lumi unc. in /pb"
+    #     impacts /= lumi
+    #     scale=1
+    # else:
+    #     unit = "bin unc."
+    #     scale=1
+
+    if normalize:
+        impacts /= total
+
+    if stat > 0 and "stat" in labels:
+        idx = np.argwhere(labels == "stat")
+        impacts[idx] = stat
+
+    apply_mask = (group and grouping is not None) or filters is not None
+
+    if apply_mask:
+        mask = np.ones(len(labels), dtype=bool)
+
+        if group and grouping:
+            mask &= np.isin(labels, grouping)  # Check if labels are in the grouping
+
+        if filters:
+            mask &= np.array(
+                [any(re.search(f, label) for f in filters) for label in labels]
+            )  # Apply regex filter
+
+        labels = labels[mask]
+
+    df = pd.DataFrame(np.array(labels, dtype=str), columns=["label"])
+
+    if apply_mask:
+        impacts = impacts[mask]
+
+    if scale and not normalize:
+        impacts = impacts * scale
+
+    if asym:
+        df["impact_down"] = impacts[..., 1]
+        df["impact_up"] = impacts[..., 0]
+        df["absimpact"] = np.abs(impacts).max(axis=-1)
+    else:
+        df["impact_down"] = -impacts
+        df["impact_up"] = impacts
+        df["absimpact"] = np.abs(impacts)
+
+    if not group:
+        if apply_mask:
+            pulls = pulls[mask]
+            constraints = constraints[mask]
+            pulls_prefit = pulls_prefit[mask]
+            constraints_prefit = constraints_prefit[mask]
+
+        df["pull"] = pulls
+        df["pull_prefit"] = pulls_prefit
+        df["pull"] = pulls - pulls_prefit
+        df["abspull"] = np.abs(df["pull"])
+
+        if asym:
+            df["constraint_down"] = -constraints[..., 1]
+            df["constraint_up"] = constraints[..., 0]
+        else:
+            df["constraint"] = constraints
+            valid = (1 - constraints**2) > 0
+            df["newpull"] = 999.0
+            df.loc[valid, "newpull"] = df.loc[valid]["pull"] / np.sqrt(
+                1 - df.loc[valid]["constraint"] ** 2
+            )
+
+    return df
+
+
 def parseArgs():
     sort_choices = ["label", "pull", "abspull", "constraint", "absimpact"]
     sort_choices += [
@@ -565,6 +682,13 @@ def parseArgs():
         default=None,
         type=str,
         help="fitresults key in file (e.g. 'asimov'). Leave empty for data fit result.",
+    )
+    parser.add_argument(
+        "--hist",
+        default=None,
+        type=str,
+        nargs="+",
+        help="Print impacts on observables use '--hist channel' or for projections '--hist channel ax0 ax1'.",
     )
     parser.add_argument(
         "-r",
@@ -668,7 +792,7 @@ def parseArgs():
         help="Show global impacts instead of traditional ones",
     )
     parser.add_argument(
-        "--asym",
+        "--asymImpacts",
         action="store_true",
         help="Show asymmetric numbers from likelihood confidence intervals",
     )
@@ -726,79 +850,18 @@ def parseArgs():
     return parser.parse_args()
 
 
-def producePlots(
-    fitresult,
+def make_plots(
+    df,
     args,
     outdir,
     outfile,
-    poi=None,
     group=False,
     asym=False,
-    normalize=False,
-    fitresult_ref=None,
-    grouping=None,
     pullrange=None,
     meta=None,
     postfix=None,
     impact_title=None,
-    translate_label={},
 ):
-    poi_type = poi.split("_")[-1] if poi else None
-
-    if not group:
-        df = readFitInfoFromFile(
-            fitresult,
-            poi,
-            False,
-            asym=asym,
-            global_impacts=args.globalImpacts,
-            filters=args.filters,
-            stat=args.stat / 100.0,
-            normalize=normalize,
-            scale=args.scaleImpacts,
-        )
-    elif group:
-        df = readFitInfoFromFile(
-            fitresult,
-            poi,
-            True,
-            global_impacts=args.globalImpacts,
-            filters=args.filters,
-            stat=args.stat / 100.0,
-            normalize=normalize,
-            grouping=grouping,
-            scale=args.scaleImpacts,
-        )
-
-    if fitresult_ref:
-        df_ref = readFitInfoFromFile(
-            fitresult_ref,
-            poi,
-            group,
-            asym=asym,
-            global_impacts=args.globalImpacts,
-            filters=args.filters,
-            stat=args.stat / 100.0,
-            normalize=normalize,
-            grouping=grouping,
-            scale=args.scaleImpacts,
-        )
-        df = df.merge(df_ref, how="outer", on="label", suffixes=("", "_ref"))
-
-    df["label"] = df["label"].apply(lambda l: translate_label.get(l, l))
-
-    if df.empty:
-        print("WARNING: Empty dataframe")
-        if group and grouping:
-            print(
-                f"WARNING: This can happen if no group is found that belongs to {grouping}"
-            )
-            print(
-                "WARNING: Try a different mode for --grouping or use '--mode ungrouped' to skip making impacts for groups"
-            )
-        print("WARNING: Skipping this part")
-        return
-
     if args.sort:
         if args.sort.endswith("diff"):
             key = args.sort.replace("_diff", "")
@@ -856,6 +919,236 @@ def producePlots(
     writeOutput(fig, outfile, extensions, postfix=postfix, args=args, meta_info=meta)
 
 
+def load_dataframe_parms(
+    args,
+    fitresult,
+    poi=None,
+    group=False,
+    asym=False,
+    normalize=False,
+    fitresult_ref=None,
+    grouping=None,
+    translate_label={},
+):
+    poi_type = poi.split("_")[-1] if poi else None
+
+    if not group:
+        df = readFitInfoFromFile(
+            fitresult,
+            poi,
+            False,
+            asym=asym,
+            global_impacts=args.globalImpacts,
+            filters=args.filters,
+            stat=args.stat / 100.0,
+            normalize=normalize,
+            scale=args.scaleImpacts,
+        )
+    elif group:
+        df = readFitInfoFromFile(
+            fitresult,
+            poi,
+            True,
+            global_impacts=args.globalImpacts,
+            filters=args.filters,
+            stat=args.stat / 100.0,
+            normalize=normalize,
+            grouping=grouping,
+            scale=args.scaleImpacts,
+        )
+
+    if fitresult_ref:
+        df_ref = readFitInfoFromFile(
+            fitresult_ref,
+            poi,
+            group,
+            asym=asym,
+            global_impacts=args.globalImpacts,
+            filters=args.filters,
+            stat=args.stat / 100.0,
+            normalize=normalize,
+            grouping=grouping,
+            scale=args.scaleImpacts,
+        )
+        df = df.merge(df_ref, how="outer", on="label", suffixes=("", "_ref"))
+
+    df["label"] = df["label"].apply(lambda l: translate_label.get(l, l))
+
+    if df.empty:
+        print("WARNING: Empty dataframe")
+        if group and grouping:
+            print(
+                f"WARNING: This can happen if no group is found that belongs to {grouping}"
+            )
+            print(
+                "WARNING: Try a different mode for --grouping or use '--mode ungrouped' to skip making impacts for groups"
+            )
+        print("WARNING: Skipping this part")
+        return None
+    else:
+        return df
+
+
+def load_dataframe_hists(
+    fitresult,
+    args,
+    hist_impacts,
+    hist_total,
+    ibin=None,
+    group=False,
+    asym=False,
+    normalize=False,
+    fitresult_ref=None,
+    hist_impacts_ref=None,
+    hist_total_ref=None,
+    grouping=None,
+    translate_label={},
+):
+    df = readHistImpacts(
+        fitresult,
+        hist_impacts,
+        hist_total,
+        group,
+        global_impacts=args.globalImpacts,
+        filters=args.filters,
+        stat=args.stat / 100.0,
+        normalize=normalize,
+        grouping=grouping,
+        scale=args.scaleImpacts,
+    )
+
+    if fitresult_ref:
+        df_ref = readHistImpacts(
+            fitresult_ref,
+            hist_impacts_ref,
+            hist_total_ref,
+            group,
+            global_impacts=args.globalImpacts,
+            filters=args.filters,
+            stat=args.stat / 100.0,
+            normalize=normalize,
+            grouping=grouping,
+            scale=args.scaleImpacts,
+        )
+        df = df.merge(df_ref, how="outer", on="label", suffixes=("", "_ref"))
+
+    df["label"] = df["label"].apply(lambda l: translate_label.get(l, l))
+
+    if df.empty:
+        print("WARNING: Empty dataframe")
+        if group and grouping:
+            print(
+                f"WARNING: This can happen if no group is found that belongs to {grouping}"
+            )
+            print(
+                "WARNING: Try a different mode for --grouping or use '--mode ungrouped' to skip making impacts for groups"
+            )
+        print("WARNING: Skipping this part")
+        return None
+    else:
+        return df
+
+
+def produce_plots_parms(
+    args,
+    fitresult,
+    outdir,
+    outfile,
+    poi=None,
+    group=False,
+    asym=False,
+    normalize=False,
+    fitresult_ref=None,
+    pullrange=None,
+    meta=None,
+    postfix=None,
+    impact_title=None,
+    grouping=None,
+    translate_label={},
+):
+
+    df = load_dataframe_parms(
+        args,
+        fitresult,
+        poi=poi,
+        group=group,
+        asym=asym,
+        normalize=normalize,
+        fitresult_ref=fitresult_ref,
+        grouping=grouping,
+        translate_label=translate_label,
+    )
+
+    if df is None:
+        return
+
+    make_plots(
+        df,
+        args,
+        outdir,
+        outfile,
+        group=group,
+        asym=asym,
+        pullrange=pullrange,
+        meta=meta,
+        postfix=postfix,
+        impact_title=impact_title,
+    )
+
+
+def produce_plots_hist(
+    args,
+    fitresult,
+    outdir,
+    outfile,
+    hist_impacts,
+    hist_total,
+    ibin=None,
+    lumi=None,
+    group=False,
+    asym=False,
+    normalize=False,
+    fitresult_ref=None,
+    hist_impacts_ref=None,
+    hist_total_ref=None,
+    pullrange=None,
+    meta=None,
+    postfix=None,
+    impact_title=None,
+    grouping=None,
+    translate_label={},
+):
+
+    df = load_dataframe_hists(
+        fitresult,
+        args,
+        hist_impacts,
+        hist_total,
+        ibin=ibin,
+        group=group,
+        asym=asym,
+        normalize=normalize,
+        fitresult_ref=fitresult_ref,
+        grouping=grouping,
+        translate_label=translate_label,
+    )
+    if df is None:
+        return
+
+    make_plots(
+        df,
+        args,
+        outdir,
+        outfile,
+        group=group,
+        asym=asym,
+        pullrange=pullrange,
+        meta=meta,
+        postfix=postfix,
+        impact_title=impact_title,
+    )
+
+
 def main():
     args = parseArgs()
 
@@ -878,7 +1171,7 @@ def main():
 
     kwargs = dict(
         pullrange=args.pullrange,
-        asym=args.asym,
+        asym=args.asymImpacts,
         fitresult_ref=fitresult_ref,
         meta=meta_out,
         postfix=args.postfix,
@@ -887,10 +1180,8 @@ def main():
 
     if args.noImpacts:
         # do one pulls plot, ungrouped
-        producePlots(fitresult, args, outdir, outfile="pulls.html", **kwargs)
+        produce_plots_parms(args, fitresult, outdir, outfile="pulls.html", **kwargs)
         exit()
-
-    pois = [args.poi] if args.poi else io_tools.get_poi_names(meta)
 
     kwargs.update(dict(normalize=args.normalize, impact_title=args.impactTitle))
 
@@ -902,24 +1193,104 @@ def main():
     if args.grouping is not None:
         grouping = getattr(config, "nuisance_grouping", {}).get(args.grouping, None)
 
-    for poi in pois:
-        print(f"Now at {poi}")
-        if args.mode in ["both", "ungrouped"]:
-            name = f"{impacts_name}_{poi}.html"
-            if not args.noPulls:
-                name = f"pulls_and_{name}"
-            producePlots(fitresult, args, outdir, outfile=name, poi=poi, **kwargs)
-        if args.mode in ["both", "group"]:
-            producePlots(
-                fitresult,
-                args,
-                outdir,
-                outfile=f"{impacts_name}_grouped_{poi}.html",
-                poi=poi,
-                group=True,
-                grouping=grouping,
-                **kwargs,
+    if args.hist is not None:
+        if args.asymImpacts:
+            raise NotImplementedError(
+                "Asymetric impacts on observables is not yet implemented"
             )
+        if not args.globalImpacts:
+            raise NotImplementedError(
+                "Only global impacts on observables is implemented (use --globalImpacts)"
+            )
+
+        channel = args.hist[0]
+        projection_axes = args.hist[1:]
+        channel_hists = fitresult["channels"][channel]
+
+        if len(projection_axes) > 0:
+            projection_hists = channel_hists["projections"]
+            key = "_".join(projection_axes)
+            if key not in projection_hists.keys():
+                available = [k.split("_") for k in projection_hists.keys()]
+                raise ValueError(
+                    f"Histogram projection with axes {projection_axes} not found! Available histograms: {available}"
+                )
+            hists = projection_hists[key]
+        else:
+            hists = channel_hists
+
+        modes = ["ungrouped", "group"] if args.mode == "both" else [args.mode]
+        for mode in modes:
+            group = mode == "group"
+
+            key = "hist_postfit_inclusive_global_impacts"
+            if group:
+                key += "_grouped"
+
+            hist_total = hists["hist_postfit_inclusive"].get()
+
+            hist = hists[key].get()
+
+            # TODO: implement ref
+            # hist_ref
+            # hist_total_ref
+
+            # lumi in pb-1
+            lumi = (
+                meta["meta_info_input"]["channel_info"]["ch0"].get("lumi", 0.001) * 1000
+            )
+
+            for idxs in itertools.product(
+                *[np.arange(a.size) for a in hist_total.axes]
+            ):
+                ibin = {a: i for a, i in zip(hist_total.axes.name, idxs)}
+                print(f"Now at {ibin}")
+
+                ibin_str = "_".join([f"{a}{i}" for a, i in ibin.items()])
+                if group:
+                    outfile = f"{impacts_name}_grouped_{ibin_str}.html"
+                else:
+                    outfile = f"{impacts_name}_{ibin_str}.html"
+                    if not args.noPulls:
+                        outfile = f"pulls_and_{outfile}"
+
+                produce_plots_hist(
+                    args,
+                    fitresult,
+                    outdir,
+                    outfile,
+                    hist[ibin],
+                    hist_total[ibin],
+                    ibin,
+                    lumi,
+                    group=group,
+                    grouping=grouping,
+                    hist_impacts_ref=None,
+                    hist_total_ref=None,
+                    **kwargs,
+                )
+    else:
+        pois = [args.poi] if args.poi else io_tools.get_poi_names(meta)
+        for poi in pois:
+            print(f"Now at {poi}")
+            if args.mode in ["both", "ungrouped"]:
+                name = f"{impacts_name}_{poi}.html"
+                if not args.noPulls:
+                    name = f"pulls_and_{name}"
+                produce_plots_parms(
+                    args, fitresult, outdir, outfile=name, poi=poi, **kwargs
+                )
+            if args.mode in ["both", "group"]:
+                produce_plots_parms(
+                    args,
+                    fitresult,
+                    outdir,
+                    outfile=f"{impacts_name}_grouped_{poi}.html",
+                    poi=poi,
+                    group=True,
+                    grouping=grouping,
+                    **kwargs,
+                )
 
     output_tools.write_indexfile(outdir)
 

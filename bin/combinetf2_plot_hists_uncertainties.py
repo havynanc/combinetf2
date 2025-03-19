@@ -316,6 +316,12 @@ def make_plot(
             # unrolled ND histograms
             h_impact = hh.unrolledHist(h_impact, obs=[a.name for a in axes])
 
+        if len(h_impacts.axes) == 1:
+            h_impact = hist.Hist(
+                hist.axis.Integer(0, 1, name="yield", overflow=False, underflow=False),
+                data=h_impact.value,
+            )
+
         hep.histplot(
             h_impact,
             xerr=False,
@@ -339,6 +345,7 @@ def make_plot(
             yerr=False,
             histtype="step",
             color="black",
+            linestyle="dashed",
             label=translate_label.get("Total", "Total"),
             density=False,
             ax=ax1,
@@ -421,17 +428,19 @@ def make_plots(
 
     hist_total = result["hist_postfit_inclusive"].get()
 
+    if hist_impacts is not None:
+        uncertainties = np.array(hist_impacts.axes["impacts"], dtype=str)
+    else:
+        uncertainties = np.array([])
+
     if not args.absolute:
         # give impacts as relative uncertainty
         if hist_impacts is not None:
             hist_impacts = hh.divideHists(hist_impacts, hist_total, rel_unc=True)
             hist_impacts = hh.scaleHist(hist_impacts, 100)  # impacts in %
-            uncertainties = np.array(hist_impacts.axes["impacts"], dtype=str)
-        else:
-            uncertainties = np.array([])
+            hist_total = hh.scaleHist(hist_total, 100)
 
         hist_total = hh.divideHists(hist_total, hist_total, rel_unc=True)
-        hist_total = hh.scaleHist(hist_total, 100)
 
     hist_total.values()[...] = hist_total.variances()[...] ** 0.5
 
@@ -571,7 +580,8 @@ def main():
         channel = projection[0]
         axes = projection[1:]
         info = channel_info[channel]
-
+        if len(axes) == 0:
+            axes = ["yield"]
         result = fitresult["channels"][channel]["projections"]["_".join(axes)]
 
         make_plots(
