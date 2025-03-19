@@ -402,6 +402,8 @@ def save_hists(args, fitter, ws, prefit=True, profile=False):
 
 def fit(args, fitter, ws, dofit=True):
 
+    edmval = None
+
     if args.externalPostfit is not None:
         # load results from external fit and set postfit value and covariance elements for common parameters
         with h5py.File(args.externalPostfit, "r") as fext:
@@ -436,8 +438,22 @@ def fit(args, fitter, ws, dofit=True):
         if dofit:
             fitter.minimize()
 
+        # compute the covariance matrix and estimated distance to minimum
+
         val, grad, hess = fitter.loss_val_grad_hess()
-        fitter.cov.assign(tf.linalg.inv(hess))
+
+
+        # use a Cholesky decomposition to easily detect the non-positive-definite case
+        chol = tf.linalg.cholesky(hess)
+        del hess
+
+        gradv = grad[..., None]
+        edmval = 0.5 * tf.linalg.matmul(gradv, tf.linalg.cholesky_solve(chol, gradv), transpose_a=True)
+        print(edmval)
+
+        fitter.cov.assign(tf.linalg.cholesky_solve(chol, tf.eye(chol.shape[0], dtype=chol.dtype)))
+
+        del chol
 
         if args.doImpacts:
             ws.add_impacts_hists(*fitter.impacts_parms(hess))
@@ -454,6 +470,7 @@ def fit(args, fitter, ws, dofit=True):
     ws.results.update(
         {
             "nllvalfull": nllvalfull,
+            "edmval": edmval,
             "satnllvalfull": satnllvalfull,
             "ndfsat": ndfsat,
             "postfit_profile": args.externalPostfit is None,
