@@ -87,9 +87,16 @@ class Fitter:
         )
 
         # global observables for mc stat uncertainty
-        self.beta0 = tf.Variable(
-            tf.ones_like(self.indata.kstat), trainable=False, name="beta0"
-        )
+        if self.indata.systematic_type == "log_normal":
+            self.beta0 = tf.Variable(
+                tf.ones_like(self.indata.kstat), trainable=False, name="beta0"
+            )
+        elif self.indata.systematic_type == "normal":
+            self.beta0 = tf.Variable(
+                tf.zeros_like(self.indata.kstat), trainable=False, name="beta0"
+            )
+        else:
+            raise RuntimeError(f"Invalid systematic_type {self.indata.systematic_type}, valid choices are 'log_normal' or 'normal'")
 
         self.nexpnom = tf.Variable(
             self.expected_yield(), trainable=False, name="nexpnom"
@@ -131,7 +138,12 @@ class Fitter:
             self.x.assign(tf.concat([self.xpoidefault, self.theta0], axis=0))
 
     def beta0defaultassign(self):
-        self.beta0.assign(tf.ones_like(self.indata.kstat, dtype=self.beta0.dtype))
+        if self.indata.systematic_type == "log_normal":
+            self.beta0.assign(tf.ones_like(self.indata.kstat, dtype=self.beta0.dtype))
+        elif self.indata.systematic_type == "normal":
+            self.beta0.assign(tf.zeros_like(self.indata.kstat, dtype=self.beta0.dtype))
+        else:
+            raise RuntimeError(f"Invalid systematic_type {self.indata.systematic_type}, valid choices are 'log_normal' or 'normal'")
 
     def defaultassign(self):
         self.cov.assign(self.prefit_covariance())
@@ -616,11 +628,21 @@ class Fitter:
         if self.indata.sparse:
             logsnorm = tf.sparse.sparse_dense_matmul(self.indata.logk, mthetaalpha)
             logsnorm = tf.squeeze(logsnorm, -1)
-            snorm = tf.exp(logsnorm)
 
-            snormnorm_sparse = self.indata.norm.with_values(
-                snorm * self.indata.norm.values
-            )
+            if self.indata.systematic_type == "log_normal":
+                snorm = tf.exp(logsnorm)
+                snormnorm_sparse = self.indata.norm.with_values(
+                    snorm * self.indata.norm.values
+                )
+            elif self.indata.systematic_type == "normal":
+                snormnorm_sparse = self.indata.norm.with_values(
+                    self.indata.norm.values + logsnorm
+                )
+            else:
+                raise RuntimeError(f"Invalid systematic_type {self.indata.systematic_type}, valid choices are 'log_normal' or 'normal'")
+
+            nexpfullcentral = tf.sparse.sparse_dense_matmul(snormnorm_sparse, mrnorm)
+            nexpfullcentral = tf.squeeze(nexpfullcentral, -1)
 
             if not full and self.indata.nbinsmasked:
                 snormnorm_sparse = simple_sparse_slice0end(
@@ -656,9 +678,14 @@ class Fitter:
             logsnorm = tf.matmul(mlogk, mthetaalpha)
             logsnorm = tf.reshape(logsnorm, [nbins, self.indata.nproc])
 
-            snorm = tf.exp(logsnorm)
+            if self.indata.systematic_type == "log_normal":
+                snorm = tf.exp(logsnorm)
+                snormnorm = snorm * norm
+            elif self.indata.systematic_type == "normal":
+                snormnorm = norm + logsnorm
+            else:
+                raise RuntimeError(f"Invalid systematic_type {self.indata.systematic_type}, valid choices are 'log_normal' or 'normal'")
 
-            snormnorm = snorm * norm
             nexpcentral = tf.matmul(snormnorm, mrnorm)
             nexpcentral = tf.squeeze(nexpcentral, -1)
 
@@ -683,20 +710,53 @@ class Fitter:
     ):
         nexp, norm = self._compute_yields_noBBB(compute_norm, full=full)
 
+        nexp_profile = nexp[: self.indata.nbins]
+        kstat = self.indata.kstat[: self.indata.nbins]
+        beta0 = self.beta0[: self.indata.nbins]
+
         if self.binByBinStat:
             if profile:
-                beta = (self.nobs + self.indata.kstat[: self.indata.nbins]) / (
-                    nexp[: self.indata.nbins] + self.indata.kstat[: self.indata.nbins]
-                )
+                # analytic solution for profiled barlow-beeston lite parameters for each combination
+                # of likelihood and uncertainty form
+                if self.chisqFit:
+                    if self.indata.systematic_type == "log_normal":
+                        abeta = nexp_profile**2
+                        bbeta = kstat*self.nobs - nexp_profile*self.nobs
+                        cbeta = -kstat*self.nobs
+                        beta = 0.5*(-bbeta + tf.sqrt(bbeta**2 -4.*abeta*cbeta))/abeta
+                    elif self.indata.systematic_type == "normal":
+                        sigmabetasq = self.nobs**2/kstat
+                        beta = sigmabetasq*(self.nobs - nexp_profile)/(self.nobs + sigmabetasq)
+                    else:
+                        raise RuntimeError(f"Invalid systematic_type {self.indata.systematic_type}, valid choices are 'log_normal' or 'normal'")
+                else:
+                    if self.indata.systematic_type == "log_normal":
+                        beta = (self.nobs + kstat) / (
+                            nexp_profile + kstat
+                        )
+                    elif self.indata.systematic_type == "normal":
+                        sigmabetasq = self.nobs**2/kstat
+                        bbeta = sigmabetasq + self.nobs
+                        cbeta = sigmabetasq*(nexp_profile - self.nobs)
+                        beta = 0.5*(-bbeta + tf.sqrt(bbeta**2 -4.*cbeta))
+                    else:
+                        raise RuntimeError(f"Invalid systematic_type {self.indata.systematic_type}, valid choices are 'log_normal' or 'normal'")
+
                 if not profile_grad:
                     beta = tf.stop_gradient(beta)
             else:
-                beta = self.beta0[: self.indata.nbins]
+                beta = beta0
 
             if full and self.indata.nbinsmasked:
                 beta = tf.concat([beta, self.beta0[self.indata.nbins :]], axis=0)
 
-            nexp = beta * nexp
+            if self.indata.systematic_type == "log_normal":
+                nexp = nexp*beta
+            elif self.indata.systematic_type == "normal":
+                nexp = nexp + beta
+            else:
+                raise RuntimeError(f"Invalid systematic_type {self.indata.systematic_type}, valid choices are 'log_normal' or 'normal'")
+
             if compute_norm:
                 norm = beta[..., None] * norm
         else:
@@ -1034,15 +1094,21 @@ class Fitter:
         lfull = lnfull + lc
 
         if self.binByBinStat:
-            lbetavfull = (
-                -self.indata.kstat[: self.indata.nbins]
-                * tf.math.log(beta / self.beta0[: self.indata.nbins])
-                + self.indata.kstat[: self.indata.nbins]
-                * beta
-                / self.beta0[: self.indata.nbins]
-            )
+            kstat = self.indata.kstat[: self.indata.nbins]
+            beta0 = self.beta0[: self.indata.nbins]
+            if self.indata.systematic_type == "log_normal":
+                lbetavfull = (
+                    -kstat * tf.math.log(beta / beta0)
+                    + kstat * beta / beta0
+                )
 
-            lbetav = lbetavfull - self.indata.kstat[: self.indata.nbins]
+                lbetav = lbetavfull - kstat
+            elif self.indata.systematic_type == "normal":
+                lbetavfull = 0.5*(beta - beta0)**2*kstat/self.nobs**2
+                lbetav = lbetavfull
+            else:
+                raise RuntimeError(f"Invalid systematic_type {self.indata.systematic_type}, valid choices are 'log_normal' or 'normal'")
+
             lbeta = tf.reduce_sum(lbetav)
 
             l = l + lbeta
