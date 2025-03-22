@@ -165,14 +165,14 @@ jobs:
       - name: nominal fit
         run: >- 
           combinetf2_fit.py $COMBINETF2_OUTDIR/test_tensor.hdf5 -o $COMBINETF2_OUTDIR/
-          -t 0 --binByBinStat --doImpacts --globalImpacts --project ch1 a --project ch1 b --project ch0_masked
+          -t 0 --binByBinStat --doImpacts --globalImpacts -m Project ch1 a -m Project ch1 b -m Project ch0_masked
           --saveHists --saveHistsPerProcess --computeHistErrors --computeHistCov --computeHistImpacts --computeVariations
 
       - name: sparse tensor fit 
         run: >- 
           combinetf2_fit.py $COMBINETF2_OUTDIR/test_tensor_sparse.hdf5 -o $COMBINETF2_OUTDIR/ --postfix sparse
           -t -0 --binByBinStat --doImpacts --globalImpacts --computeVariations
-          --saveHists --saveHistsPerProcess --computeHistErrors --project ch1 a --project ch1 b 
+          --saveHists --saveHistsPerProcess --computeHistErrors -m Project ch1 a -m Project ch1 b 
 
       - name: pseudodata fit
         run: >- 
@@ -183,7 +183,7 @@ jobs:
         run: >- 
           combinetf2_fit.py $COMBINETF2_OUTDIR/test_tensor.hdf5 -o $COMBINETF2_OUTDIR/ --postfix chi2
           -t -0 --chisqFit --externalCovariance --doImpacts --globalImpacts 
-          --saveHists --saveHistsPerProcess --computeHistErrors --project ch1 a --project ch1 b 
+          --saveHists --saveHistsPerProcess --computeHistErrors -m Project ch1 a -m Project ch1 b 
 
 
   plotting:
