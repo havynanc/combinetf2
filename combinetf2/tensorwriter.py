@@ -15,7 +15,7 @@ class TensorWriter:
         self,
         sparse=False,
         exponential_transform=False,
-        systematic_type = "log_normal",
+        systematic_type="log_normal",
         allow_negative_expectation=False,
     ):
         self.allow_negative_expectation = allow_negative_expectation
@@ -297,7 +297,7 @@ class TensorWriter:
                 self.logkepsilon * np.ones_like(_logk),
             )
 
-            #FIXME does this actually take effect since _logk_view is normally returned?
+            # FIXME does this actually take effect since _logk_view is normally returned?
             if self.clipSystVariations > 0.0:
                 _logk = np.clip(_logk, -self.clip, self.clip)
             if self.exponential_transform:
@@ -305,10 +305,12 @@ class TensorWriter:
             else:
                 return _logk_view
         elif self.systematic_type == "normal":
-            _logk = kfac*(syst - norm)
+            _logk = kfac * (syst - norm)
             return _logk
         else:
-            raise RuntimeError(f"Invalid systematic_type {self.indata.systematic_type}, valid choices are 'log_normal' or 'normal'")
+            raise RuntimeError(
+                f"Invalid systematic_type {self.indata.systematic_type}, valid choices are 'log_normal' or 'normal'"
+            )
 
     def book_logk_avg(self, *args):
         self.book_logk(
@@ -671,7 +673,7 @@ class TensorWriter:
             "symmetric_tensor": self.symmetric_tensor,
             "exponential_transform": self.exponential_transform,
             "exponential_transform_scale": self.exponential_transform_scale,
-            "systematic_type" : self.systematic_type,
+            "systematic_type": self.systematic_type,
         }
 
         ioutils.pickle_dump_h5py("meta", meta, f)

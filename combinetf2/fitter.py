@@ -7,6 +7,7 @@ from combinetf2.tfhelpers import simple_sparse_slice0end
 
 logger = logging.child_logger(__name__)
 
+
 class Fitter:
     def __init__(self, indata, options):
         self.indata = indata
@@ -22,16 +23,24 @@ class Fitter:
             raise Exception(
                 'option "--externalCovariance" only works with "--chisqFit"'
             )
-        if options.externalCovariance and options.binByBinStat and options.binByBinStat_type != "normal":
+        if (
+            options.externalCovariance
+            and options.binByBinStat
+            and options.binByBinStat_type != "normal"
+        ):
             raise Exception(
                 'option "--binByBinStat" only for options "--externalCovariance" with "--binByBinStat_type normal"'
             )
 
         if self.binByBinStat_type not in ["gamma", "normal"]:
-            raise RuntimeError(f"Invalid binByBinStat_type {self.indata.binByBinStat_type}, valid choices are 'gamma' or 'normal'")
+            raise RuntimeError(
+                f"Invalid binByBinStat_type {self.indata.binByBinStat_type}, valid choices are 'gamma' or 'normal'"
+            )
 
         if self.indata.systematic_type not in ["log_normal", "normal"]:
-            raise RuntimeError(f"Invalid systematic_type {self.indata.systematic_type}, valid choices are 'log_normal' or 'normal'")
+            raise RuntimeError(
+                f"Invalid systematic_type {self.indata.systematic_type}, valid choices are 'log_normal' or 'normal'"
+            )
 
         self.chisqFit = options.chisqFit
         self.externalCovariance = options.externalCovariance
@@ -98,15 +107,11 @@ class Fitter:
         # computation (corresponding disconnected gradient is propagated as zero rather than skipping it entirely)
 
         # global observables for mc stat uncertainty
-        self.beta0 = tf.Variable(
-            self._default_beta0(), trainable=False, name="beta0"
-        )
+        self.beta0 = tf.Variable(self._default_beta0(), trainable=False, name="beta0")
 
         if self.binByBinStat:
             # nuisance parameters for mc stat uncertainty
-            self.beta = tf.Variable(
-                self.beta0, trainable=False, name="beta"
-            )
+            self.beta = tf.Variable(self.beta0, trainable=False, name="beta")
 
             # cache the constraint variance since it's used in several places
             # this is treated as a constant
@@ -114,12 +119,14 @@ class Fitter:
                 self.varbeta = tf.stop_gradient(tf.math.reciprocal(self.indata.kstat))
             elif self.binByBinStat_type == "normal":
                 n0 = self.expected_events_nominal()
-                self.varbeta = tf.stop_gradient(n0**2/self.indata.kstat)
+                self.varbeta = tf.stop_gradient(n0**2 / self.indata.kstat)
 
                 if self.externalCovariance:
                     # precompute decomposition of composite matrix to speed up
                     # calculation of profiled beta values
-                    self.betaauxlu = tf.linalg.lu(self.data_cov_inv + tf.diag(tf.reciprocal(self.varbeta)))
+                    self.betaauxlu = tf.linalg.lu(
+                        self.data_cov_inv + tf.diag(tf.reciprocal(self.varbeta))
+                    )
 
         self.nexpnom = tf.Variable(
             self.expected_yield(), trainable=False, name="nexpnom"
@@ -129,7 +136,13 @@ class Fitter:
         self.cov = tf.Variable(self.prefit_covariance(), trainable=False, name="cov")
 
         # determine if problem is linear (ie likelihood is purely quadratic)
-        self.is_linear = self.chisqFit and self.indata.symmetric_tensor and self.indata.systematic_type == "normal" and self.npoi == 0 and ((not self.binByBinStat) or self.binByBinStat_type == "normal")
+        self.is_linear = (
+            self.chisqFit
+            and self.indata.symmetric_tensor
+            and self.indata.systematic_type == "normal"
+            and self.npoi == 0
+            and ((not self.binByBinStat) or self.binByBinStat_type == "normal")
+        )
 
     def _default_beta0(self):
         if self.binByBinStat_type == "gamma":
@@ -209,17 +222,18 @@ class Fitter:
                 self.beta.assign(
                     tf.random.gamma(
                         shape=[],
-                        alpha=self.indata.kstat*self.beta0 + 1.0,
+                        alpha=self.indata.kstat * self.beta0 + 1.0,
                         beta=tf.ones_like(self.indata.kstat),
                         dtype=self.beta.dtype,
-                    )/self.indata.kstat
+                    )
+                    / self.indata.kstat
                 )
             elif self.binByBinStat_type == "normal":
                 self.beta.assign(
                     tf.random.normal(
                         shape=[],
-                        mean = self.beta0,
-                        sigma = tf.sqrt(self.varbeta),
+                        mean=self.beta0,
+                        sigma=tf.sqrt(self.varbeta),
                         dtype=self.beta.dtype,
                     )
                 )
@@ -234,16 +248,17 @@ class Fitter:
                 self.beta0.assign(
                     tf.random.poisson(
                         shape=[],
-                        lam=self.indata.kstat*self.beta,
+                        lam=self.indata.kstat * self.beta,
                         dtype=self.beta.dtype,
-                    )/self.indata.kstat
+                    )
+                    / self.indata.kstat
                 )
             elif self.binByBinStat_type == "normal":
                 self.beta0.assign(
                     tf.random.normal(
                         shape=[],
-                        mean = self.beta,
-                        sigma = tf.sqrt(self.varbeta),
+                        mean=self.beta,
+                        sigma=tf.sqrt(self.varbeta),
                         dtype=self.beta.dtype,
                     )
                 )
@@ -372,9 +387,7 @@ class Fitter:
 
             # FIXME consider implications of using kstat*beta as the variance
             impacts_bbb = tf.sqrt(
-                tf.reduce_sum(
-                    tf.square(dxdbeta0) * self.varbeta, axis=-1
-                )
+                tf.reduce_sum(tf.square(dxdbeta0) * self.varbeta, axis=-1)
             )
             impacts_bbb = tf.reshape(impacts_bbb, (-1, 1))
             impacts_grouped = tf.concat([impacts_data_stat, impacts_bbb], axis=1)
@@ -695,7 +708,9 @@ class Fitter:
                     self.indata.norm.values + logsnorm
                 )
             else:
-                raise RuntimeError(f"Invalid systematic_type {self.indata.systematic_type}, valid choices are 'log_normal' or 'normal'")
+                raise RuntimeError(
+                    f"Invalid systematic_type {self.indata.systematic_type}, valid choices are 'log_normal' or 'normal'"
+                )
 
             nexpfullcentral = tf.sparse.sparse_dense_matmul(snormnorm_sparse, mrnorm)
             nexpfullcentral = tf.squeeze(nexpfullcentral, -1)
@@ -740,7 +755,9 @@ class Fitter:
             elif self.indata.systematic_type == "normal":
                 snormnorm = norm + logsnorm
             else:
-                raise RuntimeError(f"Invalid systematic_type {self.indata.systematic_type}, valid choices are 'log_normal' or 'normal'")
+                raise RuntimeError(
+                    f"Invalid systematic_type {self.indata.systematic_type}, valid choices are 'log_normal' or 'normal'"
+                )
 
             nexpcentral = tf.matmul(snormnorm, mrnorm)
             nexpcentral = tf.squeeze(nexpcentral, -1)
@@ -761,9 +778,7 @@ class Fitter:
 
         return nexpcentral, normcentral
 
-    def _compute_yields_with_beta(
-        self, profile=True, compute_norm=False, full=True
-    ):
+    def _compute_yields_with_beta(self, profile=True, compute_norm=False, full=True):
         nexp, norm = self._compute_yields_noBBB(compute_norm, full=full)
 
         if self.binByBinStat:
@@ -781,24 +796,37 @@ class Fitter:
                 if self.chisqFit:
                     if self.binByBinStat_type == "gamma":
                         abeta = nexp_profile**2
-                        bbeta = kstat*nobs0 - nexp_profile*self.nobs
-                        cbeta = -kstat*nobs0*self.beta0
-                        beta = 0.5*(-bbeta + tf.sqrt(bbeta**2 -4.*abeta*cbeta))/abeta
-                    elif self.binByBinStat_type == "normal":
-                        if self.externalCovariance:
-                            beta = tf.linalg.lu_solve(self.betaauxlu, self.data_cov_inv @ ((self.nobs - nexp_profile)[:, None]) + (beta0/self.varbeta)[:, None])
-                            beta = tf.squeeze(beta, axis=-1)
-                        else:
-                            beta = (self.varbeta*(self.nobs - nexp_profile) + nobs0*beta0)/(nobs0 + self.varbeta)
-                else:
-                    if self.binByBinStat_type == "gamma":
-                        beta = (self.nobs + kstat*beta0) / (
-                            nexp_profile + kstat
+                        bbeta = kstat * nobs0 - nexp_profile * self.nobs
+                        cbeta = -kstat * nobs0 * self.beta0
+                        beta = (
+                            0.5
+                            * (-bbeta + tf.sqrt(bbeta**2 - 4.0 * abeta * cbeta))
+                            / abeta
                         )
                     elif self.binByBinStat_type == "normal":
+                        if self.externalCovariance:
+                            beta = tf.linalg.lu_solve(
+                                self.betaauxlu,
+                                self.data_cov_inv
+                                @ ((self.nobs - nexp_profile)[:, None])
+                                + (beta0 / self.varbeta)[:, None],
+                            )
+                            beta = tf.squeeze(beta, axis=-1)
+                        else:
+                            beta = (
+                                self.varbeta * (self.nobs - nexp_profile)
+                                + nobs0 * beta0
+                            ) / (nobs0 + self.varbeta)
+                else:
+                    if self.binByBinStat_type == "gamma":
+                        beta = (self.nobs + kstat * beta0) / (nexp_profile + kstat)
+                    elif self.binByBinStat_type == "normal":
                         bbeta = self.varbeta + nexp_profile - self.beta0
-                        cbeta = self.varbeta*(nexp_profile - self.nobs) - nexp_profile*self.beta0
-                        beta = 0.5*(-bbeta + tf.sqrt(bbeta**2 -4.*cbeta))
+                        cbeta = (
+                            self.varbeta * (nexp_profile - self.nobs)
+                            - nexp_profile * self.beta0
+                        )
+                        beta = 0.5 * (-bbeta + tf.sqrt(bbeta**2 - 4.0 * cbeta))
 
                 if full and self.indata.nbinsmasked:
                     beta = tf.concat([beta, self.beta[self.indata.nbins :]], axis=0)
@@ -808,7 +836,7 @@ class Fitter:
                     beta = beta[: self.indata.nbins]
 
             if self.binByBinStat_type == "gamma":
-                nexp = nexp*beta
+                nexp = nexp * beta
             elif self.binByBinStat_type == "normal":
                 nexp = nexp + beta
 
@@ -831,7 +859,7 @@ class Fitter:
 
     @tf.function
     def expected_events_nominal(self):
-        rnorm  = tf.ones(self.indata.nproc, dtype=self.indata.dtype)
+        rnorm = tf.ones(self.indata.nproc, dtype=self.indata.dtype)
         mrnorm = tf.expand_dims(rnorm, -1)
 
         if self.indata.sparse:
@@ -843,9 +871,7 @@ class Fitter:
 
         return nexpfullcentral
 
-    def _compute_yields(
-        self, inclusive=True, profile=True, full=True
-    ):
+    def _compute_yields(self, inclusive=True, profile=True, full=True):
         nexpcentral, normcentral, beta = self._compute_yields_with_beta(
             profile=profile,
             compute_norm=not inclusive,
@@ -883,7 +909,8 @@ class Fitter:
 
         def fun():
             return self._compute_yields(
-                inclusive=inclusive, profile=profile,
+                inclusive=inclusive,
+                profile=profile,
             )
 
         if compute_variations and (
@@ -1079,9 +1106,7 @@ class Fitter:
 
     @tf.function
     def expected_yield(self, profile=False, full=False):
-        return self._compute_yields(
-            inclusive=True, profile=profile, full=full
-        )
+        return self._compute_yields(inclusive=True, profile=profile, full=full)
 
     @tf.function
     def _expected_yield_noBBB(self, full=False):
@@ -1112,7 +1137,9 @@ class Fitter:
             if self.binByBinStat_type == "log_normal":
                 kstat = self.indata.kstat[: self.indata.nbins]
                 beta0 = self.beta0[: self.indata.nbins]
-                lsaturated += tf.reduce_sum(-kstat * beta0 * tf.math.log(beta0) + kstat*beta0)
+                lsaturated += tf.reduce_sum(
+                    -kstat * beta0 * tf.math.log(beta0) + kstat * beta0
+                )
             elif self.binByBinStat_type == "normal":
                 # mc stat contribution to the saturated likelihood is zero in this case
                 pass
@@ -1150,13 +1177,17 @@ class Fitter:
                 residual = tf.reshape(self.nobs - nexp, [-1, 1])  # chi2 residual
                 ln = lnfull = 0.5 * tf.reduce_sum(
                     tf.matmul(
-                        residual, tf.matmul(self.data_cov_inv, residual), transpose_a=True
+                        residual,
+                        tf.matmul(self.data_cov_inv, residual),
+                        transpose_a=True,
                     )
                 )
             else:
                 # stop_gradient needed in denominator here because it should be considered
                 # constant when evaluating global impacts from observed data
-                ln = lnfull = 0.5*tf.math.reduce_sum((nexp - self.nobs)**2/tf.stop_gradient(self.nobs), axis=-1)
+                ln = lnfull = 0.5 * tf.math.reduce_sum(
+                    (nexp - self.nobs) ** 2 / tf.stop_gradient(self.nobs), axis=-1
+                )
         else:
             nobsnull = tf.equal(self.nobs, tf.zeros_like(self.nobs))
 
@@ -1188,19 +1219,16 @@ class Fitter:
             kstat = self.indata.kstat[: self.indata.nbins]
             beta0 = self.beta0[: self.indata.nbins]
             if self.binByBinStat_type == "gamma":
-                lbetavfull = (
-                    -kstat * beta0 * tf.math.log(beta)
-                    + kstat * beta
-                )
+                lbetavfull = -kstat * beta0 * tf.math.log(beta) + kstat * beta
 
-                lbetav = -kstat * beta0 * tf.math.log(beta) + kstat * (beta - 1.)
+                lbetav = -kstat * beta0 * tf.math.log(beta) + kstat * (beta - 1.0)
 
                 lbetafull = tf.reduce_sum(lbetavfull)
                 lbeta = tf.reduce_sum(lbetav)
             elif self.binByBinStat_type == "normal":
-                lbetavfull = 0.5*(beta - beta0)**2/self.varbeta
+                lbetavfull = 0.5 * (beta - beta0) ** 2 / self.varbeta
 
-                lbetafull  = tf.reduce_sum(lbetavfull)
+                lbetafull = tf.reduce_sum(lbetavfull)
                 lbeta = lbetafull
 
             l = l + lbeta
@@ -1274,7 +1302,9 @@ class Fitter:
     def minimize(self):
 
         if self.is_linear:
-            logger.info("Likelihood is purely quadratic, solving by Cholesky decomposition instead of iterative fit")
+            logger.info(
+                "Likelihood is purely quadratic, solving by Cholesky decomposition instead of iterative fit"
+            )
 
             # no need to do a minimization, simple matrix solve is sufficient
             val, grad, hess = self.loss_val_grad_hess()
@@ -1284,15 +1314,18 @@ class Fitter:
 
             # FIXME catch this exception to mark failed toys and continue
             if tf.reduce_any(tf.math.is_nan(chol)).numpy():
-                raise ValueError("Cholesky decomposition failed, Hessian is not positive-definite")
+                raise ValueError(
+                    "Cholesky decomposition failed, Hessian is not positive-definite"
+                )
 
             del hess
             gradv = grad[..., None]
-            dx =  tf.linalg.cholesky_solve(chol, -gradv)[:, 0]
+            dx = tf.linalg.cholesky_solve(chol, -gradv)[:, 0]
             del chol
 
             self.x.assign_add(dx)
         else:
+
             def scipy_loss(xval):
                 self.x.assign(xval)
                 val, grad = self.loss_val_grad()
@@ -1304,15 +1337,15 @@ class Fitter:
                 val, grad, hessp = self.loss_val_grad_hessp(p)
                 return hessp.__array__()
 
-
-
             class FitterCallback:
                 def __init__(self, xv):
                     self.iiter = 0
                     self.xval = xv
 
                 def __call__(self, intermediate_result):
-                    logger.debug(f"Iteration {self.iiter}: loss value {intermediate_result.fun}")
+                    logger.debug(
+                        f"Iteration {self.iiter}: loss value {intermediate_result.fun}"
+                    )
                     self.xval = intermediate_result.x
                     self.iiter += 1
 
@@ -1321,7 +1354,13 @@ class Fitter:
 
             try:
                 res = scipy.optimize.minimize(
-                    scipy_loss, xval, method="trust-krylov", jac=True, hessp=scipy_hessp, tol=0., callback=callback,
+                    scipy_loss,
+                    xval,
+                    method="trust-krylov",
+                    jac=True,
+                    hessp=scipy_hessp,
+                    tol=0.0,
+                    callback=callback,
                 )
             except Exception as ex:
                 # minimizer could have called the loss or hessp functions with "random" values, so restore the

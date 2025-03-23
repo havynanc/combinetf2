@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import tensorflow as tf
+
 tf.config.experimental.enable_op_determinism()
 
 import argparse
@@ -8,7 +9,6 @@ import time
 
 import h5py
 import numpy as np
-
 
 from combinetf2 import fitter, inputdata, io_tools, workspace
 
@@ -190,7 +190,7 @@ def make_parser():
     parser.add_argument(
         "--binByBinStat_type",
         default="gamma",
-        choices = ["gamma", "normal"],
+        choices=["gamma", "normal"],
         help="probability density for bin-by-bin statistical uncertainties",
     )
     parser.add_argument(
@@ -363,7 +363,7 @@ def save_hists(args, fitter, ws, prefit=True, profile=False):
             inclusive=True,
             compute_variance=False,
             compute_variations=True,
-            profile=False
+            profile=False,
         )
 
         ws.add_expected_hists(
@@ -451,14 +451,20 @@ def fit(args, fitter, ws, dofit=True):
 
         # FIXME catch this exception to mark failed toys and continue
         if tf.reduce_any(tf.math.is_nan(chol)).numpy():
-            raise ValueError("Cholesky decomposition failed, Hessian is not positive-definite")
+            raise ValueError(
+                "Cholesky decomposition failed, Hessian is not positive-definite"
+            )
 
         gradv = grad[..., None]
-        edmval = 0.5 * tf.linalg.matmul(gradv, tf.linalg.cholesky_solve(chol, gradv), transpose_a=True)
-        edmval = edmval[0,0].numpy()
+        edmval = 0.5 * tf.linalg.matmul(
+            gradv, tf.linalg.cholesky_solve(chol, gradv), transpose_a=True
+        )
+        edmval = edmval[0, 0].numpy()
         logger.info(f"edmval: {edmval}")
 
-        fitter.cov.assign(tf.linalg.cholesky_solve(chol, tf.eye(chol.shape[0], dtype=chol.dtype)))
+        fitter.cov.assign(
+            tf.linalg.cholesky_solve(chol, tf.eye(chol.shape[0], dtype=chol.dtype))
+        )
 
         del chol
 
