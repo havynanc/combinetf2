@@ -195,10 +195,12 @@ class Term:
                 raise RuntimeError(
                     f"Not all selection axis found in channel. Selection axes: {selections.keys()}, Channel axes: {channel_axes_names}"
                 )
-            self.selections = [
-                selections[n] if n in selections.keys() else slice(None)
-                for i, n in enumerate(channel_axes_names)
-            ]
+            self.selections = tuple(
+                [
+                    selections[n] if n in selections.keys() else slice(None)
+                    for i, n in enumerate(channel_axes_names)
+                ]
+            )
             channel_axes = [c for c in channel_axes if c.name not in selections.keys()]
             self.selection_idxs = [
                 i for i, n in enumerate(channel_axes_names) if n in selections.keys()
@@ -310,9 +312,9 @@ class Ratio(PhysicsModel):
             exp_den = tf.reshape(exp_den, self.den.exp_shape)
 
             if self.num.selections:
-                exp_num = exp_num[*self.num.selections]
+                exp_num = exp_num[self.num.selections]
             if self.den.selections:
-                exp_den = exp_den[*self.den.selections]
+                exp_den = exp_den[self.den.selections]
             exp_num = tf.reduce_sum(exp_num, axis=self.num.selection_idxs)
             exp_den = tf.reduce_sum(exp_den, axis=self.den.selection_idxs)
 
