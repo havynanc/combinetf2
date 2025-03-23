@@ -263,30 +263,31 @@ def save_hists(args, models, fitter, ws, prefit=True, profile=False):
     for model in models:
         logger.info(f"Save inclusive histogram for physics model {model.name}")
 
-        exp, aux = fitter.expected_events(
-            model,
-            inclusive=True,
-            compute_variance=args.computeHistErrors,
-            compute_cov=args.computeHistCov,
-            compute_chi2=not args.noChi2 and model.has_data,
-            compute_global_impacts=args.computeHistImpacts and not prefit,
-            profile=profile,
-        )
+        if not getattr(model, "skip_incusive", False):
+            exp, aux = fitter.expected_events(
+                model,
+                inclusive=True,
+                compute_variance=args.computeHistErrors,
+                compute_cov=args.computeHistCov,
+                compute_chi2=not args.noChi2 and model.has_data,
+                compute_global_impacts=args.computeHistImpacts and not prefit,
+                profile=profile,
+            )
 
-        ws.add_expected_hists(
-            model,
-            exp,
-            var=aux[0],
-            cov=aux[1],
-            impacts=aux[2],
-            impacts_grouped=aux[3],
-            prefit=prefit,
-        )
+            ws.add_expected_hists(
+                model,
+                exp,
+                var=aux[0],
+                cov=aux[1],
+                impacts=aux[2],
+                impacts_grouped=aux[3],
+                prefit=prefit,
+            )
 
-        if aux[4] is not None:
-            ws.add_chi2(aux[4], aux[5], prefit, model)
+            if aux[4] is not None:
+                ws.add_chi2(aux[4], aux[5], prefit, model)
 
-        if args.saveHistsPerProcess:
+        if args.saveHistsPerProcess and not getattr(model, "skip_per_process", False):
             logger.info(f"Save processes histogram for {model.name}")
 
             exp, aux = fitter.expected_events(
@@ -300,7 +301,11 @@ def save_hists(args, models, fitter, ws, prefit=True, profile=False):
                 model,
                 exp,
                 var=aux[0],
-                process_axis=fitter.indata.axis_procs,
+                process_axis=(
+                    fitter.indata.axis_procs
+                    if getattr(model, "has_processes", True)
+                    else None
+                ),
                 prefit=prefit,
             )
 
@@ -311,7 +316,7 @@ def save_hists(args, models, fitter, ws, prefit=True, profile=False):
 
             exp, aux = fitter.expected_events(
                 model,
-                inclusive=True,
+                inclusive=getattr(model, "need_processes", True),
                 compute_variance=False,
                 compute_variations=True,
                 profile=profile,

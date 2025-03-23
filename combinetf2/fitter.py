@@ -794,10 +794,10 @@ class Fitter:
                 )
 
             chi2val = self.chi2(res, rescov).numpy()
-            ndf = tf.size(exp).numpy() - model.normalize
+            ndf = tf.size(exp).numpy() - getattr(model, "normalize", False)
 
             aux.append(self.chi2(res, rescov).numpy())  # chi2val
-            aux.append(tf.size(exp).numpy() - model.normalize)  # ndf
+            aux.append(tf.size(exp).numpy() - getattr(model, "normalize", False))  # ndf
         else:
             aux.append(None)
             aux.append(None)
