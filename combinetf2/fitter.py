@@ -550,12 +550,12 @@ class Fitter:
         # FIXME switch back to optimized version at some point?
 
         with tf.GradientTape() as t:
-            t.watch([self.theta0, self.nobs, self.beta0])
+            t.watch([self.theta0, self.nobs, self.beta])
             expected = fun_exp()
             expected_flat = tf.reshape(expected, (-1,))
-        pdexpdx, pdexpdnobs, pdexpdbeta0 = t.jacobian(
+        pdexpdx, pdexpdnobs, pdexpdbeta = t.jacobian(
             expected_flat,
-            [self.x, self.nobs, self.beta0],
+            [self.x, self.nobs, self.beta],
         )
 
         expcov = pdexpdx @ tf.matmul(self.cov, pdexpdx, transpose_b=True)
@@ -567,8 +567,8 @@ class Fitter:
 
         expcov_noBBB = expcov
         if self.binByBinStat:
-            varbeta0 = self.varbeta
-            exp_cov_BBB = pdexpdbeta0 @ (varbeta0[:, None] * tf.transpose(pdexpdbeta0))
+            varbeta = self.varbeta
+            exp_cov_BBB = pdexpdbeta @ (varbeta[:, None] * tf.transpose(pdexpdbeta))
             expcov += exp_cov_BBB
 
         if compute_global_impacts:
