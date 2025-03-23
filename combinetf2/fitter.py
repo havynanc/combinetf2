@@ -104,15 +104,15 @@ class Fitter:
         )
 
         # FIXME for now this is needed even if binByBinStat is off because of how it is used in the global impacts
-        # computation (corresponding disconnected gradient is propagated as zero rather than skipping it entirely)
+        #  and uncertainty band computations (gradient is allowed to be zero or None and then propagated or skipped only later)
 
         # global observables for mc stat uncertainty
         self.beta0 = tf.Variable(self._default_beta0(), trainable=False, name="beta0")
 
-        if self.binByBinStat:
-            # nuisance parameters for mc stat uncertainty
-            self.beta = tf.Variable(self.beta0, trainable=False, name="beta")
+        # nuisance parameters for mc stat uncertainty
+        self.beta = tf.Variable(self.beta0, trainable=False, name="beta")
 
+        if self.binByBinStat:
             # cache the constraint variance since it's used in several places
             # this is treated as a constant
             if self.binByBinStat_type == "gamma":
