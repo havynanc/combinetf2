@@ -9,7 +9,6 @@ class Fitter:
     def __init__(self, indata, options):
         self.indata = indata
         self.binByBinStat = options.binByBinStat
-        self.normalize = options.normalize
         self.systgroupsfull = self.indata.systgroups.tolist()
         self.systgroupsfull.append("stat")
         if self.binByBinStat:
@@ -665,15 +664,6 @@ class Fitter:
         else:
             normcentral = None
 
-        if self.normalize:
-            # FIXME this should be done per-channel ideally
-            nexpcentral = nexpcentral[:nbins]
-            normscale = tf.reduce_sum(self.nobs) / tf.reduce_sum(nexpcentral)
-
-            nexpcentral *= normscale
-            if compute_norm:
-                normcentral *= normscale
-
         return nexpcentral, normcentral
 
     def _compute_yields_with_beta(
@@ -804,10 +794,10 @@ class Fitter:
                 )
 
             chi2val = self.chi2(res, rescov).numpy()
-            ndf = tf.size(exp).numpy() - self.normalize
+            ndf = tf.size(exp).numpy() - model.normalize
 
             aux.append(self.chi2(res, rescov).numpy())  # chi2val
-            aux.append(tf.size(exp).numpy() - self.normalize)  # ndf
+            aux.append(tf.size(exp).numpy() - model.normalize)  # ndf
         else:
             aux.append(None)
             aux.append(None)
@@ -853,9 +843,7 @@ class Fitter:
 
         lsaturated = tf.reduce_sum(-nobs * lognobs + nobs, axis=-1)
 
-        ndof = (
-            tf.size(nobs) - self.npoi - self.indata.nsystnoconstraint - self.normalize
-        )
+        ndof = tf.size(nobs) - self.npoi - self.indata.nsystnoconstraint
 
         return lsaturated, ndof
 

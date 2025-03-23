@@ -204,7 +204,14 @@ def parseArgs():
         nargs="+",
         action="append",
         default=[],
-        help='add projection for the prefit and postfit histograms, specifying the channel name followed by the axis names, e.g. "--project ch0 eta pt".  This argument can be called multiple times',
+        help='add projection for the prefit and postfit histograms, specifying the channel name followed by the axis names, e.g. "--project ch0 eta pt". This argument can be called multiple times',
+    )
+    parser.add_argument(
+        "--normalized",
+        nargs="+",
+        action="append",
+        default=[],
+        help='add normalized (projection) for the prefit and postfit histograms, specifying the channel name followed by the axis names, e.g. "--normalized ch0 eta pt". This argument can be called multiple times',
     )
     parser.add_argument(
         "--filterProcs",
@@ -408,7 +415,11 @@ def make_plot(
             axes = axes[::-1]
 
         # make unrolled 1D histograms
-        if h_data is not None and binwnorm is not None and not args.unfoldedXsec:
+        if (
+            h_data is not None
+            and binwnorm is not None
+            and h_data.storage_type != hist.storage.Weight()
+        ):
             # need hist with variances to handle bin width normaliztion
             h_data_tmp = hist.Hist(
                 *[a for a in h_data.axes], storage=hist.storage.Weight()
@@ -1092,9 +1103,6 @@ def main():
     )
 
     meta_info = meta["meta_info"]
-    is_normalized = (
-        meta_info["args"].get("normalize", False) if meta is not None else False
-    )
 
     plt.rcParams["font.size"] = plt.rcParams["font.size"] * args.scaleTextSize
 
@@ -1125,16 +1133,18 @@ def main():
         varNames=varNames,
         varLabels=varLabels,
         varColors=varColors,
-        is_normalized=is_normalized,
     )
 
-    for projection in args.project:
+    for projection in [*args.project, *args.normalized]:
         channel = projection[0]
         axes = projection[1:]
         info = channel_info[channel]
         if len(axes) == 0:
             axes = ["yield"]
-        result = fitresult["channels"][channel]["projections"]["_".join(axes)]
+
+        is_normalized = projection in args.normalized
+        identifier = "normalized" if is_normalized else "projections"
+        result = fitresult["channels"][channel][identifier]["_".join(axes)]
         chi2, ndf, _ = get_chi2(result, args.noChisq, fittype)
 
         make_plots(
@@ -1144,6 +1154,7 @@ def main():
             channel=channel,
             chi2=[chi2, ndf],
             lumi=info.get("lumi", None),
+            is_normalized=is_normalized,
             **opts,
         )
 

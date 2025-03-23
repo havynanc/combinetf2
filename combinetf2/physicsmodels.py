@@ -2,13 +2,20 @@ import tensorflow as tf
 
 
 class PhysicsModel:
-    name = "basemodel"  # Used for the output dictionary
+    """
+    A class to output histograms without any transformation.
+
+    Parameters
+    ----------
+    """
 
     def __init__(self, indata):
+        self.name = "basemodel"  # Used for the output dictionary
         # channel info of the resulting histogram, needed for the writing
         self.channel_info = indata.channel_info
         # if data histograms are stored or not, and if chi2 is calculated
         self.has_data = True
+        self.normalize = False
         # a list of strings, the result will be written under these keys
         self.identifiers = []
 
@@ -21,13 +28,26 @@ class PhysicsModel:
 
 
 class Project(PhysicsModel):
-    name = "projections"
+    """
+    A class to project a histogram to lower dimensions.
+    Optionally the histogram can be normalized.
+    The normalization is done to the integral of all processes or data.
 
-    def __init__(self, indata, channel, *axes_names):
+    Parameters
+    ----------
+    channel_name : str
+        Name of the channel. Required.
+    axes_names : list of str, optional
+        Names of the axes to keep. If empty, the histogram will be projected to a single bin.
+    """
+
+    def __init__(self, indata, channel, *axes_names, normalize=False):
         info = indata.channel_info[channel]
 
         self.start = info["start"]
         self.stop = info["stop"]
+        self.normalize = normalize
+        self.name = "normalized" if normalize else "projections"
 
         channel_axes = info["axes"]
 
@@ -72,7 +92,7 @@ class Project(PhysicsModel):
         }
 
         self.identifiers = [
-            Project.name,
+            self.name,
             "_".join(axes_names) if len(axes_names) else "yield",
         ]
 
@@ -87,6 +107,9 @@ class Project(PhysicsModel):
 
         def proj_fun():
             exp = fun_flat()[self.start : self.stop]
+            if self.normalize:
+                norm = tf.reduce_sum(exp)
+                exp /= norm
             exp = tf.reshape(exp, out_shape)
             exp = tf.reduce_sum(exp, axis=self.proj_idxs)
             exp = tf.transpose(exp, perm=transpose_idxs)
@@ -94,3 +117,48 @@ class Project(PhysicsModel):
             return exp
 
         return proj_fun
+
+    def get_data(self, data, cov=None):
+        val = self.make_fun(lambda: data)()
+
+        shape = self.exp_shape[:-1]
+        perm_idxs = self.transpose_idxs[:-1]
+
+        if cov is not None:
+            cov = cov[self.start : self.stop, self.start : self.stop]
+
+            cov = tf.reshape(cov, [*shape, *shape])
+            for idx in sorted(self.proj_idxs, reverse=True):
+                cov = tf.reduce_sum(cov, axis=idx)
+                cov = tf.reduce_sum(cov, axis=idx + len(shape) - 1)
+            cov = tf.transpose(
+                cov, perm=perm_idxs + [i + len(perm_idxs) for i in perm_idxs]
+            )
+
+            if self.normalize:
+                norm = tf.reduce_sum(val)
+                jac = tf.eye(tf.shape(val)[0]) / norm - tf.expand_dims(val, 1) / norm**2
+                cov = tf.matmul(jac, tf.matmul(cov, tf.transpose(jac)))
+
+            var = tf.linalg.diag_part(cov)
+        else:
+            var = data[self.start : self.stop]
+
+            if self.normalize:
+                norm = tf.reduce_sum(var)
+                var = var / (norm**2)
+                # Additional variance from the normalization uncertainty
+                var = var + var**2
+
+            var = tf.reshape(var, shape)
+            var = tf.reduce_sum(var, axis=self.proj_idxs)
+            var = tf.transpose(var, perm=perm_idxs)
+
+        return val, var
+
+
+models = {
+    "basemodel": lambda *args: PhysicsModel(*args),
+    "project": lambda *args: Project(*args, normalize=False),
+    "normalize": lambda *args: Project(*args, normalize=True),
+}

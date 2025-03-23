@@ -205,12 +205,6 @@ def make_parser():
         help="run fit on pseudo data with the given name",
     )
     parser.add_argument(
-        "--normalize",
-        default=False,
-        action="store_true",
-        help="Normalize prediction and systematic uncertainties to the overall event yield in data",
-    )
-    parser.add_argument(
         "-m",
         "--physicsModel",
         nargs="+",
@@ -219,7 +213,7 @@ def make_parser():
         help="""
         add physics model to perform transformations on observables for the prefit and postfit histograms, 
         specifying the model defined in combinetf2/physicsmodels.py followed by arguments passed in the model __init__, 
-        e.g. "-m Project ch0 eta pt" to get a 2D projection to eta-pt or "-m Project ch0" to get the total yield.  
+        e.g. "-m project ch0 eta pt" to get a 2D projection to eta-pt or "-m project ch0" to get the total yield.  
         This argument can be called multiple times
         """,
     )
@@ -477,17 +471,18 @@ def main():
     global logger
     logger = logging.setup_logger(__file__, args.verbose, args.noColorLogger)
 
-    indata = inputdata.FitInputData(
-        args.filename, args.pseudoData, normalize=args.normalize
-    )
+    indata = inputdata.FitInputData(args.filename, args.pseudoData)
     ifitter = fitter.Fitter(indata, args)
 
     # models for observables
-    models = [pm.PhysicsModel(indata)]
+    models = [pm.models["basemodel"](indata)]
     # custom physics models for observables transformations
-    models.extend(
-        [getattr(pm, margs[0])(indata, *margs[1:]) for margs in args.physicsModel]
-    )
+    for margs in args.physicsModel:
+        if margs[0] not in pm.models.keys():
+            raise NotImplementedError(
+                f"Model {margs[0]} not found. Available models are {pm.models.keys()}"
+            )
+        models.append(pm.models[margs[0]](indata, *margs[1:]))
 
     np.random.seed(args.seed)
     tf.random.set_seed(args.seed)
