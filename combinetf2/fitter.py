@@ -112,21 +112,20 @@ class Fitter:
         # nuisance parameters for mc stat uncertainty
         self.beta = tf.Variable(self.beta0, trainable=False, name="beta")
 
-        if self.binByBinStat:
-            # cache the constraint variance since it's used in several places
-            # this is treated as a constant
-            if self.binByBinStat_type == "gamma":
-                self.varbeta = tf.stop_gradient(tf.math.reciprocal(self.indata.kstat))
-            elif self.binByBinStat_type == "normal":
-                n0 = self.expected_events_nominal()
-                self.varbeta = tf.stop_gradient(n0**2 / self.indata.kstat)
+        # cache the constraint variance since it's used in several places
+        # this is treated as a constant
+        if self.binByBinStat_type == "gamma":
+            self.varbeta = tf.stop_gradient(tf.math.reciprocal(self.indata.kstat))
+        elif self.binByBinStat_type == "normal":
+            n0 = self.expected_events_nominal()
+            self.varbeta = tf.stop_gradient(n0**2 / self.indata.kstat)
 
-                if self.externalCovariance:
-                    # precompute decomposition of composite matrix to speed up
-                    # calculation of profiled beta values
-                    self.betaauxlu = tf.linalg.lu(
-                        self.data_cov_inv + tf.diag(tf.reciprocal(self.varbeta))
-                    )
+            if self.binByBinStat and self.externalCovariance:
+                # precompute decomposition of composite matrix to speed up
+                # calculation of profiled beta values
+                self.betaauxlu = tf.linalg.lu(
+                    self.data_cov_inv + tf.diag(tf.reciprocal(self.varbeta))
+                )
 
         self.nexpnom = tf.Variable(
             self.expected_yield(), trainable=False, name="nexpnom"
