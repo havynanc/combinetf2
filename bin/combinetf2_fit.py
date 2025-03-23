@@ -188,6 +188,12 @@ def make_parser():
         help="add bin-by-bin statistical uncertainties on templates (adding sumW2 on variance)",
     )
     parser.add_argument(
+        "--binByBinStat_type",
+        default="gamma",
+        choices = ["gamma", "normal"],
+        help="probability density for bin-by-bin statistical uncertainties",
+    )
+    parser.add_argument(
         "--externalPostfit",
         default=None,
         type=str,
@@ -357,8 +363,7 @@ def save_hists(args, fitter, ws, prefit=True, profile=False):
             inclusive=True,
             compute_variance=False,
             compute_variations=True,
-            profile=profile,
-            profile_grad=False,
+            profile=False
         )
 
         ws.add_expected_hists(
@@ -381,8 +386,7 @@ def save_hists(args, fitter, ws, prefit=True, profile=False):
                 inclusive=True,
                 compute_variance=False,
                 compute_variations=True,
-                profile=profile,
-                profile_grad=False,
+                profile=False,
                 masked=channel_info.get("masked", False),
             )
 
@@ -442,14 +446,17 @@ def fit(args, fitter, ws, dofit=True):
 
         val, grad, hess = fitter.loss_val_grad_hess()
 
-
         # use a Cholesky decomposition to easily detect the non-positive-definite case
         chol = tf.linalg.cholesky(hess)
-        del hess
+
+        # FIXME catch this exception to mark failed toys and continue
+        if tf.reduce_any(tf.math.is_nan(chol)).numpy():
+            raise ValueError("Cholesky decomposition failed, Hessian is not positive-definite")
 
         gradv = grad[..., None]
         edmval = 0.5 * tf.linalg.matmul(gradv, tf.linalg.cholesky_solve(chol, gradv), transpose_a=True)
-        print(edmval)
+        edmval = edmval[0,0].numpy()
+        logger.info(f"edmval: {edmval}")
 
         fitter.cov.assign(tf.linalg.cholesky_solve(chol, tf.eye(chol.shape[0], dtype=chol.dtype)))
 
@@ -457,6 +464,8 @@ def fit(args, fitter, ws, dofit=True):
 
         if args.doImpacts:
             ws.add_impacts_hists(*fitter.impacts_parms(hess))
+
+        del hess
 
         if args.globalImpacts:
             ws.add_global_impacts_hists(*fitter.global_impacts_parms())
