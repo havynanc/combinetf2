@@ -706,10 +706,6 @@ class Fitter:
                 snormnorm_sparse = self.indata.norm.with_values(
                     self.indata.norm.values + logsnorm
                 )
-            else:
-                raise RuntimeError(
-                    f"Invalid systematic_type {self.indata.systematic_type}, valid choices are 'log_normal' or 'normal'"
-                )
 
             nexpfullcentral = tf.sparse.sparse_dense_matmul(snormnorm_sparse, mrnorm)
             nexpfullcentral = tf.squeeze(nexpfullcentral, -1)
@@ -753,10 +749,6 @@ class Fitter:
                 snormnorm = snorm * norm
             elif self.indata.systematic_type == "normal":
                 snormnorm = norm + logsnorm
-            else:
-                raise RuntimeError(
-                    f"Invalid systematic_type {self.indata.systematic_type}, valid choices are 'log_normal' or 'normal'"
-                )
 
             nexpcentral = tf.matmul(snormnorm, mrnorm)
             nexpcentral = tf.squeeze(nexpcentral, -1)
