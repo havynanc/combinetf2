@@ -121,7 +121,7 @@ class FitInputData:
 
             if self.metadata.get("exponential_transform", False):
                 raise NotImplementedError(
-                    "exponential_transform functionality has been removed.   Please use systematicType normal instead"
+                    "exponential_transform functionality has been removed.   Please use systematic_type normal instead"
                 )
 
             self.systematic_type = self.metadata.get("systematic_type", "log_normal")
