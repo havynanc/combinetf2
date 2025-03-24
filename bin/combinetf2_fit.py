@@ -188,7 +188,7 @@ def make_parser():
         help="add bin-by-bin statistical uncertainties on templates (adding sumW2 on variance)",
     )
     parser.add_argument(
-        "--binByBinStat_type",
+        "--binByBinStatType",
         default="gamma",
         choices=["gamma", "normal"],
         help="probability density for bin-by-bin statistical uncertainties",

@@ -12,7 +12,7 @@ class Fitter:
     def __init__(self, indata, options):
         self.indata = indata
         self.binByBinStat = options.binByBinStat
-        self.binByBinStat_type = options.binByBinStat_type
+        self.binByBinStatType = options.binByBinStatType
         self.normalize = options.normalize
         self.systgroupsfull = self.indata.systgroups.tolist()
         self.systgroupsfull.append("stat")
@@ -26,15 +26,15 @@ class Fitter:
         if (
             options.externalCovariance
             and options.binByBinStat
-            and options.binByBinStat_type != "normal"
+            and options.binByBinStatType != "normal"
         ):
             raise Exception(
-                'option "--binByBinStat" only for options "--externalCovariance" with "--binByBinStat_type normal"'
+                'option "--binByBinStat" only for options "--externalCovariance" with "--binByBinStatType normal"'
             )
 
-        if self.binByBinStat_type not in ["gamma", "normal"]:
+        if self.binByBinStatType not in ["gamma", "normal"]:
             raise RuntimeError(
-                f"Invalid binByBinStat_type {self.indata.binByBinStat_type}, valid choices are 'gamma' or 'normal'"
+                f"Invalid binByBinStatType {self.indata.binByBinStatType}, valid choices are 'gamma' or 'normal'"
             )
 
         if self.indata.systematic_type not in ["log_normal", "normal"]:
@@ -114,9 +114,9 @@ class Fitter:
 
         # cache the constraint variance since it's used in several places
         # this is treated as a constant
-        if self.binByBinStat_type == "gamma":
+        if self.binByBinStatType == "gamma":
             self.varbeta = tf.stop_gradient(tf.math.reciprocal(self.indata.kstat))
-        elif self.binByBinStat_type == "normal":
+        elif self.binByBinStatType == "normal":
             n0 = self.expected_events_nominal()
             self.varbeta = tf.stop_gradient(n0**2 / self.indata.kstat)
 
@@ -140,13 +140,13 @@ class Fitter:
             and self.indata.symmetric_tensor
             and self.indata.systematic_type == "normal"
             and self.npoi == 0
-            and ((not self.binByBinStat) or self.binByBinStat_type == "normal")
+            and ((not self.binByBinStat) or self.binByBinStatType == "normal")
         )
 
     def _default_beta0(self):
-        if self.binByBinStat_type == "gamma":
+        if self.binByBinStatType == "gamma":
             return tf.ones_like(self.indata.kstat)
-        elif self.binByBinStat_type == "normal":
+        elif self.binByBinStatType == "normal":
             return tf.zeros_like(self.indata.kstat)
 
     def prefit_covariance(self, unconstrained_err=0.0):
@@ -217,7 +217,7 @@ class Fitter:
             )
 
         if self.binByBinStat:
-            if self.binByBinStat_type == "gamma":
+            if self.binByBinStatType == "gamma":
                 self.beta.assign(
                     tf.random.gamma(
                         shape=[],
@@ -227,7 +227,7 @@ class Fitter:
                     )
                     / self.indata.kstat
                 )
-            elif self.binByBinStat_type == "normal":
+            elif self.binByBinStatType == "normal":
                 self.beta.assign(
                     tf.random.normal(
                         shape=[],
@@ -243,7 +243,7 @@ class Fitter:
             tf.random.normal(shape=self.theta0.shape, dtype=self.theta0.dtype)
         )
         if self.binByBinStat:
-            if self.binByBinStat_type == "gamma":
+            if self.binByBinStatType == "gamma":
                 self.beta0.assign(
                     tf.random.poisson(
                         shape=[],
@@ -252,7 +252,7 @@ class Fitter:
                     )
                     / self.indata.kstat
                 )
-            elif self.binByBinStat_type == "normal":
+            elif self.binByBinStatType == "normal":
                 self.beta0.assign(
                     tf.random.normal(
                         shape=[],
@@ -793,7 +793,7 @@ class Fitter:
                 nobs0 = tf.stop_gradient(self.nobs)
 
                 if self.chisqFit:
-                    if self.binByBinStat_type == "gamma":
+                    if self.binByBinStatType == "gamma":
                         abeta = nexp_profile**2
                         bbeta = kstat * nobs0 - nexp_profile * self.nobs
                         cbeta = -kstat * nobs0 * self.beta0
@@ -802,7 +802,7 @@ class Fitter:
                             * (-bbeta + tf.sqrt(bbeta**2 - 4.0 * abeta * cbeta))
                             / abeta
                         )
-                    elif self.binByBinStat_type == "normal":
+                    elif self.binByBinStatType == "normal":
                         if self.externalCovariance:
                             beta = tf.linalg.lu_solve(
                                 self.betaauxlu,
@@ -817,9 +817,9 @@ class Fitter:
                                 + nobs0 * beta0
                             ) / (nobs0 + self.varbeta)
                 else:
-                    if self.binByBinStat_type == "gamma":
+                    if self.binByBinStatType == "gamma":
                         beta = (self.nobs + kstat * beta0) / (nexp_profile + kstat)
-                    elif self.binByBinStat_type == "normal":
+                    elif self.binByBinStatType == "normal":
                         bbeta = self.varbeta + nexp_profile - self.beta0
                         cbeta = (
                             self.varbeta * (nexp_profile - self.nobs)
@@ -834,9 +834,9 @@ class Fitter:
                 if (not full) and self.indata.nbinsmasked:
                     beta = beta[: self.indata.nbins]
 
-            if self.binByBinStat_type == "gamma":
+            if self.binByBinStatType == "gamma":
                 nexp = nexp * beta
-            elif self.binByBinStat_type == "normal":
+            elif self.binByBinStatType == "normal":
                 nexp = nexp + beta
 
             if compute_norm:
@@ -1126,13 +1126,13 @@ class Fitter:
             lsaturated = tf.reduce_sum(-nobs * lognobs + nobs, axis=-1)
 
         if self.binByBinStat:
-            if self.binByBinStat_type == "log_normal":
+            if self.binByBinStatType == "log_normal":
                 kstat = self.indata.kstat[: self.indata.nbins]
                 beta0 = self.beta0[: self.indata.nbins]
                 lsaturated += tf.reduce_sum(
                     -kstat * beta0 * tf.math.log(beta0) + kstat * beta0
                 )
-            elif self.binByBinStat_type == "normal":
+            elif self.binByBinStatType == "normal":
                 # mc stat contribution to the saturated likelihood is zero in this case
                 pass
 
@@ -1210,14 +1210,14 @@ class Fitter:
         if self.binByBinStat:
             kstat = self.indata.kstat[: self.indata.nbins]
             beta0 = self.beta0[: self.indata.nbins]
-            if self.binByBinStat_type == "gamma":
+            if self.binByBinStatType == "gamma":
                 lbetavfull = -kstat * beta0 * tf.math.log(beta) + kstat * beta
 
                 lbetav = -kstat * beta0 * tf.math.log(beta) + kstat * (beta - 1.0)
 
                 lbetafull = tf.reduce_sum(lbetavfull)
                 lbeta = tf.reduce_sum(lbetav)
-            elif self.binByBinStat_type == "normal":
+            elif self.binByBinStatType == "normal":
                 lbetavfull = 0.5 * (beta - beta0) ** 2 / self.varbeta
 
                 lbetafull = tf.reduce_sum(lbetavfull)
