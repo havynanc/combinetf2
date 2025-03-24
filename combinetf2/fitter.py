@@ -844,11 +844,6 @@ class Fitter:
         else:
             beta = None
 
-        if self.indata.exponential_transform:
-            nexp = self.indata.exponential_transform_scale * tf.math.log(nexp)
-            if compute_norm:
-                norm = self.indata.exponential_transform_scale * tf.math.log(norm)
-
         return nexp, norm, beta
 
     @tf.function
@@ -1028,8 +1023,6 @@ class Fitter:
             def proj_fun():
                 exp = fun_flat()[start:stop]
                 exp = tf.reshape(exp, exp_shape)
-                if self.indata.exponential_transform:
-                    exp = self.indata.exponential_transform_scale * tf.math.log(exp)
                 exp = tf.reduce_sum(exp, axis=proj_idxs)
                 exp = tf.transpose(exp, perm=transpose_idxs)
 
