@@ -27,12 +27,6 @@ parser.add_argument(
     help="Make fully symmetric tensor",
 )
 parser.add_argument(
-    "--exponentialTransform",
-    default=False,
-    action="store_true",
-    help="Store tensor with exponential transformation",
-)
-parser.add_argument(
     "--skipMaskedChannels",
     default=False,
     action="store_true",
@@ -174,7 +168,6 @@ cov += np.diag(
 # Build tensor
 writer = tensorwriter.TensorWriter(
     sparse=args.sparse,
-    exponential_transform=args.exponentialTransform,
 )
 
 writer.add_channel(h1_data.axes, "ch0")
