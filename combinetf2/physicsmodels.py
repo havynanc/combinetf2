@@ -45,7 +45,7 @@ class Project(PhysicsModel):
         self.start = info["start"]
         self.stop = info["stop"]
         self.normalize = normalize
-        self.name = "normalized" if normalize else "projections"
+        self.name = "normalize" if normalize else "project"
 
         channel_axes = info["axes"]
 
@@ -249,7 +249,7 @@ class Ratio(PhysicsModel):
         normalize=False,
     ):
         self.normalize = normalize
-        self.name = "normratios" if normalize else "ratios"
+        self.name = "normratio" if normalize else "ratio"
 
         self.num = Term(indata, num_channel, num_processes, num_selection)
         self.den = Term(indata, den_channel, den_processes, den_selection)

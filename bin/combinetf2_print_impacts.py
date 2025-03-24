@@ -39,11 +39,12 @@ def parseArgs():
         help="fitresults key in file (e.g. 'asimov'). Leave empty for data fit result.",
     )
     parser.add_argument(
-        "--hist",
+        "-m",
+        "--physicsModel",
         default=None,
         type=str,
         nargs="+",
-        help="Print impacts on observables use '--hist channel' or for projections '--hist channel ax0 ax1'.",
+        help="Print impacts on observables use '-m <model> channel axes' for physics model results.",
     )
     parser.add_argument(
         "--relative",
@@ -123,7 +124,7 @@ def main():
     args = parseArgs()
     fitresult, meta = io_tools.get_fitresult(args.inputFile, args.result, meta=True)
 
-    if args.hist is not None:
+    if args.physicsModel is not None:
         if args.asymImpacts:
             raise NotImplementedError(
                 "Asymetric impacts on observables is not yet implemented"
@@ -133,19 +134,20 @@ def main():
                 "Only global impacts on observables is implemented (use --globalImpacts)"
             )
 
-        channel = args.hist[0]
-        projection_axes = args.hist[1:]
+        identifier = args.physicsModel[0]
+        channel = args.physicsModel[1]
+        model_axes = args.physicsModel[2:]
         channel_hists = fitresult["channels"][channel]
 
-        if len(projection_axes) > 0:
-            projection_hists = channel_hists["projections"]
-            key = "_".join(projection_axes)
-            if key not in projection_hists.keys():
-                available = [k.split("_") for k in projection_hists.keys()]
+        if len(model_axes) > 0:
+            model_hists = channel_hists[identifier]
+            key = "_".join(model_axes)
+            if key not in model_hists.keys():
+                available = [k.split("_") for k in model_hists.keys()]
                 raise ValueError(
-                    f"Histogram projection with axes {projection_axes} not found! Available histograms: {available}"
+                    f"Histogram with axes {model_axes} not found! Available histograms: {available}"
                 )
-            hists = projection_hists[key]
+            hists = model_hists[key]
         else:
             hists = channel_hists
 

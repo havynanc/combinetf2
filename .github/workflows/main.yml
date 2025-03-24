@@ -221,7 +221,7 @@ jobs:
         run: combinetf2_print_impacts.py $COMBINETF2_OUTDIR/fitresults.hdf5 -s --globalImpacts
 
       - name: print global impacts of observable
-        run: combinetf2_print_impacts.py $COMBINETF2_OUTDIR/fitresults.hdf5 --globalImpacts --hist ch0_masked yield --ungroup --sort
+        run: combinetf2_print_impacts.py $COMBINETF2_OUTDIR/fitresults.hdf5 --globalImpacts -m project ch0_masked yield --ungroup --sort
 
       - name: plot impacts
         run: >-
@@ -238,7 +238,7 @@ jobs:
       - name: plot global impacts on observable
         run: >-
           combinetf2_plot_pulls_and_impacts.py $COMBINETF2_OUTDIR/fitresults.hdf5 -o $WEB_DIR/$PLOT_DIR
-          -s absimpact --hist ch0_masked yield
+          -s absimpact -m project ch0_masked yield
           --otherExtensions pdf png -n 50  --config tests/style_config.py --oneSidedImpacts --globalImpacts --showNumbers
           --grouping max --subtitle Preliminary --postfix ch0_masked
 
@@ -251,7 +251,7 @@ jobs:
       - name: plot postfit distributions
         run: >-
           combinetf2_plot_hists.py $COMBINETF2_OUTDIR/fitresults.hdf5 -o $WEB_DIR/$PLOT_DIR 
-          --extraTextLoc '0.05' '0.7' --legCols 1 -m basemodel -m project ch1 a -m project ch1 b -m normalized ch0 x -m ratio ch0 x --yscale '1.2' 
+          --extraTextLoc '0.05' '0.7' --legCols 1 -m basemodel -m project ch1 a -m project ch1 b -m normalize ch0 x -m ratio ch0 x --yscale '1.2' 
           --subtitle Preliminary --varNames 'slope_signal' --varColors orange --config tests/style_config.py --rrange 0.8 1.2
 
       - name: plot histogram uncertainties
@@ -262,12 +262,12 @@ jobs:
       - name: plot postfit signal fraction
         run: >-
           combinetf2_plot_hists.py $COMBINETF2_OUTDIR/fitresults.hdf5 -o $WEB_DIR/$PLOT_DIR  
-          -m ratios ch0 x --yscale 1.2 --subtitle Preliminary --config tests/style_config.py --ylabel 'sig/(sig+bkg)' --postfix signalfraction
+          -m ratio ch0 x --yscale 1.2 --subtitle Preliminary --config tests/style_config.py --ylabel 'sig/(sig+bkg)' --postfix signalfraction
 
       - name: plot postfit signal fraction uncertainties
         run: >-
-          combinetf2_plot_hists.py $COMBINETF2_OUTDIR/fitresults.hdf5 -o $WEB_DIR/$PLOT_DIR  
-          -m ratios ch0 x --subtitle Preliminary --config tests/style_config.py --ylabel 'sig/(sig+bkg)' --postfix signalfraction
+          combinetf2_plot_hists_uncertainties.py $COMBINETF2_OUTDIR/fitresults.hdf5 -o $WEB_DIR/$PLOT_DIR  
+          -m ratio ch0 x --subtitle Preliminary --config tests/style_config.py --ylabel 'sig/(sig+bkg)' --postfix signalfraction
 
       - name: plot histogram covariance matrices
         run: >-

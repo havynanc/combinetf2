@@ -167,7 +167,7 @@ def parseArgs():
     )
     parser.add_argument(
         "-m",
-        "--physicsModels",
+        "--physicsModel",
         nargs="+",
         action="append",
         default=[],
@@ -577,10 +577,10 @@ def main():
         config=config,
     )
 
-    if len(args.physicsModels) == 0:
+    if len(args.physicsModel) == 0:
         models = [["basemodel"]]
     else:
-        models = args.physicsModels
+        models = args.physicsModel
 
     for margs in models:
         model = margs[0]

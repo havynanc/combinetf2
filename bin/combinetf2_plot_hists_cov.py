@@ -100,7 +100,7 @@ def parseArgs():
     )
     parser.add_argument(
         "-m",
-        "--physicsModels",
+        "--physicsModel",
         nargs="+",
         action="append",
         default=[],
@@ -235,7 +235,7 @@ def main():
 
     channel_info = meta["meta_info_input"]["channel_info"]
 
-    models = {p[0]: p[1:] for p in args.physicsModels}
+    models = {p[0]: p[1:] for p in args.physicsModel}
 
     hist_cov = fitresult[
         f"hist_{'prefit' if args.prefit else 'postfit'}_inclusive_cov"
