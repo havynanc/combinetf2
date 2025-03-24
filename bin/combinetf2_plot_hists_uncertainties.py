@@ -166,11 +166,12 @@ def parseArgs():
         help="Give the uncertainties in absolute numbers (relative by default)",
     )
     parser.add_argument(
-        "--project",
+        "-m",
+        "--physicsModels",
         nargs="+",
         action="append",
         default=[],
-        help='add projection for the prefit and postfit histograms, specifying the channel name followed by the axis names, e.g. "--project ch0 eta pt".  This argument can be called multiple times',
+        help='Make plot of physics model prefit and postfit histograms, specifying the model name, followed by the channel name and axis names, e.g. "-m project ch0 eta pt". This argument can be called multiple times',
     )
     parser.add_argument(
         "--flterUncertainties",
@@ -576,34 +577,35 @@ def main():
         config=config,
     )
 
-    for projection in args.project:
-        channel = projection[0]
-        axes = projection[1:]
-        info = channel_info[channel]
-        if len(axes) == 0:
-            axes = ["yield"]
-        result = fitresult["channels"][channel]["projections"]["_".join(axes)]
+    if len(args.physicsModels) == 0:
+        models = [["basemodel"]]
+    else:
+        models = args.physicsModels
 
-        make_plots(
-            outdir,
-            result,
-            axes=[a for a in info["axes"] if a.name in axes],
-            channel=channel,
-            lumi=info.get("lumi", None),
-            **opts,
-        )
+    for margs in models:
+        model = margs[0]
 
-    for channel, info in channel_info.items():
-        result = fitresult[f"channels"][channel]
+        for channel, info in channel_info.items():
 
-        make_plots(
-            outdir,
-            result,
-            axes=info["axes"],
-            channel=channel,
-            lumi=info.get("lumi", None),
-            **opts,
-        )
+            if model == "basemodel":
+                axes_names = [a.name for a in info["axes"]]
+                result = fitresult[f"channels"][channel]
+            else:
+                if channel != margs[1]:
+                    continue
+                axes_names = margs[2:]
+                if len(axes_names) == 0:
+                    axes_names = ["yield"]
+                result = fitresult["channels"][channel][model]["_".join(axes_names)]
+
+            make_plots(
+                outdir,
+                result,
+                axes=[a for a in info["axes"] if a.name in axes_names],
+                channel=channel,
+                lumi=info.get("lumi", None),
+                **opts,
+            )
 
     if output_tools.is_eosuser_path(args.outpath) and args.eoscp:
         output_tools.copy_to_eos(outdir, args.outpath, args.outfolder)

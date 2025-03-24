@@ -6,9 +6,6 @@ import tensorflow as tf
 class PhysicsModel:
     """
     A class to output histograms without any transformation.
-
-    Parameters
-    ----------
     """
 
     def __init__(self, indata):
@@ -230,7 +227,8 @@ class Ratio(PhysicsModel):
         den_processes: list of str, optional
             Same as num_processes but for denumerator
         num_selection: dict, optional
-            Dictionary specifying selection criteria for the numerator. Keys are axis names, and values are slices or conditions. Defaults to an empty dictionary meaning no selection.
+            Dictionary specifying selection criteria for the numerator. Keys are axis names, and values are slices or conditions.
+            Defaults to an empty dictionary meaning no selection.
             E.g. {"charge":0, "ai":slice(0,2)}
             Selected axes are summed before the ratio is computed. To integrate over one axis before the ratio, use `slice(None)`
         den_selection: dict, optional
@@ -261,10 +259,9 @@ class Ratio(PhysicsModel):
         self.need_processes = len(num_processes) or len(
             den_processes
         )  # the fun_flat will be by processes
-        self.skip_incusive = (
-            self.need_processes
-        )  # inclusive yields only if no processes are specified
-        self.skip_per_process = not self.need_processes
+
+        # The output of ratios will always be without process axis
+        self.skip_per_process = True
 
         if self.num.channel_axes != self.den.channel_axes:
             raise RuntimeError(
@@ -313,16 +310,18 @@ class Ratio(PhysicsModel):
 
             if self.num.selections:
                 exp_num = exp_num[self.num.selections]
+                exp_num = tf.reduce_sum(exp_num, axis=self.num.selection_idxs)
             if self.den.selections:
                 exp_den = exp_den[self.den.selections]
-            exp_num = tf.reduce_sum(exp_num, axis=self.num.selection_idxs)
-            exp_den = tf.reduce_sum(exp_den, axis=self.den.selection_idxs)
+                exp_den = tf.reduce_sum(exp_den, axis=self.den.selection_idxs)
 
             if self.normalize:
                 norm_num = tf.reduce_sum(exp_num)
                 exp_num /= norm_num
                 norm_den = tf.reduce_sum(exp_den)
                 exp_den /= norm_den
+
+            # exp_den = tf.where(exp_den <= 0, tf.ones_like(exp_den), exp_den)
 
             exp = exp_num / exp_den
 
@@ -353,22 +352,28 @@ def parse_ratio(indata, *args, normalize=False):
     parsing the input arguments into the ratio constructor, is has to be called as
     -m ratio
         <ch num> <ch den>
-        <proc_num_0>;<proc_num_1>,... <proc_num_0>;<proc_num_1>,...
-        <axis_num_0>:<slice_num_0>;<axis_num_1>;<slice_num_1>... <axis_den_0>;<slice_den_0>;<axis_den_1>;<slice_den_1>...
+        <proc_num_0>,<proc_num_1>,... <proc_num_0>,<proc_num_1>,...
+        <axis_num_0>:<slice_num_0>,<axis_num_1>,<slice_num_1>... <axis_den_0>,<slice_den_0>,<axis_den_1>,<slice_den_1>...
 
-    For processes use 'None' if you don't want to select any for either numerator or denominator
+    Processes selections are optional. But in case on is given for the numerator, the denominator must be specified as well and vice versa.
+    Use 'None' if you don't want to select any for either numerator xor denominator.
 
     Axes selections are optional. But in case one is given for the numerator, the denominator must be specified as well and vice versa.
-    For axes selections, use 'None:None' if you don't want to do any for either numerator xor denominator
+    Use 'None:None' if you don't want to do any for either numerator xor denominator.
     """
 
-    procs_num = [p for p in args[2].split(",") if p != "None"]
-    procs_den = [p for p in args[3].split(",") if p != "None"]
+    if len(args) > 2 and ":" not in args[2]:
+        procs_num = [p for p in args[2].split(",") if p != "None"]
+        procs_den = [p for p in args[3].split(",") if p != "None"]
+    else:
+        procs_num = []
+        procs_den = []
 
     # find axis selections
     if any(a for a in args if ":" in a):
-        axis_selection_num = parse_axis_selection(args[4])
-        axis_selection_den = parse_axis_selection(args[5])
+        sel_args = [a for a in args if ":" in a]
+        axis_selection_num = parse_axis_selection(sel_args[0])
+        axis_selection_den = parse_axis_selection(sel_args[1])
     else:
         axis_selection_num = None
         axis_selection_den = None

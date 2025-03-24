@@ -784,14 +784,9 @@ class Fitter:
 
             fun_residual = model.make_fun(flat_fun_residual, inclusive)
 
-            if profile:
-                res, resvar, rescov, _1, _2 = self._expvar_profiled(
-                    fun_residual, compute_cov=True
-                )
-            else:
-                res, resvar, rescov, _1, _2 = self._expvar(
-                    fun_residual, compute_cov=True
-                )
+            res, resvar, rescov, _1, _2 = self.expected_with_variance(
+                fun_residual, profile=profile, compute_cov=True
+            )
 
             chi2val = self.chi2(res, rescov).numpy()
             ndf = tf.size(exp).numpy() - getattr(model, "normalize", False)

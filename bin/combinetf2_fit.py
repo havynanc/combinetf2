@@ -266,7 +266,7 @@ def save_hists(args, models, fitter, ws, prefit=True, profile=False):
         if not getattr(model, "skip_incusive", False):
             exp, aux = fitter.expected_events(
                 model,
-                inclusive=True,
+                inclusive=not getattr(model, "need_processes", False),
                 compute_variance=args.computeHistErrors,
                 compute_cov=args.computeHistCov,
                 compute_chi2=not args.noChi2 and model.has_data,
@@ -301,11 +301,7 @@ def save_hists(args, models, fitter, ws, prefit=True, profile=False):
                 model,
                 exp,
                 var=aux[0],
-                process_axis=(
-                    fitter.indata.axis_procs
-                    if getattr(model, "has_processes", True)
-                    else None
-                ),
+                process_axis=fitter.indata.axis_procs,
                 prefit=prefit,
             )
 

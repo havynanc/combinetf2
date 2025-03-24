@@ -200,18 +200,12 @@ def parseArgs():
         "--prefit", action="store_true", help="Make prefit plot, else postfit"
     )
     parser.add_argument(
-        "--project",
+        "-m",
+        "--physicsModels",
         nargs="+",
         action="append",
         default=[],
-        help='add projection for the prefit and postfit histograms, specifying the channel name followed by the axis names, e.g. "--project ch0 eta pt". This argument can be called multiple times',
-    )
-    parser.add_argument(
-        "--normalized",
-        nargs="+",
-        action="append",
-        default=[],
-        help='add normalized (projection) for the prefit and postfit histograms, specifying the channel name followed by the axis names, e.g. "--normalized ch0 eta pt". This argument can be called multiple times',
+        help='Make plot of physics model prefit and postfit histograms, specifying the model name, followed by the channel name and axis names, e.g. "-m project ch0 eta pt". This argument can be called multiple times',
     )
     parser.add_argument(
         "--filterProcs",
@@ -548,13 +542,13 @@ def make_plot(
                 zorder=2,
                 flow="none",
             )
-    if args.unfoldedXsec:
+    if args.unfoldedXsec or len(h_stack) == 0:
         hep.histplot(
             h_inclusive,
             yerr=False,
             histtype="step",
             color="black",
-            label="Prefit model",
+            label="Prefit model" if args.unfoldedXsec else "Prediction",
             binwnorm=binwnorm,
             ax=ax1,
             alpha=1.0,
@@ -897,9 +891,13 @@ def make_plots(
             hist_data = result["hist_data_obs"].get()
         else:
             hist_data = None
+
         hist_inclusive = result[f"hist_{fittype}_inclusive"].get()
-        hist_stack = result[f"hist_{fittype}"].get()
-        hist_stack = [hist_stack[{"processes": p}] for p in procs]
+        if f"hist_{fittype}" in result.keys():
+            hist_stack = result[f"hist_{fittype}"].get()
+            hist_stack = [hist_stack[{"processes": p}] for p in procs]
+        else:
+            hist_stack = []
 
     # vary poi by postfit uncertainty
     if varNames is not None:
@@ -945,7 +943,10 @@ def make_plots(
 
     if args.unfoldedXsec:
         # convert number in cross section in pb
-        to_xsc = lambda h: hh.scaleHist(h, 1.0 / (lumi * 1000))
+        if lumi is not None:
+            to_xsc = lambda h: hh.scaleHist(h, 1.0 / (lumi * 1000))
+        else:
+            to_xsc = lambda h: h
         hist_data = to_xsc(hist_data)
         hist_inclusive = to_xsc(hist_inclusive)
         hist_stack = [to_xsc(h) for h in hist_stack]
@@ -1135,43 +1136,41 @@ def main():
         varColors=varColors,
     )
 
-    for projection in [*args.project, *args.normalized]:
-        channel = projection[0]
-        axes = projection[1:]
-        info = channel_info[channel]
-        if len(axes) == 0:
-            axes = ["yield"]
+    if len(args.physicsModels) == 0:
+        models = [["basemodel"]]
+    else:
+        models = args.physicsModels
 
-        is_normalized = projection in args.normalized
-        identifier = "normalized" if is_normalized else "projections"
-        result = fitresult["channels"][channel][identifier]["_".join(axes)]
-        chi2, ndf, _ = get_chi2(result, args.noChisq, fittype)
+    for margs in models:
+        model = margs[0]
 
-        make_plots(
-            result,
-            [a for a in info["axes"] if a.name in axes],
-            outdir,
-            channel=channel,
-            chi2=[chi2, ndf],
-            lumi=info.get("lumi", None),
-            is_normalized=is_normalized,
-            **opts,
-        )
+        for channel, info in channel_info.items():
 
-    for channel, info in channel_info.items():
-        result = fitresult[f"channels"][channel]
-        chi2, ndf, saturated_chi2 = get_chi2(fitresult, args.noChisq, fittype)
+            if model == "basemodel":
+                axes_names = [a.name for a in info["axes"]]
+                result = fitresult[f"channels"][channel]
+                is_normalized = False
+                chi2, ndf, saturated_chi2 = get_chi2(fitresult, args.noChisq, fittype)
+            else:
+                if channel != margs[1]:
+                    continue
+                axes_names = margs[2:]
+                if len(axes_names) == 0:
+                    axes_names = ["yield"]
+                result = fitresult["channels"][channel][model]["_".join(axes_names)]
+                is_normalized = model in ["normalized", "normratio"]
+                chi2, ndf, _ = get_chi2(result, args.noChisq, fittype)
 
-        make_plots(
-            result,
-            info["axes"],
-            outdir,
-            channel=channel,
-            chi2=[chi2, ndf],
-            saturated_chi2=saturated_chi2,
-            lumi=info.get("lumi", None),
-            **opts,
-        )
+            make_plots(
+                result,
+                [a for a in info["axes"] if a.name in axes_names],
+                outdir,
+                channel=channel,
+                chi2=[chi2, ndf],
+                lumi=info.get("lumi", None),
+                is_normalized=is_normalized,
+                **opts,
+            )
 
     if output_tools.is_eosuser_path(args.outpath) and args.eoscp:
         output_tools.copy_to_eos(outdir, args.outpath, args.outfolder)

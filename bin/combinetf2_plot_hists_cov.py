@@ -99,11 +99,12 @@ def parseArgs():
         help="Plot correlation instad of covariance",
     )
     parser.add_argument(
-        "--project",
+        "-m",
+        "--physicsModels",
         nargs="+",
         action="append",
         default=[],
-        help='add projection for the prefit and postfit histograms, specifying the channel name followed by the axis names, e.g. "--project ch0 eta pt".  This argument can be called multiple times',
+        help='Make plot of physics model prefit and postfit histograms, specifying the model name, followed by the channel name and axis names, e.g. "-m project ch0 eta pt". This argument can be called multiple times',
     )
     parser.add_argument(
         "--prefit", action="store_true", help="Make prefit plot, else postfit"
@@ -135,6 +136,7 @@ def plot_matrix(
     annot=False,
     config={},
     meta=None,
+    suffix=None,
 ):
 
     matrix = hist_obj.values()
@@ -183,6 +185,8 @@ def plot_matrix(
         to_join.append(channel)
     if axes is not None:
         to_join.append("_".join(axes))
+    if suffix is not None:
+        to_join.append(suffix)
     to_join = [*to_join, args.postfix]
 
     outfile = "_".join(filter(lambda x: x, to_join))
@@ -231,7 +235,7 @@ def main():
 
     channel_info = meta["meta_info_input"]["channel_info"]
 
-    projections = {p[0]: p[1:] for p in args.project}
+    models = {p[0]: p[1:] for p in args.physicsModels}
 
     hist_cov = fitresult[
         f"hist_{'prefit' if args.prefit else 'postfit'}_inclusive_cov"
@@ -259,7 +263,7 @@ def main():
         )
 
         selection_axes = [a for a in axes if a.name in args.selectionAxes]
-        if (len(args.project) and channel in [p[0] for p in args.project]) or len(
+        if (len(models) and channel in [p[0] for p in models.values()]) or len(
             selection_axes
         ) > 0:
             # reshape into original axes
@@ -304,18 +308,22 @@ def main():
                     outdir, h_cov_i, args, suffix, other_axes, config=config, meta=meta
                 )
 
-        for projection in args.project:
-            if channel != projection[0]:
-                continue
+    for mname, margs in models.items():
+        hist_cov = fitresult[mname]["_".join(margs[1:])][
+            f"hist_{'prefit' if args.prefit else 'postfit'}_inclusive_cov"
+        ].get()
 
-            projection_axes = projection[1:]
-            projection_axes_y = [f"y_{p}" for p in projection[1:]]
-
-            h_cov = h2d.project(*projection_axes, *projection_axes_y)
-
-            plot_matrix(
-                outdir, h_cov, args, channel, projection_axes, config=config, meta=meta
-            )
+        # plot full covariance matrix only if it goes across multiple channels
+        plot_matrix(
+            outdir,
+            hist_cov,
+            args,
+            channel=margs[0],
+            axes=margs[1:],
+            config=config,
+            meta=meta,
+            suffix=mname,
+        )
 
     if output_tools.is_eosuser_path(args.outpath) and args.eoscp:
         output_tools.copy_to_eos(outdir, args.outpath, args.outfolder)
