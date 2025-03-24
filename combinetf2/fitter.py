@@ -8,6 +8,17 @@ from combinetf2.tfhelpers import simple_sparse_slice0end
 logger = logging.child_logger(__name__)
 
 
+class FitterCallback:
+    def __init__(self, xv):
+        self.iiter = 0
+        self.xval = xv
+
+    def __call__(self, intermediate_result):
+        logger.debug(f"Iteration {self.iiter}: loss value {intermediate_result.fun}")
+        self.xval = intermediate_result.x
+        self.iiter += 1
+
+
 class Fitter:
     def __init__(self, indata, options):
         self.indata = indata
@@ -1320,18 +1331,6 @@ class Fitter:
                 p = tf.convert_to_tensor(pval)
                 val, grad, hessp = self.loss_val_grad_hessp(p)
                 return hessp.__array__()
-
-            class FitterCallback:
-                def __init__(self, xv):
-                    self.iiter = 0
-                    self.xval = xv
-
-                def __call__(self, intermediate_result):
-                    logger.debug(
-                        f"Iteration {self.iiter}: loss value {intermediate_result.fun}"
-                    )
-                    self.xval = intermediate_result.x
-                    self.iiter += 1
 
             xval = self.x.numpy()
             callback = FitterCallback(xval)
