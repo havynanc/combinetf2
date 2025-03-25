@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 
+import tensorflow as tf
+
+tf.config.experimental.enable_op_determinism()
+
 import argparse
 import time
 
 import h5py
 import numpy as np
-import tensorflow as tf
 
 from combinetf2 import fitter, inputdata, io_tools, workspace
 
@@ -185,6 +188,12 @@ def make_parser():
         help="add bin-by-bin statistical uncertainties on templates (adding sumW2 on variance)",
     )
     parser.add_argument(
+        "--binByBinStatType",
+        default="gamma",
+        choices=["gamma", "normal"],
+        help="probability density for bin-by-bin statistical uncertainties",
+    )
+    parser.add_argument(
         "--externalPostfit",
         default=None,
         type=str,
@@ -354,8 +363,7 @@ def save_hists(args, fitter, ws, prefit=True, profile=False):
             inclusive=True,
             compute_variance=False,
             compute_variations=True,
-            profile=profile,
-            profile_grad=False,
+            profile=False,
         )
 
         ws.add_expected_hists(
@@ -378,8 +386,7 @@ def save_hists(args, fitter, ws, prefit=True, profile=False):
                 inclusive=True,
                 compute_variance=False,
                 compute_variations=True,
-                profile=profile,
-                profile_grad=False,
+                profile=False,
                 masked=channel_info.get("masked", False),
             )
 
@@ -398,6 +405,8 @@ def save_hists(args, fitter, ws, prefit=True, profile=False):
 
 
 def fit(args, fitter, ws, dofit=True):
+
+    edmval = None
 
     if args.externalPostfit is not None:
         # load results from external fit and set postfit value and covariance elements for common parameters
@@ -433,11 +442,36 @@ def fit(args, fitter, ws, dofit=True):
         if dofit:
             fitter.minimize()
 
+        # compute the covariance matrix and estimated distance to minimum
+
         val, grad, hess = fitter.loss_val_grad_hess()
-        fitter.cov.assign(tf.linalg.inv(hess))
+
+        # use a Cholesky decomposition to easily detect the non-positive-definite case
+        chol = tf.linalg.cholesky(hess)
+
+        # FIXME catch this exception to mark failed toys and continue
+        if tf.reduce_any(tf.math.is_nan(chol)).numpy():
+            raise ValueError(
+                "Cholesky decomposition failed, Hessian is not positive-definite"
+            )
+
+        gradv = grad[..., None]
+        edmval = 0.5 * tf.linalg.matmul(
+            gradv, tf.linalg.cholesky_solve(chol, gradv), transpose_a=True
+        )
+        edmval = edmval[0, 0].numpy()
+        logger.info(f"edmval: {edmval}")
+
+        fitter.cov.assign(
+            tf.linalg.cholesky_solve(chol, tf.eye(chol.shape[0], dtype=chol.dtype))
+        )
+
+        del chol
 
         if args.doImpacts:
             ws.add_impacts_hists(*fitter.impacts_parms(hess))
+
+        del hess
 
         if args.globalImpacts:
             ws.add_global_impacts_hists(*fitter.global_impacts_parms())
@@ -451,6 +485,7 @@ def fit(args, fitter, ws, dofit=True):
     ws.results.update(
         {
             "nllvalfull": nllvalfull,
+            "edmval": edmval,
             "satnllvalfull": satnllvalfull,
             "ndfsat": ndfsat,
             "postfit_profile": args.externalPostfit is None,

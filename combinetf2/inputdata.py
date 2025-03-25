@@ -118,12 +118,13 @@ class FitInputData:
                     }
 
             self.symmetric_tensor = self.metadata.get("symmetric_tensor", False)
-            self.exponential_transform = self.metadata.get(
-                "exponential_transform", False
-            )
-            self.exponential_transform_scale = self.metadata.get(
-                "exponential_transform_scale", 1000000
-            )
+
+            if self.metadata.get("exponential_transform", False):
+                raise NotImplementedError(
+                    "exponential_transform functionality has been removed.   Please use systematic_type normal instead"
+                )
+
+            self.systematic_type = self.metadata.get("systematic_type", "log_normal")
 
             # compute indices for channels
             ibin = 0

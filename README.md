@@ -70,6 +70,9 @@ source setup.sh
 
 An example can be found in ```tests/make_tensor.py -o test_tensor.hdf5```. 
 
+### Systematic uncertainties
+Systematic uncertainties are implemented by default using a log-normal probability density (with a multiplicative effect on the event yield).  Gaussian uncertainties with an additive effect on the event yield can also be used.  This is configured through the `systematic_type` parameter of the `TensorWriter`.
+
 ### Sparse tensor
 By setting `sparse=True` in the `TensorWriter` constructor the tensor is stored in the sparse representation. 
 This is useful when working with a sparse tensor, e.g. having many bins/processes/systematics where each bin/process/systematic only contributes to a small number of bins/processes/systematics. 
@@ -97,6 +100,9 @@ For example:
 ```bash
 combinetf2_fit test_tensor.hdf5 -o results/fitresult.hdf5 -t 0 --doImpacts --globalImpacts --binByBinStat --saveHists --computeHistErrors --project ch1 a --project ch1 b
 ```
+
+### Bin-by-bin statistical uncertainties
+Bin-by-bin statistical uncertainties on the templates can be added at runtime using the `--binByBinStat` option.  The Barlow-Beeston lite method is used to add implicit nuisance parameters for each template bin.  By default this is implemented using a gamma distribution for the probability density, but Gaussian uncertainties can also be used with `--binByBinStatType normal`.
 
 ## Fit diagnostics
 
