@@ -1129,7 +1129,7 @@ class Fitter:
             lsaturated = tf.reduce_sum(-nobs * lognobs + nobs, axis=-1)
 
         if self.binByBinStat:
-            if self.binByBinStatType == "log_normal":
+            if self.binByBinStatType == "gamma":
                 kstat = self.indata.kstat[: self.indata.nbins]
                 beta0 = self.beta0[: self.indata.nbins]
                 lsaturated += tf.reduce_sum(
