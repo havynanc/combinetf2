@@ -54,16 +54,28 @@ def make_parser():
         help="run a given number of toys, 0 fits the data, and -1 fits the asimov toy (the default)",
     )
     parser.add_argument(
-        "--toysBayesian",
-        default=False,
-        action="store_true",
-        help="run bayesian-type toys (otherwise frequentist)",
+        "--toysSystRandomize",
+        default="frequentist",
+        choices=["frequentist", "bayesian", "none"],
+        help="Type of randomization for systematic uncertainties (including binByBinStat if present).  Options are 'frequentist' which randomizes the contraint minima a.k.a global observables and 'bayesian' which randomizes the actual nuisance parameters used in the pseudodata generation",
     )
     parser.add_argument(
-        "--bootstrapData",
+        "--toysDataRandomize",
+        default="poisson",
+        choices=["poisson", "normal", "none"],
+        help="Type of randomization for pseudodata.  Options are 'poisson',  'normal', and 'none'",
+    )
+    parser.add_argument(
+        "--toysDataMode",
+        default="expected",
+        choices=["expected", "observed"],
+        help="central value for pseudodata used in the toys",
+    )
+    parser.add_argument(
+        "--toysRandomizeParameters",
         default=False,
         action="store_true",
-        help="throw toys directly from observed data counts rather than expectation from templates",
+        help="randomize the parameter starting values for toys",
     )
     parser.add_argument(
         "--seed", default=123456789, type=int, help="random seed for toys"
@@ -251,6 +263,12 @@ def make_parser():
         default=False,
         action="store_true",
         help="Using an external covariance matrix for the observations in the chi-square fit",
+    )
+    parser.add_argument(
+        "--prefitUnconstrainedNuisanceUncertainty",
+        default=0.0,
+        type=float,
+        help="Assumed prefit uncertainty for unconstrained nuisances",
     )
 
     return parser.parse_args()
@@ -625,7 +643,10 @@ def main():
             elif ifit >= 1:
                 group += f"_toy{ifit}"
                 ifitter.toyassign(
-                    bayesian=args.toysBayesian, bootstrap_data=args.bootstrapData
+                    syst_randomize=args.toysSystRandomize,
+                    data_randomize=args.toysDataRandomize,
+                    data_mode=args.toysDataMode,
+                    randomize_parameters=args.toysRandomizeParameters,
                 )
 
             ws.add_parms_hist(

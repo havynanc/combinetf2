@@ -1,9 +1,10 @@
 import numpy as np
 import scipy
 import tensorflow as tf
+import tensorflow_probability as tfp
 from wums import logging
 
-from combinetf2.tfhelpers import simple_sparse_slice0end
+from combinetf2.tfhelpers import is_diag, simple_sparse_slice0end
 
 logger = logging.child_logger(__name__)
 
@@ -55,6 +56,9 @@ class Fitter:
 
         self.chisqFit = options.chisqFit
         self.externalCovariance = options.externalCovariance
+        self.prefitUnconstrainedNuisanceUncertainty = (
+            options.prefitUnconstrainedNuisanceUncertainty
+        )
 
         self.nsystgroupsfull = len(self.systgroupsfull)
 
@@ -143,7 +147,13 @@ class Fitter:
         )
 
         # parameter covariance matrix
-        self.cov = tf.Variable(self.prefit_covariance(), trainable=False, name="cov")
+        self.cov = tf.Variable(
+            self.prefit_covariance(
+                unconstrained_err=self.prefitUnconstrainedNuisanceUncertainty
+            ),
+            trainable=False,
+            name="cov",
+        )
 
         # determine if problem is linear (ie likelihood is purely quadratic)
         self.is_linear = (
@@ -168,7 +178,7 @@ class Fitter:
         # are set to a placeholder uncertainty (zero by default) for the purposes of prefit uncertainties
         var_theta = tf.where(
             self.indata.constraintweights == 0.0,
-            unconstrained_err,
+            unconstrained_err**2,
             tf.math.reciprocal(self.indata.constraintweights),
         )
 
@@ -199,7 +209,11 @@ class Fitter:
         self.beta.assign(self.beta0)
 
     def defaultassign(self):
-        self.cov.assign(self.prefit_covariance())
+        self.cov.assign(
+            self.prefit_covariance(
+                unconstrained_err=self.prefitUnconstrainedNuisanceUncertainty
+            )
+        )
         self.theta0defaultassign()
         if self.binByBinStat:
             self.beta0defaultassign()
@@ -273,30 +287,52 @@ class Fitter:
                     )
                 )
 
-    def toyassign(self, bayesian=False, bootstrap_data=False):
-        if bayesian:
+    def toyassign(
+        self,
+        syst_randomize="frequentist",
+        data_randomize="poisson",
+        data_mode="expected",
+        randomize_parameters=False,
+    ):
+        if syst_randomize == "bayesian":
             # randomize actual values
             self.bayesassign()
-        else:
+        elif syst_randomize == "frequentist":
             # randomize nuisance constraint minima
             self.frequentistassign()
 
-        if bootstrap_data:
-            # randomize from observed data
-            self.nobs.assign(
-                tf.random.poisson(
-                    lam=self.indata.data_obs, shape=[], dtype=self.nobs.dtype
+        if data_mode == "expected":
+            data_nom = self.expected_yield()
+        elif data_mode == "observed":
+            data_nom = self.indata.data_obs
+
+        if data_randomize == "poisson":
+            if self.externalCovariance:
+                raise RuntimeError(
+                    "Toys with external covariance only possible with data_randomize=normal"
                 )
-            )
-        else:
-            # randomize from expectation
-            self.nobs.assign(
-                tf.random.poisson(
-                    lam=self.expected_yield(),
-                    shape=[],
-                    dtype=self.nobs.dtype,
+            else:
+                self.nobs.assign(
+                    tf.random.poisson(lam=data_nom, shape=[], dtype=self.nobs.dtype)
                 )
-            )
+        elif data_randomize == "normal":
+            if self.externalCovariance:
+                pdata = tfp.distributions.MultivariateNormalTriL(
+                    loc=data_nom,
+                    scale_tril=tf.linalg.cholesky(tf.linalg.inv(self.data_cov_inv)),
+                )
+                self.nobs.assign(pdata.sample())
+            else:
+                self.nobs.assign(
+                    tf.random.normal(
+                        mean=data_nom,
+                        stddev=tf.sqrt(data_nom),
+                        shape=[],
+                        dtype=self.nobs.dtype,
+                    )
+                )
+        elif data_randomize == "none":
+            self.nobs.assign(data_nom)
 
         # assign start values for nuisance parameters to constraint minima
         self.xdefaultassign()
@@ -304,6 +340,35 @@ class Fitter:
             self.betadefaultassign()
         # set likelihood offset
         self.nexpnom.assign(self.expected_yield())
+
+        if randomize_parameters:
+            # the special handling of the diagonal case here speeds things up, but is also required
+            # in case the prefit covariance has zero for some uncertainties (which is the default
+            # for unconstrained nuisances for example) since the multivariate normal distribution
+            # requires a positive-definite covariance matrix
+            if is_diag(self.cov):
+                self.x.assign(
+                    tf.random.normal(
+                        shape=[],
+                        mean=self.x,
+                        stddev=tf.sqrt(tf.linalg.diag_part(self.cov)),
+                        dtype=self.x.dtype,
+                    )
+                )
+            else:
+                pparms = tfp.distributions.MultivariateNormalTriL(
+                    loc=self.x, scale_tril=tf.linalg.cholesky(self.cov)
+                )
+                self.x.assign(pparms.sample())
+            if self.binByBinStat:
+                self.beta.assign(
+                    tf.random.normal(
+                        shape=[],
+                        mean=self.beta0,
+                        stddev=tf.sqrt(self.varbeta),
+                        dtype=self.beta.dtype,
+                    )
+                )
 
     def _compute_impact_group(self, v, idxs):
         cov_reduced = tf.gather(self.cov[self.npoi :, self.npoi :], idxs, axis=0)
