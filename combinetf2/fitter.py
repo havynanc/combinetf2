@@ -96,6 +96,7 @@ class Fitter:
 
         # observed number of events per bin
         self.nobs = tf.Variable(self.indata.data_obs, trainable=False, name="nobs")
+        self.data_cov_inv = None
 
         if self.chisqFit:
             if self.externalCovariance:
@@ -975,7 +976,7 @@ class Fitter:
 
         aux = [None] * 4
         if compute_cov or compute_variance or compute_global_impacts:
-            exp, expvar, expcov, exp_impacts, exp_impacts_grouped = (
+            exp, exp_var, exp_cov, exp_impacts, exp_impacts_grouped = (
                 self.expected_with_variance(
                     fun,
                     profile=profile,
@@ -983,35 +984,32 @@ class Fitter:
                     compute_global_impacts=compute_global_impacts,
                 )
             )
-            aux = [expvar, expcov, exp_impacts, exp_impacts_grouped]
+            aux = [exp_var, exp_cov, exp_impacts, exp_impacts_grouped]
         elif compute_variations:
             exp = self.expected_variations(fun, correlations=correlated_variations)
         else:
             exp = tf.function(fun)()
 
         if compute_chi2:
+            data, data_err, data_cov = model.get_data(self.nobs, self.data_cov_inv)
 
-            def flat_fun_residual():
-                return (
-                    self._compute_yields(
-                        inclusive=inclusive,
-                        profile=profile,
-                        full=False,
-                    )
-                    - self.nobs
+            # need to calculate prediction excluding masked channels
+            def flat_fun():
+                return self._compute_yields(
+                    inclusive=inclusive, profile=profile, full=False
                 )
 
-            fun_residual = model.make_fun(flat_fun_residual, inclusive)
-
-            res, resvar, rescov, _1, _2 = self.expected_with_variance(
-                fun_residual, profile=profile, compute_cov=True
+            pred, pred_var, pred_cov, _1, _2 = self.expected_with_variance(
+                model.make_fun(flat_fun, inclusive),
+                profile=profile,
+                compute_cov=compute_cov,
             )
 
-            chi2val = self.chi2(res, rescov).numpy()
-            ndf = tf.size(exp).numpy() - getattr(model, "normalize", False)
+            chi2val = self.chi2(pred - data, pred_cov + data_cov).numpy()
+            ndf = tf.size(pred).numpy() - getattr(model, "normalize", False)
 
-            aux.append(self.chi2(res, rescov).numpy())  # chi2val
-            aux.append(tf.size(exp).numpy() - getattr(model, "normalize", False))  # ndf
+            aux.append(chi2val)
+            aux.append(ndf)
         else:
             aux.append(None)
             aux.append(None)

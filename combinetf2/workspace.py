@@ -168,12 +168,16 @@ class Workspace:
             self.add_value(ndf, "ndf" + postfix, channel, model.identifiers)
             self.add_value(chi2, "chi2" + postfix, channel, model.identifiers)
 
-    def add_observed_hists(self, model, data_obs, nobs):
+    def add_observed_hists(
+        self, model, data_obs, nobs, data_cov_inv=None, nobs_cov_inv=None
+    ):
         hists_data_obs = {}
         hists_nobs = {}
 
-        values_data_obs, variances_data_obs = model.get_data(data_obs)
-        values_nobs, variances_nobs = model.get_data(nobs)
+        values_data_obs, variances_data_obs, cov_data_obs = model.get_data(
+            data_obs, data_cov_inv
+        )
+        values_nobs, variances_nobs, cov_nobs = model.get_data(nobs, nobs_cov_inv)
 
         for channel, info in model.channel_info.items():
             axes = info["axes"]

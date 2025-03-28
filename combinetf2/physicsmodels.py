@@ -17,12 +17,53 @@ class PhysicsModel:
         # a list of strings, the result will be written under these keys
         self.identifiers = []
 
-    def make_fun(self, fun_flat, inclusive=True):
-        return fun_flat
+    # values are inclusive in processes: nbins
+    def compute(self, values):
+        return values
 
-    def get_data(self, data):
-        fun = self.make_fun(lambda: data)
-        return fun(), None
+    # values are provided per process: nbins x nprocesses
+    def compute_per_process(self, values):
+        return self.compute(values)
+
+    # generic version which should not need to be overridden
+    def make_fun(self, fun_flat, inclusive=True):
+        compute = self.compute if inclusive else self.compute_per_process
+
+        def fun():
+            exp = compute(fun_flat())
+            return exp
+
+        return fun
+
+    # generic version which should not need to be overridden
+    @tf.function
+    def get_data(self, data, data_cov_inv=None):
+        with tf.GradientTape() as t:
+            t.watch(data)
+            output = self.compute(data)
+
+        jacobian = t.jacobian(output, data)
+
+        # Ensure the Jacobian has at least 2 dimensions (expand in case output is a scalar)
+        if len(jacobian.shape) == 1:
+            jacobian = tf.expand_dims(jacobian, axis=0)
+
+        if data_cov_inv is None:
+            # Inverse standard deviations for Poisson errors (1/sqrt(data))
+            inv_sigma = 1.0 / tf.sqrt(data)
+            # Directly scale the Jacobian rows by 1/sqrt(data) (broadcasted)
+            scaled_jacobian = jacobian * inv_sigma
+
+            # Propagate covariance for uncorrelated errors
+            cov_output_inv = scaled_jacobian @ tf.transpose(scaled_jacobian)
+        else:
+            # General case with full covariance matrix
+            cov_output_inv = jacobian @ data_cov_inv @ tf.transpose(jacobian)
+
+        cov_output = tf.linalg.inv(cov_output_inv)
+        uncertainty_output = tf.sqrt(tf.linalg.diag_part(cov_output))
+
+        return output, uncertainty_output, cov_output
 
 
 class Project(PhysicsModel):
@@ -94,65 +135,23 @@ class Project(PhysicsModel):
             "_".join(axes_names) if len(axes_names) else "yield",
         ]
 
-    def make_fun(self, fun_flat, inclusive=True):
+    def project(self, values, out_shape, transpose_idxs):
+        exp = values[self.start : self.stop]
+        if self.normalize:
+            norm = tf.reduce_sum(exp)
+            exp /= norm
+        exp = tf.reshape(exp, out_shape)
+        exp = tf.reduce_sum(exp, axis=self.proj_idxs)
+        exp = tf.transpose(exp, perm=transpose_idxs)
+        return exp
 
-        if inclusive:
-            out_shape = self.exp_shape[:-1]
-            transpose_idxs = self.transpose_idxs[:-1]
-        else:
-            out_shape = self.exp_shape
-            transpose_idxs = self.transpose_idxs
+    def compute_per_process(self, values):
+        return self.project(values, self.exp_shape, self.transpose_idxs)
 
-        def fun():
-            exp = fun_flat()[self.start : self.stop]
-            if self.normalize:
-                norm = tf.reduce_sum(exp)
-                exp /= norm
-            exp = tf.reshape(exp, out_shape)
-            exp = tf.reduce_sum(exp, axis=self.proj_idxs)
-            exp = tf.transpose(exp, perm=transpose_idxs)
-
-            return exp
-
-        return fun
-
-    def get_data(self, data, cov=None):
-        val = self.make_fun(lambda: data)()
-
-        shape = self.exp_shape[:-1]
-        perm_idxs = self.transpose_idxs[:-1]
-
-        if cov is not None:
-            cov = cov[self.start : self.stop, self.start : self.stop]
-
-            cov = tf.reshape(cov, [*shape, *shape])
-            for idx in sorted(self.proj_idxs, reverse=True):
-                cov = tf.reduce_sum(cov, axis=idx)
-                cov = tf.reduce_sum(cov, axis=idx + len(shape) - 1)
-            cov = tf.transpose(
-                cov, perm=perm_idxs + [i + len(perm_idxs) for i in perm_idxs]
-            )
-
-            if self.normalize:
-                norm = tf.reduce_sum(val)
-                jac = tf.eye(tf.shape(val)[0]) / norm - tf.expand_dims(val, 1) / norm**2
-                cov = tf.matmul(jac, tf.matmul(cov, tf.transpose(jac)))
-
-            var = tf.linalg.diag_part(cov)
-        else:
-            var = data[self.start : self.stop]
-
-            if self.normalize:
-                norm = tf.reduce_sum(var)
-                var = var / (norm**2)
-                # Additional variance from the normalization uncertainty
-                var = var + var**2
-
-            var = tf.reshape(var, shape)
-            var = tf.reduce_sum(var, axis=self.proj_idxs)
-            var = tf.transpose(var, perm=perm_idxs)
-
-        return val, var
+    def compute(self, values):
+        out_shape = self.exp_shape[:-1]
+        transpose_idxs = self.transpose_idxs[:-1]
+        return self.project(values, out_shape, transpose_idxs)
 
 
 class Term:
@@ -207,6 +206,26 @@ class Term:
             self.selection_idxs = None
 
         self.channel_axes = channel_axes
+
+    def select(self, values, normalize=False, inclusive=True):
+        values = values[self.start : self.stop]
+
+        if not inclusive:
+            if self.proc_idxs:
+                values = tf.gather(values, indices=self.proc_idxs, axis=-1)
+            values = tf.reduce_sum(values, axis=-1)
+
+        values = tf.reshape(values, self.exp_shape)
+
+        if self.selections:
+            values = values[self.selections]
+            values = tf.reduce_sum(values, axis=self.selection_idxs)
+
+        if normalize:
+            norm = tf.reduce_sum(values)
+            values /= norm
+
+        return values
 
 
 class Ratio(PhysicsModel):
@@ -290,44 +309,17 @@ class Ratio(PhysicsModel):
             "_".join([a.name for a in hist_axes]) if len(hist_axes) else "yield",
         ]
 
-    def make_fun(self, fun_flat, inclusive=True):
+    def compute(self, values):
+        num = self.num.select(values, self.normalize, inclusive=True)
+        den = self.den.select(values, self.normalize, inclusive=True)
 
-        def fun():
-            exp_full = fun_flat()
-            exp_num = exp_full[self.num.start : self.num.stop]
-            exp_den = exp_full[self.den.start : self.den.stop]
+        return num / den
 
-            if not inclusive:
-                if self.num.proc_idxs:
-                    exp_num = tf.gather(exp_num, indices=self.num.proc_idxs, axis=-1)
-                if self.den.proc_idxs:
-                    exp_den = tf.gather(exp_den, indices=self.den.proc_idxs, axis=-1)
-                exp_num = tf.reduce_sum(exp_num, axis=-1)
-                exp_den = tf.reduce_sum(exp_den, axis=-1)
+    def compute_per_process(self, values):
+        num = self.num.select(values, self.normalize, inclusive=False)
+        den = self.den.select(values, self.normalize, inclusive=False)
 
-            exp_num = tf.reshape(exp_num, self.num.exp_shape)
-            exp_den = tf.reshape(exp_den, self.den.exp_shape)
-
-            if self.num.selections:
-                exp_num = exp_num[self.num.selections]
-                exp_num = tf.reduce_sum(exp_num, axis=self.num.selection_idxs)
-            if self.den.selections:
-                exp_den = exp_den[self.den.selections]
-                exp_den = tf.reduce_sum(exp_den, axis=self.den.selection_idxs)
-
-            if self.normalize:
-                norm_num = tf.reduce_sum(exp_num)
-                exp_num /= norm_num
-                norm_den = tf.reduce_sum(exp_den)
-                exp_den /= norm_den
-
-            # exp_den = tf.where(exp_den <= 0, tf.ones_like(exp_den), exp_den)
-
-            exp = exp_num / exp_den
-
-            return exp
-
-        return fun
+        return num / den
 
 
 def parse_axis_selection(selection_str):
