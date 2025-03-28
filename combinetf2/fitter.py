@@ -1002,7 +1002,7 @@ class Fitter:
             pred, pred_var, pred_cov, _1, _2 = self.expected_with_variance(
                 model.make_fun(flat_fun, inclusive),
                 profile=profile,
-                compute_cov=compute_cov,
+                compute_cov=True,
             )
 
             chi2val = self.chi2(pred - data, pred_cov + data_cov).numpy()
