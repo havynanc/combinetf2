@@ -16,13 +16,14 @@ class TensorWriter:
         sparse=False,
         systematic_type="log_normal",
         allow_negative_expectation=False,
+        add_bin_by_bin_stat_to_data_cov=False,
     ):
         self.allow_negative_expectation = allow_negative_expectation
 
         self.systematic_type = systematic_type
 
         self.symmetric_tensor = True  # If all shape systematics are symmetrized the systematic tensor is symmetric leading to reduced memory and improved efficiency
-        self.add_bin_by_bin_stat_to_data_cov = False  # add bin by bin statistical uncertainty to data covariance matrix in case covariance is given for chi2
+        self.add_bin_by_bin_stat_to_data_cov = add_bin_by_bin_stat_to_data_cov  # add bin by bin statistical uncertainty to data covariance matrix
 
         self.signals = set()
         self.bkgs = set()
@@ -38,6 +39,7 @@ class TensorWriter:
         self.systsnoi = set()
         self.systsnoconstraint = set()
         self.systsnoprofile = set()
+        self.systscovariance = set()
 
         self.sparse = sparse
         self.idxdtype = "int64"
@@ -77,9 +79,8 @@ class TensorWriter:
             raise RuntimeError(f"Data histogram for channel '{channel}' already set.")
         self.dict_data_obs[channel] = self.get_flat_values(h)
 
-    def add_data_covariance(self, cov, add_bin_by_bin_stat_to_data_cov=False):
+    def add_data_covariance(self, cov):
         self.data_covariance = cov if isinstance(cov, np.ndarray) else cov.values()
-        self.add_bin_by_bin_stat_to_data_cov = add_bin_by_bin_stat_to_data_cov
 
     def add_pseudodata(self, h, name=None, channel="ch0"):
         self._check_hist_and_channel(h, channel)
@@ -172,6 +173,7 @@ class TensorWriter:
         channel,
         uncertainty,
         profile=True,
+        add_to_data_covariance=False,
         groups=None,
     ):
         if not isinstance(process, (list, tuple, np.ndarray)):
@@ -185,13 +187,20 @@ class TensorWriter:
                 f"uncertainty must be either a scalar or list with the same length as the list of processes but len(process) = {len(process)} and len(uncertainty) = {len(uncertainty)}"
             )
 
+        systematic_type = "normal" if add_to_data_covariance else self.systematic_type
+
         for p, u in zip(process, uncertainty):
             norm = self.dict_norm[channel][p]
             syst = norm * u
-            logk = self.get_logk(syst, norm)
+            logk = self.get_logk(syst, norm, systematic_type=systematic_type)
             self.book_logk_avg(logk, channel, p, name)
 
-        self.book_systematic(name, groups=groups, profile=profile)
+        self.book_systematic(
+            name,
+            groups=groups,
+            profile=profile,
+            add_to_data_covariance=add_to_data_covariance,
+        )
 
     def add_systematic(
         self,
@@ -202,6 +211,7 @@ class TensorWriter:
         kfactor=1,
         mirror=True,
         symmetrize="average",
+        add_to_data_covariance=False,
         **kargs,
     ):
         """
@@ -212,6 +222,8 @@ class TensorWriter:
 
         var_name_out = name
 
+        systematic_type = "normal" if add_to_data_covariance else self.systematic_type
+
         if isinstance(h, (list, tuple, np.ndarray)):
             self._check_hist_and_channel(h[0], channel)
             self._check_hist_and_channel(h[1], channel)
@@ -219,8 +231,12 @@ class TensorWriter:
             syst_up = self.get_flat_values(h[0])
             syst_down = self.get_flat_values(h[1])
 
-            logkup_proc = self.get_logk(syst_up, norm, kfactor)
-            logkdown_proc = -self.get_logk(syst_down, norm, kfactor)
+            logkup_proc = self.get_logk(
+                syst_up, norm, kfactor, systematic_type=systematic_type
+            )
+            logkdown_proc = -self.get_logk(
+                syst_down, norm, kfactor, systematic_type=systematic_type
+            )
 
             if symmetrize == "conservative":
                 # symmetrize by largest magnitude of up and down variations
@@ -249,8 +265,17 @@ class TensorWriter:
                 self.book_logk_avg(
                     logkdiffavg_proc, channel, process, var_name_out_diff
                 )
-                self.book_systematic(var_name_out_diff, **kargs)
+                self.book_systematic(
+                    var_name_out_diff,
+                    add_to_data_covariance=add_to_data_covariance,
+                    **kargs,
+                )
             else:
+                if add_to_data_covariance:
+                    raise RuntimeError(
+                        "add_to_data_covariance requires symmetric uncertainties"
+                    )
+
                 self.symmetric_tensor = False
 
                 logkavg_proc = 0.5 * (logkup_proc + logkdown_proc)
@@ -264,23 +289,27 @@ class TensorWriter:
         elif mirror:
             self._check_hist_and_channel(h, channel)
             syst = self.get_flat_values(h)
-            logkavg_proc = self.get_logk(syst, norm, kfactor)
+            logkavg_proc = self.get_logk(
+                syst, norm, kfactor, systematic_type=systematic_type
+            )
         else:
             raise RuntimeError(
                 "Only one histogram given but mirror=False, can not construct a variation"
             )
 
         self.book_logk_avg(logkavg_proc, channel, process, var_name_out)
-        self.book_systematic(var_name_out, **kargs)
+        self.book_systematic(
+            var_name_out, add_to_data_covariance=add_to_data_covariance, **kargs
+        )
 
-    def get_logk(self, syst, norm, kfac=1.0):
+    def get_logk(self, syst, norm, kfac=1.0, systematic_type=None):
         if not np.all(np.isfinite(syst)):
             raise RuntimeError(
                 f"{len(syst)-sum(np.isfinite(syst))} NaN or Inf values encountered in systematic!"
             )
 
         # TODO clean this up and avoid duplication
-        if self.systematic_type == "log_normal":
+        if systematic_type == "log_normal":
             # check if there is a sign flip between systematic and nominal
             _logk = kfac * np.log(syst / norm)
             _logk_view = np.where(
@@ -294,12 +323,12 @@ class TensorWriter:
                 _logk = np.clip(_logk, -self.clip, self.clip)
 
             return _logk_view
-        elif self.systematic_type == "normal":
+        elif systematic_type == "normal":
             _logk = kfac * (syst - norm)
             return _logk
         else:
             raise RuntimeError(
-                f"Invalid systematic_type {self.indata.systematic_type}, valid choices are 'log_normal' or 'normal'"
+                f"Invalid systematic_type {systematic_type}, valid choices are 'log_normal' or 'normal'"
             )
 
     def book_logk_avg(self, *args):
@@ -341,27 +370,31 @@ class TensorWriter:
         profile=True,
         noi=False,
         constrained=True,
+        add_to_data_covariance=False,
         groups=None,
     ):
-        if not profile:
+
+        if add_to_data_covariance:
+            self.systscovariance.add(name)
+        elif not profile:
             self.systsnoprofile.add(name)
-        elif noi:
-            self.systsnoi.add(name)
         elif not constrained:
             self.systsnoconstraint.add(name)
         else:
             self.systsstandard.add(name)
 
-        if groups is None:
-            groups = [name]
+        # below only makes sense if this is an explicit nuisance parameter
+        if not add_to_data_covariance:
+            if groups is None:
+                groups = [name]
 
-        if noi:
-            target_dict = self.dict_noigroups
-        else:
-            target_dict = self.dict_systgroups
+            if noi:
+                target_dict = self.dict_noigroups
+            else:
+                target_dict = self.dict_systgroups
 
-        for group in groups:
-            target_dict[group].add(name)
+            for group in groups:
+                target_dict[group].add(name)
 
     def write(self, outfolder="./", outfilename="combinetf2_input.hdf5", args={}):
 
@@ -630,6 +663,12 @@ class TensorWriter:
         kstat = np.where(np.equal(sumw, 0.0), 1.0, kstat)
         kstat = np.where(np.equal(sumw2, 0.0), 1.0, kstat)
 
+        if self.data_covariance is None and (
+            self.systscovariance or self.add_bin_by_bin_stat_to_data_cov
+        ):
+            # create data covariance assuming poisson statistics
+            self.data_covariance = np.diag(data_obs)
+
         # write results to hdf5 file
         procSize = nproc * np.dtype(self.dtype).itemsize
         systSize = 2 * nsyst * np.dtype(self.dtype).itemsize
@@ -715,6 +754,29 @@ class TensorWriter:
         pseudodata = None
 
         if self.data_covariance is not None:
+            for syst in self.systscovariance:
+                systv = np.zeros(shape=(nbinsfull, 1), dtype=self.dtype)
+
+                ibin = 0
+                for chan in self.channels.keys():
+                    nbinschan = self.nbinschan[chan]
+                    dict_norm_chan = self.dict_norm[chan]
+
+                    for proc in procs:
+                        if proc not in dict_norm_chan:
+                            continue
+
+                        dict_logkavg_proc = self.dict_logkavg[chan][proc]
+
+                        if syst not in dict_logkavg_proc.keys():
+                            continue
+
+                        systv[ibin : ibin + nbinschan, 0] += dict_logkavg_proc[syst]
+
+                    ibin += nbinschan
+
+                self.data_covariance[...] += systv @ systv.T
+
             full_cov = (
                 np.add(self.data_covariance, np.diag(sumw2))
                 if self.add_bin_by_bin_stat_to_data_cov
@@ -777,7 +839,7 @@ class TensorWriter:
         return list(common.natural_sort(self.systsnoi))
 
     def get_systsnoconstraint(self):
-        return self.get_systsnoi() + list(common.natural_sort(self.systsnoconstraint))
+        return list(common.natural_sort(self.systsnoconstraint))
 
     def get_systs(self):
         return (

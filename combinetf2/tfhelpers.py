@@ -23,3 +23,9 @@ def simple_sparse_slice0end(in_sparse, end):
     return tf.sparse.SparseTensor(
         indices=selected_indices, values=selected_values, dense_shape=out_shape
     )
+
+
+def is_diag(x):
+    return tf.math.equal(
+        tf.math.count_nonzero(x), tf.math.count_nonzero(tf.linalg.diag_part(x))
+    )
