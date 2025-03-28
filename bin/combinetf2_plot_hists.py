@@ -1063,7 +1063,6 @@ def get_chi2(result, no_chi2=True, fittype="postfit"):
         satnllvalfull = result["satnllvalfull"]
         chi2 = 2.0 * (nllvalfull - satnllvalfull)
         ndf = result["ndfsat"]
-        saturated_chi2 = True
         return chi2, ndf, True
     elif f"chi2_{fittype}" in result and not no_chi2:
         return result[f"chi2_{fittype}"], result[f"ndf_{fittype}"], False
@@ -1159,7 +1158,9 @@ def main():
                     axes_names = ["yield"]
                 result = fitresult["channels"][channel][model]["_".join(axes_names)]
                 is_normalized = model in ["normalized", "normratio"]
-                chi2, ndf, _ = get_chi2(result, args.noChisq, fittype)
+                chi2, ndf, saturated_chi2 = get_chi2(result, args.noChisq, fittype)
+
+            opts["saturated_chi2"] = saturated_chi2
 
             make_plots(
                 result,

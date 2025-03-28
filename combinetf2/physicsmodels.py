@@ -17,6 +17,12 @@ class PhysicsModel:
         # a list of strings, the result will be written under these keys
         self.identifiers = []
 
+    # class function to parse strings as given by the argparse input e.g. -m PhysicsModel <arg1> <args2>
+    #   kwargs can be used to template a function, e.g. normalize=True
+    @classmethod
+    def parse_args(cls, indata, *args, **kwargs):
+        return cls(indata, *args, **kwargs)
+
     # values are inclusive in processes: nbins
     def compute(self, values):
         return values
@@ -309,6 +315,73 @@ class Ratio(PhysicsModel):
             "_".join([a.name for a in hist_axes]) if len(hist_axes) else "yield",
         ]
 
+    @classmethod
+    def parse_args(cls, indata, *args, **kwargs):
+        """
+        parsing the input arguments into the ratio constructor, is has to be called as
+        -m ratio
+            <ch num> <ch den>
+            <proc_num_0>,<proc_num_1>,... <proc_num_0>,<proc_num_1>,...
+            <axis_num_0>:<slice_num_0>,<axis_num_1>,<slice_num_1>... <axis_den_0>,<slice_den_0>,<axis_den_1>,<slice_den_1>...
+
+        Processes selections are optional. But in case on is given for the numerator, the denominator must be specified as well and vice versa.
+        Use 'None' if you don't want to select any for either numerator xor denominator.
+
+        Axes selections are optional. But in case one is given for the numerator, the denominator must be specified as well and vice versa.
+        Use 'None:None' if you don't want to do any for either numerator xor denominator.
+        """
+
+        if len(args) > 2 and ":" not in args[2]:
+            procs_num = [p for p in args[2].split(",") if p != "None"]
+            procs_den = [p for p in args[3].split(",") if p != "None"]
+        else:
+            procs_num = []
+            procs_den = []
+
+        # find axis selections
+        if any(a for a in args if ":" in a):
+            sel_args = [a for a in args if ":" in a]
+
+            def parse_axis_selection(selection_str):
+                if selection_str == "None:None":
+                    return None
+                else:
+                    sel = {}
+                    for s in re.split(r",(?![^()]*\))", selection_str):
+                        k, v = s.split(":")
+                        if "slice" in v:
+                            sl = slice(
+                                *[
+                                    int(x) if x != "None" else None
+                                    for x in v[6:-1].split(",")
+                                ]
+                            )
+                        else:
+                            sl = (
+                                slice(int(v), int(v) + 1)
+                                if v != "None"
+                                else slice(None)
+                            )
+                        sel[k] = sl
+                    return sel
+
+            axis_selection_num = parse_axis_selection(sel_args[0])
+            axis_selection_den = parse_axis_selection(sel_args[1])
+        else:
+            axis_selection_num = None
+            axis_selection_den = None
+
+        return cls(
+            indata,
+            args[0],
+            args[1],
+            procs_num,
+            procs_den,
+            axis_selection_num,
+            axis_selection_den,
+            **kwargs,
+        )
+
     def compute(self, values):
         num = self.num.select(values, self.normalize, inclusive=True)
         den = self.den.select(values, self.normalize, inclusive=True)
@@ -322,70 +395,10 @@ class Ratio(PhysicsModel):
         return num / den
 
 
-def parse_axis_selection(selection_str):
-    if selection_str == "None:None":
-        return None
-    else:
-        sel = {}
-        for s in re.split(r",(?![^()]*\))", selection_str):
-            k, v = s.split(":")
-            if "slice" in v:
-                sl = slice(
-                    *[int(x) if x != "None" else None for x in v[6:-1].split(",")]
-                )
-            else:
-                sl = slice(int(v), int(v) + 1) if v != "None" else slice(None)
-            sel[k] = sl
-        return sel
-
-
-def parse_ratio(indata, *args, normalize=False):
-    """
-    parsing the input arguments into the ratio constructor, is has to be called as
-    -m ratio
-        <ch num> <ch den>
-        <proc_num_0>,<proc_num_1>,... <proc_num_0>,<proc_num_1>,...
-        <axis_num_0>:<slice_num_0>,<axis_num_1>,<slice_num_1>... <axis_den_0>,<slice_den_0>,<axis_den_1>,<slice_den_1>...
-
-    Processes selections are optional. But in case on is given for the numerator, the denominator must be specified as well and vice versa.
-    Use 'None' if you don't want to select any for either numerator xor denominator.
-
-    Axes selections are optional. But in case one is given for the numerator, the denominator must be specified as well and vice versa.
-    Use 'None:None' if you don't want to do any for either numerator xor denominator.
-    """
-
-    if len(args) > 2 and ":" not in args[2]:
-        procs_num = [p for p in args[2].split(",") if p != "None"]
-        procs_den = [p for p in args[3].split(",") if p != "None"]
-    else:
-        procs_num = []
-        procs_den = []
-
-    # find axis selections
-    if any(a for a in args if ":" in a):
-        sel_args = [a for a in args if ":" in a]
-        axis_selection_num = parse_axis_selection(sel_args[0])
-        axis_selection_den = parse_axis_selection(sel_args[1])
-    else:
-        axis_selection_num = None
-        axis_selection_den = None
-
-    return Ratio(
-        indata,
-        args[0],
-        args[1],
-        procs_num,
-        procs_den,
-        axis_selection_num,
-        axis_selection_den,
-        normalize=normalize,
-    )
-
-
-models = {
-    "basemodel": lambda *args: PhysicsModel(*args),
-    "project": lambda *args: Project(*args, normalize=False),
-    "normalize": lambda *args: Project(*args, normalize=True),
-    "ratio": lambda *args: parse_ratio(*args, normalize=False),
-    "normratio": lambda *args: parse_ratio(*args, normalize=True),
-}
+models = dict(
+    basemodel=lambda *args: PhysicsModel.parse_args(*args),
+    project=lambda *args: Project.parse_args(*args, normalize=False),
+    normalize=lambda *args: Project.parse_args(*args, normalize=True),
+    ratio=lambda *args: Ratio.parse_args(*args, normalize=False),
+    normratio=lambda *args: Ratio.parse_args(*args, normalize=True),
+)

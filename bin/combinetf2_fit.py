@@ -538,7 +538,8 @@ def main():
             raise NotImplementedError(
                 f"Model {margs[0]} not found. Available models are {pm.models.keys()}"
             )
-        models.append(pm.models[margs[0]](indata, *margs[1:]))
+        model = pm.models[margs[0]](indata, *margs[1:])
+        models.append(model)
 
     np.random.seed(args.seed)
     tf.random.set_seed(args.seed)
