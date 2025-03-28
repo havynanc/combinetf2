@@ -45,7 +45,7 @@ python -m venv env
 The activate it and install the necessary packages
 ```bash
 source env/bin/activate
-pip install wums[pickling,plotting] tensorflow numpy h5py hist scipy matplotlib mplhep seaborn pandas plotly kaleido
+pip install wums[pickling,plotting] tensorflow tensorflow-probability numpy h5py hist scipy matplotlib mplhep seaborn pandas plotly kaleido
 ```
 The packages `matplotlib`, `mplhep`, `seaborn`, `pandas`, `plotly`, and `kaleido` are only needed for the plotting scripts. 
 In case you want to contribute to the development, please also install the linters `isort`, `flake8`, `autoflake`, `black`, and `pylint` used in the pre-commit hooks and the github CI
