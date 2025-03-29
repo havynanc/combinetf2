@@ -556,26 +556,27 @@ def readHistImpacts(
     normalize=False,
     scale=1,
 ):
-    labels_pulls, pulls, constraints = io_tools.get_pulls_and_constraints(
-        fitresult, asym=asym
-    )
-    labels_pulls_prefit, pulls_prefit, constraints_prefit = (
-        io_tools.get_pulls_and_constraints(fitresult, asym=asym, prefit=True)
-    )
-
     labels = np.array(hist_impacts.axes["impacts"])
     impacts = hist_impacts.values()
 
-    labels, idxs, idxs_pulls = np.intersect1d(
-        labels, labels_pulls, assume_unique=True, return_indices=True
-    )
+    if not group:
+        labels_pulls, pulls, constraints = io_tools.get_pulls_and_constraints(
+            fitresult, asym=asym
+        )
+        labels_pulls_prefit, pulls_prefit, constraints_prefit = (
+            io_tools.get_pulls_and_constraints(fitresult, asym=asym, prefit=True)
+        )
 
-    pulls = pulls[idxs_pulls]
-    constraints = constraints[idxs_pulls]
-    pulls_prefit = pulls_prefit[idxs_pulls]
-    constraints_prefit = constraints_prefit[idxs_pulls]
+        labels, idxs, idxs_pulls = np.intersect1d(
+            labels, labels_pulls, assume_unique=True, return_indices=True
+        )
 
-    impacts = impacts[idxs]
+        pulls = pulls[idxs_pulls]
+        constraints = constraints[idxs_pulls]
+        pulls_prefit = pulls_prefit[idxs_pulls]
+        constraints_prefit = constraints_prefit[idxs_pulls]
+
+        impacts = impacts[idxs]
 
     total = np.sqrt(hist_total.variance)
     if group:
@@ -862,6 +863,7 @@ def make_plots(
     postfix=None,
     impact_title=None,
 ):
+
     if args.sort:
         if args.sort.endswith("diff"):
             key = args.sort.replace("_diff", "")

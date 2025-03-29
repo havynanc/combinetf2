@@ -38,12 +38,13 @@ def instance_from_module(module_name, *args, **kwargs):
 
     try:
         cls = getattr(module, class_name)
-        return cls.parse_args(*args, **kwargs)
     except AttributeError:
         print(
             f"Class '{class_name}' not found in module '{package_name}.{module_name}'."
         )
         return None
+
+    return cls.parse_args(*args, **kwargs)
 
 
 def parse_axis_selection(selection_str):

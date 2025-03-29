@@ -18,6 +18,7 @@ class Project(Basemodel):
     """
 
     name = "project"
+    need_params = False
 
     def __init__(self, indata, channel, *axes_names):
         info = indata.channel_info[channel]
@@ -78,10 +79,10 @@ class Project(Basemodel):
         exp = tf.transpose(exp, perm=transpose_idxs)
         return exp
 
-    def compute_per_process(self, values):
-        return self.project(values, self.exp_shape, self.transpose_idxs)
+    def compute_per_process(self, observables):
+        return self.project(observables, self.exp_shape, self.transpose_idxs)
 
-    def compute(self, values):
+    def compute(self, observables):
         out_shape = self.exp_shape[:-1]
         transpose_idxs = self.transpose_idxs[:-1]
-        return self.project(values, out_shape, transpose_idxs)
+        return self.project(observables, out_shape, transpose_idxs)

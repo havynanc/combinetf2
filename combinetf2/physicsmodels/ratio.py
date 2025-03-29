@@ -33,6 +33,7 @@ class Ratio(Basemodel):
     """
 
     name = "ratio"
+    need_params = False
 
     def __init__(
         self,
@@ -134,14 +135,14 @@ class Ratio(Basemodel):
             **kwargs,
         )
 
-    def compute(self, values):
-        num = self.num.select(values, inclusive=True)
-        den = self.den.select(values, inclusive=True)
+    def compute(self, observables):
+        num = self.num.select(observables, inclusive=True)
+        den = self.den.select(observables, inclusive=True)
 
         return num / den
 
-    def compute_per_process(self, values):
-        num = self.num.select(values, inclusive=False)
-        den = self.den.select(values, inclusive=False)
+    def compute_per_process(self, observables):
+        num = self.num.select(observables, inclusive=False)
+        den = self.den.select(observables, inclusive=False)
 
         return num / den

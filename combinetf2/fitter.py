@@ -972,7 +972,7 @@ class Fitter:
         ):
             raise NotImplementedError()
 
-        fun = model.make_fun(flat_fun, inclusive)
+        fun = model.make_fun(flat_fun, self.x, inclusive)
 
         aux = [None] * 4
         if compute_cov or compute_variance or compute_global_impacts:
@@ -1000,7 +1000,7 @@ class Fitter:
                 )
 
             pred, pred_var, pred_cov, _1, _2 = self.expected_with_variance(
-                model.make_fun(flat_fun, inclusive),
+                model.make_fun(flat_fun, self.x, inclusive),
                 profile=profile,
                 compute_cov=True,
             )

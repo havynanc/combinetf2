@@ -7,6 +7,11 @@ class Basemodel:
     """
 
     name = "basemodel"
+    need_observables = True  # if observables should be provided to the compute function
+    need_params = (
+        False  # if parameter values should be provided to the compute function
+    )
+    has_data = True  # if data histograms are stored or not, and if chi2 is calculated
 
     def __init__(self, indata):
         # The result of a model in the output dictionary is stored under 'result = fitresult[cls.name]'
@@ -15,9 +20,6 @@ class Basemodel:
         self.instance = "distributions"
         self.channel_info = indata.channel_info
 
-        # if data histograms are stored or not, and if chi2 is calculated
-        self.has_data = True
-
     # class function to parse strings as given by the argparse input e.g. -m PhysicsModel <arg1> <args2>
     @classmethod
     def parse_args(cls, indata, *args, **kwargs):
@@ -25,22 +27,31 @@ class Basemodel:
 
     # function to compute the transformation of the physics model, has to be differentiable.
     #    For custom physics models, this function should be overridden.
-    #    values are inclusive in processes: nbins
-    def compute(self, values):
-        return values
+    #    observables are the provided histograms inclusive in processes: nbins
+    #    params are the fit parameters
+    def compute(self, observables, params=None):
+        return observables
 
     # function to compute the transformation of the physics model, has to be differentiable.
     #    For custom physics models, this function can be overridden.
-    #    values are provided per process: nbins x nprocesses
-    def compute_per_process(self, values):
-        return self.compute(values)
+    #    observables are the provided histograms per process: nbins x nprocesses
+    #    params are the fit parameters
+    def compute_per_process(self, observables, params=None):
+        return self.compute(observables)
 
     # generic version which should not need to be overridden
-    def make_fun(self, fun_flat, inclusive=True):
+    def make_fun(self, fun_flat, params, inclusive=True):
         compute = self.compute if inclusive else self.compute_per_process
 
         def fun():
-            exp = compute(fun_flat())
+            if self.need_params and self.need_observables:
+                exp = compute(fun_flat(), params)
+            elif self.need_observables:
+                exp = compute(fun_flat())
+            elif self.need_params:
+                exp = compute(params)
+            else:
+                exp = compute()
             return exp
 
         return fun

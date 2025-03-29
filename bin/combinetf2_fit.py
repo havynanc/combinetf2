@@ -291,6 +291,9 @@ def save_hists(args, models, fitter, ws, prefit=True, profile=False):
     for model in models:
         logger.info(f"Save inclusive histogram for physics model {model.name}")
 
+        if prefit and getattr(model, "skip_prefit", False):
+            continue
+
         if not getattr(model, "skip_incusive", False):
             exp, aux = fitter.expected_events(
                 model,
