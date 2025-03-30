@@ -179,6 +179,7 @@ class TensorWriter:
         add_to_data_covariance=False,
         **kargs,
     ):
+        var_name_out = name
 
         if symmetrize == "conservative":
             # symmetrize by largest magnitude of up and down variations
@@ -225,7 +226,7 @@ class TensorWriter:
         logkup = None
         logkdown = None
 
-        return logkavg_proc
+        return logkavg_proc, var_name_out
 
     def add_lnN_systematic(
         self,
