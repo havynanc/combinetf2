@@ -358,3 +358,9 @@ class DatacardConverter:
                         )
 
         return writer
+
+    def __del__(self):
+        if self.use_root:
+            logger.info("Close all root files")
+            for file in self.root_files.values():
+                file.Close()

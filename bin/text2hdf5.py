@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
+import gc
 import os
 
 from wums import logging
@@ -81,6 +82,9 @@ def main():
     if args.postfix:
         filename += f"_{args.postfix}"
     writer.write(outfolder=directory, outfilename=filename)
+
+    del converter
+    gc.collect()
 
 
 if __name__ == "__main__":
