@@ -1006,7 +1006,7 @@ class Fitter:
             )
 
             chi2val = self.chi2(pred - data, pred_cov + data_cov).numpy()
-            ndf = tf.size(pred).numpy() - getattr(model, "normalize", False)
+            ndf = tf.size(pred).numpy() - model.ndf_reduction
 
             aux.append(chi2val)
             aux.append(ndf)

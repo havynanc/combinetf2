@@ -9,6 +9,7 @@ class Basemodel:
     name = "basemodel"
     need_observables = True  # if observables should be provided to the compute function
     has_data = True  # if data histograms are stored or not, and if chi2 is calculated
+    ndf_reduction = 0  # how much will be subtracted from the ndf / number of bins, e.g. for chi2 calculation
 
     def __init__(self, indata):
         # The result of a model in the output dictionary is stored under 'result = fitresult[cls.name]'

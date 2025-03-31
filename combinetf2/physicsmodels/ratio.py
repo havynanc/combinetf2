@@ -154,7 +154,7 @@ class Normratio(Ratio):
     """
 
     name = "normratio"
-    normalize = True
+    ndf_reduction = 1
 
     def init(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

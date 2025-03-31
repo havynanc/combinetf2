@@ -6,7 +6,6 @@ from combinetf2.physicsmodels.basemodel import Basemodel
 class Project(Basemodel):
     """
     A class to project a histogram to lower dimensions.
-    Optionally the histogram can be normalized.
     The normalization is done to the integral of all processes or data.
 
     Parameters
@@ -94,7 +93,7 @@ class Normalize(Project):
     """
 
     name = "normalize"
-    normalize = True
+    ndf_reduction = 1
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
