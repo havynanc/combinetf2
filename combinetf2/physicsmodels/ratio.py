@@ -1,10 +1,10 @@
 import hist
 
 from combinetf2.physicsmodels import helpers
-from combinetf2.physicsmodels.basemodel import Basemodel
+from combinetf2.physicsmodels.physicsmodel import PhysicsModel
 
 
-class Ratio(Basemodel):
+class Ratio(PhysicsModel):
     """
     A class to compute ratios of channels, processes, or bins.
     Optionally the numerator and denominator can be normalized.
@@ -82,8 +82,6 @@ class Ratio(Basemodel):
         self.channel_info = {
             channel: {
                 "axes": hist_axes,
-                "start": None,
-                "stop": None,
             }
         }
 
@@ -133,13 +131,13 @@ class Ratio(Basemodel):
             axis_selection_den,
         )
 
-    def compute(self, params, observables):
+    def compute_flat(self, params, observables):
         num = self.num.select(observables, inclusive=True)
         den = self.den.select(observables, inclusive=True)
 
         return num / den
 
-    def compute_per_process(self, params, observables):
+    def compute_flat_per_process(self, params, observables):
         num = self.num.select(observables, inclusive=False)
         den = self.den.select(observables, inclusive=False)
 
@@ -156,13 +154,13 @@ class Normratio(Ratio):
     def init(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    def compute(self, params, observables):
+    def compute_flat(self, params, observables):
         num = self.num.select(observables, normalize=True, inclusive=True)
         den = self.den.select(observables, normalize=True, inclusive=True)
 
         return num / den
 
-    def compute_per_process(self, params, observables):
+    def compute_flat_per_process(self, params, observables):
         num = self.num.select(observables, normalize=True, inclusive=False)
         den = self.den.select(observables, normalize=True, inclusive=False)
 

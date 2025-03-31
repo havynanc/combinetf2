@@ -1,9 +1,9 @@
 import tensorflow as tf
 
-from combinetf2.physicsmodels.basemodel import Basemodel
+from combinetf2.physicsmodels.physicsmodel import PhysicsModelChannel
 
 
-class Project(Basemodel):
+class Project(PhysicsModelChannel):
     """
     A class to project a histogram to lower dimensions.
     The normalization is done to the integral of all processes or data.
@@ -17,12 +17,10 @@ class Project(Basemodel):
     """
 
     def __init__(self, indata, key, channel, *axes_names):
-        self.key = key
+        super().__init__(indata, key, channel)
+        self.channel = channel
+
         info = indata.channel_info[channel]
-
-        self.start = info["start"]
-        self.stop = info["stop"]
-
         channel_axes = info["axes"]
 
         hist_axes = [axis for axis in channel_axes if axis.name in axes_names]
@@ -32,16 +30,7 @@ class Project(Basemodel):
                 f"Hist axes {[h.name for h in hist_axes]} != {axes_names} not found"
             )
 
-        exp_axes = channel_axes.copy()
-
-        # for per process histograms
-        exp_axes.append(indata.axis_procs)
-        extra_axes = [indata.axis_procs]
-
-        self.exp_shape = tuple([len(a) for a in exp_axes])
-
         channel_axes_names = [axis.name for axis in channel_axes]
-        extra_axes_names = [axis.name for axis in extra_axes]
 
         axis_idxs = [channel_axes_names.index(axis) for axis in axes_names]
 
@@ -49,36 +38,25 @@ class Project(Basemodel):
 
         post_proj_axes_names = [
             axis for axis in channel_axes_names if axis in axes_names
-        ] + extra_axes_names
+        ]
 
-        self.transpose_idxs = [
-            post_proj_axes_names.index(axis) for axis in axes_names
-        ] + [post_proj_axes_names.index(axis) for axis in extra_axes_names]
+        self.transpose_idxs = [post_proj_axes_names.index(axis) for axis in axes_names]
 
         self.has_data = not info["masked"]
 
-        self.channel_info = {
-            channel: {
-                "axes": hist_axes,
-                "start": None,
-                "stop": None,
-            }
-        }
+        self.channel_info = {channel: {"axes": hist_axes}}
 
-    def project(self, values, out_shape, transpose_idxs):
-        exp = values[self.start : self.stop]
-        exp = tf.reshape(exp, out_shape)
-        exp = tf.reduce_sum(exp, axis=self.proj_idxs)
-        exp = tf.transpose(exp, perm=transpose_idxs)
+    def project(self, values):
+        exp = tf.reduce_sum(values, axis=self.proj_idxs)
+        perm = self.transpose_idxs[:]
+        if len(exp.shape) > len(self.transpose_idxs):
+            # last is process axis
+            perm += list(range(len(self.transpose_idxs), len(exp.shape)))
+        exp = tf.transpose(exp, perm=perm)
         return exp
 
-    def compute_per_process(self, params, observables):
-        return self.project(observables, self.exp_shape, self.transpose_idxs)
-
-    def compute(self, params, observables):
-        out_shape = self.exp_shape[:-1]
-        transpose_idxs = self.transpose_idxs[:-1]
-        return self.project(observables, out_shape, transpose_idxs)
+    def compute(self, param, observables):
+        return self.project(observables)
 
 
 class Normalize(Project):
@@ -92,6 +70,6 @@ class Normalize(Project):
         super().__init__(*args, **kwargs)
 
     def project(self, values, *args):
-        norm = tf.reduce_sum(values[self.start : self.stop])
+        norm = tf.reduce_sum(values)
         out = values / norm
         return super().project(out, *args)

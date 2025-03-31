@@ -962,6 +962,8 @@ class Fitter:
     ):
 
         def flat_fun():
+            print("Tracing")
+            print("Running")
             return self._compute_yields(
                 inclusive=inclusive,
                 profile=profile,

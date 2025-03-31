@@ -176,8 +176,8 @@ class Workspace:
 
         for channel, info in model.channel_info.items():
             axes = info["axes"]
-            start = info["start"]
-            stop = info["stop"]
+            start = info.get("start", None)
+            stop = info.get("stop", None)
 
             if info.get("masked", False):
                 continue
@@ -351,8 +351,8 @@ class Workspace:
         for channel, info in model.channel_info.items():
             axes = info["axes"]
             opts = dict(
-                start=info["start"],
-                stop=info["stop"],
+                start=info.get("start", None),
+                stop=info.get("stop", None),
                 label=label,
                 model_key=model.key,
                 channel=channel,

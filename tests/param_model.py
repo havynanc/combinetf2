@@ -1,10 +1,10 @@
 import hist
 import tensorflow as tf
 
-from combinetf2.physicsmodels.basemodel import Basemodel
+from combinetf2.physicsmodels.physicsmodel import PhysicsModel
 
 
-class Param(Basemodel):
+class Param(PhysicsModel):
     """
     Custom physics model to transform fit parameters using f(x) = scale*x + offset
 
@@ -75,6 +75,6 @@ class Param(Basemodel):
 
         return cls(indata, key, params, scales, offsets)
 
-    def compute(self, params):
+    def compute_flat(self, params):
         params = tf.gather(params, indices=self.idxs, axis=-1)
         return params * self.scales + self.offsets
