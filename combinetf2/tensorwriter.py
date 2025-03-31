@@ -70,10 +70,18 @@ class TensorWriter:
         self.chunkSize = 4 * 1024**2
 
     def get_flat_values(self, h):
-        return h.values().flatten().astype(self.dtype)
+        if hasattr(h, "values"):
+            values = h.values()
+        else:
+            values = h
+        return values.flatten().astype(self.dtype)
 
     def get_flat_variances(self, h):
-        return h.variances().flatten().astype(self.dtype)
+        if hasattr(h, "values"):
+            variances = h.variances()
+        else:
+            variances = h
+        return variances.flatten().astype(self.dtype)
 
     def add_data(self, h, channel="ch0"):
         self._check_hist_and_channel(h, channel)
@@ -97,7 +105,7 @@ class TensorWriter:
             )
         self.dict_pseudodata[channel][name] = self.get_flat_values(h)
 
-    def add_process(self, h, name, channel="ch0", signal=False):
+    def add_process(self, h, name, channel="ch0", signal=False, variances=None):
         self._check_hist_and_channel(h, channel)
 
         if name in self.dict_norm[channel].keys():
@@ -117,7 +125,7 @@ class TensorWriter:
             self.dict_logkhalfdiff_indices[channel][name] = {}
 
         norm = self.get_flat_values(h)
-        sumw2 = self.get_flat_variances(h)
+        sumw2 = self.get_flat_variances(h if variances is None else variances)
 
         if not self.allow_negative_expectation:
             norm = np.maximum(norm, 0.0)
@@ -156,17 +164,28 @@ class TensorWriter:
             self.dict_logkhalfdiff_indices[name] = {}
 
     def _check_hist_and_channel(self, h, channel):
-        axes = [a for a in h.axes]
+
         if channel not in self.channels.keys():
             raise RuntimeError(f"Channel {channel} not known!")
-        elif axes != self.channels[channel]["axes"]:
-            raise RuntimeError(
-                f"""
-                Histogram axes different from channel axes of channel {channel}
-                \nHistogram axes: {axes}
-                \nChannel axes: {self.channels[channel]["axes"]}
-                """
-            )
+
+        if hasattr(h, "axes"):
+            axes = [a for a in h.axes]
+
+            if axes != self.channels[channel]["axes"]:
+                raise RuntimeError(
+                    f"""
+                    Histogram axes different from channel axes of channel {channel}
+                    \nHistogram axes: {axes}
+                    \nChannel axes: {self.channels[channel]["axes"]}
+                    """
+                )
+        else:
+            shape_in = h.shape
+            shape_this = tuple([len(a) for a in self.channels[channel]["axes"]])
+            if shape_in != shape_this:
+                raise RuntimeError(
+                    f"Shape of input object different from channel axes '{shape_in}' != '{shape_this}'"
+                )
 
     def _compute_asym_syst(
         self,
