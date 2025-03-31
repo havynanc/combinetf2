@@ -229,12 +229,13 @@ def make_parser():
         "--physicsModel",
         nargs="+",
         action="append",
-        default=[["basemodel"]],
+        default=[["Basemodel"]],
         help="""
         add physics model to perform transformations on observables for the prefit and postfit histograms, 
-        specifying the model defined in combinetf2/physicsmodels.py followed by arguments passed in the model __init__, 
-        e.g. "-m project ch0 eta pt" to get a 2D projection to eta-pt or "-m project ch0" to get the total yield.  
-        This argument can be called multiple times
+        specifying the model defined in combinetf2/physicsmodels/ followed by arguments passed in the model __init__, 
+        e.g. '-m Project ch0 eta pt' to get a 2D projection to eta-pt or '-m Project ch0' to get the total yield.  
+        This argument can be called multiple times.
+        Custom models can be specified with the full path to the custom model e.g. '-m custom_modesl.MyCustomModel'.
         """,
     )
     parser.add_argument(
@@ -536,7 +537,7 @@ def main():
     # physics models for observables and transformations
     models = []
     for margs in args.physicsModel:
-        model = ph.instance_from_module(margs[0], indata, *margs[1:])
+        model = ph.instance_from_class(margs[0], indata, *margs[1:])
         models.append(model)
 
     np.random.seed(args.seed)

@@ -86,3 +86,20 @@ class Project(Basemodel):
         out_shape = self.exp_shape[:-1]
         transpose_idxs = self.transpose_idxs[:-1]
         return self.project(observables, out_shape, transpose_idxs)
+
+
+class Normalize(Project):
+    """
+    Same as project but also normalize
+    """
+
+    name = "normalize"
+    normalize = True
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def project(self, values, *args):
+        norm = tf.reduce_sum(values[self.start : self.stop])
+        out = values / norm
+        return super().project(out, *args)

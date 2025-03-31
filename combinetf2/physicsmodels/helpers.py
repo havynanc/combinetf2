@@ -1,47 +1,39 @@
 import importlib
-import pkgutil
 import re
 
 import tensorflow as tf
 
+# dictionary with class name and the corresponding filename where it is defined
+baseline_models = {
+    "Basemodel": "basemodel",
+    "Project": "project",
+    "Normalize": "project",
+    "Ratio": "ratio",
+    "Normratio": "ratio",
+}
 
-def check_and_import(module_name, package_name):
-    full_module_name = f"{package_name}.{module_name}"
-    print(f"Attempting to import module: {full_module_name}")  # Debug print
 
-    try:
-        # Try to import the module
-        module = importlib.import_module(full_module_name)
-        return module
-    except ModuleNotFoundError:
-        print(f"Module '{full_module_name}' not found.")
-        print("Available modules:")
-        # List all available modules under the package
-        available_modules = [
-            name
-            for _, name, _ in pkgutil.iter_modules(
-                importlib.import_module(package_name).__path__
+def instance_from_class(class_name, *args, **kwargs):
+    if "." in class_name:
+        # import from full relative or abslute path
+        parts = class_name.split(".")
+        module_name = ".".join(parts[:-1])
+        class_name = parts[-1]
+    else:
+        # import one of the baseline models
+        if class_name not in baseline_models:
+            raise ValueError(
+                f"Model {class_name} not found, available baseline models are {baseline_models.keys()}"
             )
-            if name != "helpers"
-        ]
-        for mod in available_modules:
-            print(f"- {mod}")
-        return None
+        module_name = f"combinetf2.physicsmodels.{baseline_models[class_name]}"
 
-
-def instance_from_module(module_name, *args, **kwargs):
-    class_name = module_name.capitalize()
-    package_name = "combinetf2.physicsmodels"
-
-    # Construct the module path relative to the current working directory
-    module = check_and_import(module_name, package_name)
+    # Try to import the module
+    module = importlib.import_module(module_name)
 
     try:
         cls = getattr(module, class_name)
     except AttributeError:
-        print(
-            f"Class '{class_name}' not found in module '{package_name}.{module_name}'."
-        )
+        print(f"Class '{class_name}' not found in module '{module_name}'.")
         return None
 
     return cls.parse_args(*args, **kwargs)
