@@ -6,22 +6,24 @@ class Basemodel:
     A class to output histograms without any transformation, can be used as base class to inherit custom physics models from.
     """
 
-    name = "basemodel"
     need_observables = True  # if observables should be provided to the compute function
     has_data = True  # if data histograms are stored or not, and if chi2 is calculated
     ndf_reduction = 0  # how much will be subtracted from the ndf / number of bins, e.g. for chi2 calculation
 
-    def __init__(self, indata):
+    def __init__(self, indata, key):
         # The result of a model in the output dictionary is stored under 'result = fitresult[cls.name]'
         #   if the model can have different instances 'self.instance' must be set to a unique string and the result will be stored in 'result = result[self.instance]'
         #   each model can have different channels that are the same or different from channels from the input data. All channel specific results are stored under 'result["channels"]'
-        self.instance = "distributions"
+        self.key = (
+            key  # where to store the results of this model in the results dictionary
+        )
         self.channel_info = indata.channel_info
 
-    # class function to parse strings as given by the argparse input e.g. -m PhysicsModel <arg1> <args2>
+    # class function to parse strings as given by the argparse input e.g. -m PhysicsModel <arg[0]> <args[1]> ...
     @classmethod
-    def parse_args(cls, indata, *args, **kwargs):
-        return cls(indata, *args, **kwargs)
+    def parse_args(cls, indata, *args):
+        key = " ".join([cls.__name__, *args])
+        return cls(indata, key, *args)
 
     # function to compute the transformation of the physics model, has to be differentiable.
     #    For custom physics models, this function should be overridden.

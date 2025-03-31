@@ -6,7 +6,7 @@ from combinetf2.physicsmodels.basemodel import Basemodel
 
 class Param(Basemodel):
     """
-    Model to transform fit parameters using f(x) = scale*x + offset
+    Custom physics model to transform fit parameters using f(x) = scale*x + offset
 
     Parameters
     ----------
@@ -19,7 +19,6 @@ class Param(Basemodel):
             add an offset to the parameters
     """
 
-    name = "param"
     need_observables = False
     has_data = False
     has_processes = False
@@ -29,10 +28,12 @@ class Param(Basemodel):
     def __init__(
         self,
         indata,
+        key,
         params,
         scales=None,
         offsets=None,
     ):
+        self.key = key
 
         param_names = list(indata.signals.astype(str)) + list(indata.systs.astype(str))
 
@@ -65,13 +66,14 @@ class Param(Basemodel):
 
     @classmethod
     def parse_args(cls, indata, params, scales=None, offsets=None):
+        key = " ".join([cls.__name__, params, scales, offsets])
         params = params.split(",")
         if scales is not None:
             scales = [float(s) for s in scales.split(",")]
         if offsets is not None:
             offsets = [float(o) for o in offsets.split(",")]
 
-        return cls(indata, params, scales, offsets)
+        return cls(indata, key, params, scales, offsets)
 
     def compute(self, params):
         params = tf.gather(params, indices=self.idxs, axis=-1)

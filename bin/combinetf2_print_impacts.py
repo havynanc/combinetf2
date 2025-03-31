@@ -134,26 +134,29 @@ def main():
                 "Only global impacts on observables is implemented (use --globalImpacts)"
             )
 
-        model = args.physicsModel[0]
-        instance = args.physicsModel[1]
-        channel = args.physicsModel[2]
-        hists = fitresult[model][instance]["channels"][channel]
+        model_key = " ".join(args.physicsModel)
+        channels = fitresult["physics_models"][model_key]["channels"]
 
-        key = "hist_postfit_inclusive_global_impacts"
-        if not args.ungroup:
-            key += "_grouped"
+        for hists in channels.values():
+            key = "hist_postfit_inclusive_global_impacts"
+            if not args.ungroup:
+                key += "_grouped"
 
-        hist_total = hists["hist_postfit_inclusive"].get()
+            hist_total = hists["hist_postfit_inclusive"].get()
 
-        hist = hists[key].get()
+            hist = hists[key].get()
 
-        # lumi in pb-1
-        lumi = meta["meta_info_input"]["channel_info"]["ch0"].get("lumi", 0.001) * 1000
+            # lumi in pb-1
+            lumi = (
+                meta["meta_info_input"]["channel_info"]["ch0"].get("lumi", 0.001) * 1000
+            )
 
-        for idxs in itertools.product(*[np.arange(a.size) for a in hist_total.axes]):
-            ibin = {a: i for a, i in zip(hist_total.axes.name, idxs)}
-            print(f"Now at {ibin}")
-            printImpactsHist(args, hist[ibin], hist_total[ibin], ibin, lumi)
+            for idxs in itertools.product(
+                *[np.arange(a.size) for a in hist_total.axes]
+            ):
+                ibin = {a: i for a, i in zip(hist_total.axes.name, idxs)}
+                print(f"Now at {ibin}")
+                printImpactsHist(args, hist[ibin], hist_total[ibin], ibin, lumi)
     else:
         for poi in io_tools.get_poi_names(meta):
             print(f"Now at {poi}")

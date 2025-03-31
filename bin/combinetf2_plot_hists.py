@@ -212,7 +212,11 @@ def parseArgs():
         nargs="+",
         action="append",
         default=[],
-        help='Make plot of physics model prefit and postfit histograms, specifying the model name, followed by the instance key and channel name, e.g. "-m project ch0_eta_pt ch0". This argument can be called multiple times',
+        help="""
+        Make plot of physics model prefit and postfit histograms. Loop over all by deault. 
+        Can also specify the model name, followed by the arguments, e.g. "-m Project ch0 eta pt". 
+        This argument can be called multiple times.
+        """,
     )
     parser.add_argument(
         "--filterProcs",
@@ -1143,43 +1147,28 @@ def main():
         varColors=varColors,
     )
 
-    if len(args.physicsModel) == 0:
-        models = [["basemodel"]]
-    else:
-        models = args.physicsModel
-
-    for margs in models:
-        model = margs[0]
-
-        if model not in fitresult.keys():
-            raise ValueError(f"Model {model} not found in fitresult")
-
-        is_normalized = model in ["normalized", "normratio"]
-
-        if len(margs) > 1:
-            instance_key = margs[1]
-            if instance_key not in fitresult[model].keys():
-                raise ValueError(
-                    f"Instance {instance_key} of model {model} not found in fitresult"
-                )
+    results = fitresult["physics_models"]
+    for margs in args.physicsModel:
+        if margs == []:
+            instance_keys = results.keys()
         else:
-            instance_key = None
+            model_key = " ".join(margs)
+            instance_keys = [k for k in results.keys() if k.startswith(model_key)]
+            if len(instance_keys) == 0:
+                raise ValueError(f"No model found under {model_key}")
 
-        for instance_name, instance in fitresult[model].items():
-            if instance_key is not None and instance_name != instance_key:
-                continue
+        for instance_key in instance_keys:
+
+            is_normalized = any(
+                instance_key.startswith(x) for x in ["Normalized", "Normratio"]
+            )
+
+            instance = results[instance_key]
 
             chi2, ndf, saturated_chi2 = get_chi2(instance, args.noChisq, fittype)
 
-            if len(margs) > 2:
-                if margs[2] not in instance["channels"][model].keys():
-                    raise ValueError(
-                        f"Channel {margs[2]} of instance {instance_name} of model {model} not found in fitresult"
-                    )
-
             for channel, result in instance["channels"].items():
-                if len(margs) > 2 and margs[2] != channel:
-                    continue
+                logger.info(f"Make plot for {instance_key} in channel {channel}")
 
                 info = channel_info.get(channel, {})
 

@@ -100,16 +100,15 @@ class Workspace:
             file_path = f"{parts[0]}_{postfix}.{parts[1]}"
         return file_path
 
-    def dump_obj(
-        self, obj, key, model_name=None, model_instance_name=None, channel=None
-    ):
+    def dump_obj(self, obj, key, model_key=None, channel=None):
         result = self.results
-        for idf in [model_name, model_instance_name]:
-            if idf is None:
-                continue
-            if idf not in result.keys():
-                result[idf] = {}
-            result = result[idf]
+
+        if model_key is not None:
+            if "physics_models" not in result.keys():
+                result["physics_models"] = {}
+            if model_key not in result["physics_models"]:
+                result["physics_models"][model_key] = {}
+            result = result["physics_models"][model_key]
 
         if channel is not None:
             if "channels" not in result.keys():
@@ -145,8 +144,7 @@ class Workspace:
         stop=None,
         label=None,
         channel=None,
-        model_name=None,
-        model_instance_name=None,
+        model_key=None,
     ):
         if not isinstance(axes, (list, tuple, np.ndarray)):
             axes = [axes]
@@ -155,15 +153,15 @@ class Workspace:
             if variances is not None:
                 variances = variances[start:stop]
         h = self.hist(name, axes, values, variances, label)
-        self.dump_hist(h, model_name, model_instance_name, channel)
+        self.dump_hist(h, model_key, channel)
 
     def add_value(self, value, name, *args, **kwargs):
         self.dump_obj(value, name, *args, **kwargs)
 
     def add_chi2(self, chi2, ndf, prefit, model):
         postfix = "_prefit" if prefit else ""
-        self.add_value(ndf, "ndf" + postfix, model.name, model.instance)
-        self.add_value(chi2, "chi2" + postfix, model.name, model.instance)
+        self.add_value(ndf, "ndf" + postfix, model.key)
+        self.add_value(chi2, "chi2" + postfix, model.key)
 
     def add_observed_hists(
         self, model, data_obs, nobs, data_cov_inv=None, nobs_cov_inv=None
@@ -194,8 +192,7 @@ class Workspace:
             opts = dict(
                 start=start,
                 stop=stop,
-                model_name=model.name,
-                model_instance_name=model.instance,
+                model_key=model.key,
                 channel=channel,
             )
 
@@ -357,8 +354,7 @@ class Workspace:
                 start=info["start"],
                 stop=info["stop"],
                 label=label,
-                model_name=model.name,
-                model_instance_name=model.instance,
+                model_key=model.key,
                 channel=channel,
             )
 
@@ -415,8 +411,7 @@ class Workspace:
                 [flat_axis_x, flat_axis_y],
                 cov,
                 label=f"{label} covariance",
-                model_name=model.name,
-                model_instance_name=model.instance,
+                model_key=model.key,
             )
 
         return name, label

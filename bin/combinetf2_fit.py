@@ -277,7 +277,7 @@ def save_observed_hists(args, models, fitter, ws):
         if not model.has_data:
             continue
 
-        print(f"Save data histogram for physics model {model.name}")
+        print(f"Save data histogram for {model.key}")
         ws.add_observed_hists(
             model,
             fitter.indata.data_obs,
@@ -290,7 +290,7 @@ def save_observed_hists(args, models, fitter, ws):
 def save_hists(args, models, fitter, ws, prefit=True, profile=False):
 
     for model in models:
-        logger.info(f"Save inclusive histogram for physics model {model.name}")
+        logger.info(f"Save inclusive histogram for {model.key}")
 
         if prefit and getattr(model, "skip_prefit", False):
             continue
@@ -320,7 +320,7 @@ def save_hists(args, models, fitter, ws, prefit=True, profile=False):
                 ws.add_chi2(aux[4], aux[5], prefit, model)
 
         if args.saveHistsPerProcess and not getattr(model, "skip_per_process", False):
-            logger.info(f"Save processes histogram for {model.name}")
+            logger.info(f"Save processes histogram for {model.key}")
 
             exp, aux = fitter.expected_events(
                 model,

@@ -102,7 +102,11 @@ def parseArgs():
         nargs="+",
         action="append",
         default=[],
-        help='Make plot of physics model prefit and postfit histograms, specifying the model name, followed by the cinstance key, e.g. "-m project ch0_eta_pt". This argument can be called multiple times',
+        help="""
+        Make plot of physics model prefit and postfit histograms. Loop over all by deault. 
+        Can also specify the model name, followed by the arguments, e.g. "-m Project ch0 eta pt". 
+        This argument can be called multiple times.
+        """,
     )
     parser.add_argument(
         "--prefit", action="store_true", help="Make prefit plot, else postfit"
@@ -235,29 +239,18 @@ def main():
 
     hist_cov_key = f"hist_{'prefit' if args.prefit else 'postfit'}_inclusive_cov"
 
-    if len(args.physicsModel) == 0:
-        models = [["basemodel"]]
-    else:
-        models = args.physicsModel
-
-    for margs in models:
-        model = margs[0]
-
-        if model not in fitresult.keys():
-            raise ValueError(f"Model {model} not found in fitresult")
-
-        if len(margs) > 1:
-            instance_key = margs[1]
-            if instance_key not in fitresult[model].keys():
-                raise ValueError(
-                    f"Instance {instance_key} of model {model} not found in fitresult"
-                )
+    results = fitresult["physics_models"]
+    for margs in args.physicsModel:
+        if margs == []:
+            instance_keys = results.keys()
         else:
-            instance_key = None
+            model_key = " ".join(margs)
+            instance_keys = [k for k in results.keys() if k.startswith(model_key)]
+            if len(instance_keys) == 0:
+                raise ValueError(f"No model found under {model_key}")
 
-        for instance_name, instance in fitresult[model].items():
-            if instance_key is not None and instance_name != instance_key:
-                continue
+        for instance_key in instance_keys:
+            instance = results[instance_key]
 
             h_cov = instance[hist_cov_key].get()
 
@@ -267,7 +260,12 @@ def main():
                 args,
                 config=config,
                 meta=meta,
-                suffix=model + "_" + instance_name,
+                suffix=instance_key.replace(" ", "_")
+                .replace(".", "p")
+                .replace(",", "k")
+                .replace(":", "")
+                .replace("(", "")
+                .replace(")", ""),
             )
 
     # for channel, info in channel_info.items():

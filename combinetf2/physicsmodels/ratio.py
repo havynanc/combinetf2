@@ -32,12 +32,10 @@ class Ratio(Basemodel):
             Whether to normalize the numerator and denominator before the ratio. Defaults to False.
     """
 
-    name = "ratio"
-    need_params = False
-
     def __init__(
         self,
         indata,
+        key,
         num_channel,
         den_channel,
         num_processes=[],
@@ -45,6 +43,8 @@ class Ratio(Basemodel):
         num_selection={},
         den_selection={},
     ):
+        self.key = key
+
         self.num = helpers.Term(indata, num_channel, num_processes, num_selection)
         self.den = helpers.Term(indata, den_channel, den_processes, den_selection)
 
@@ -87,12 +87,8 @@ class Ratio(Basemodel):
             }
         }
 
-        self.instance = channel
-        if len(hist_axes):
-            self.instance += "_" + "_".join([a.name for a in hist_axes])
-
     @classmethod
-    def parse_args(cls, indata, *args, **kwargs):
+    def parse_args(cls, indata, *args):
         """
         parsing the input arguments into the ratio constructor, is has to be called as
         -m ratio
@@ -124,15 +120,17 @@ class Ratio(Basemodel):
             axis_selection_num = None
             axis_selection_den = None
 
+        key = " ".join([cls.__name__, *args])
+
         return cls(
             indata,
+            key,
             args[0],
             args[1],
             procs_num,
             procs_den,
             axis_selection_num,
             axis_selection_den,
-            **kwargs,
         )
 
     def compute(self, params, observables):
@@ -153,7 +151,6 @@ class Normratio(Ratio):
     Same as Ratio but the numerator and denominator are normalized
     """
 
-    name = "normratio"
     ndf_reduction = 1
 
     def init(self, *args, **kwargs):

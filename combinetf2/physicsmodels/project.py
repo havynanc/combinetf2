@@ -16,10 +16,8 @@ class Project(Basemodel):
         Names of the axes to keep. If empty, the histogram will be projected to a single bin.
     """
 
-    name = "project"
-    need_params = False
-
-    def __init__(self, indata, channel, *axes_names):
+    def __init__(self, indata, key, channel, *axes_names):
+        self.key = key
         info = indata.channel_info[channel]
 
         self.start = info["start"]
@@ -67,10 +65,6 @@ class Project(Basemodel):
             }
         }
 
-        self.instance = channel
-        if len(axes_names):
-            self.instance += "_" + "_".join(axes_names)
-
     def project(self, values, out_shape, transpose_idxs):
         exp = values[self.start : self.stop]
         exp = tf.reshape(exp, out_shape)
@@ -92,7 +86,6 @@ class Normalize(Project):
     Same as project but also normalize
     """
 
-    name = "normalize"
     ndf_reduction = 1
 
     def __init__(self, *args, **kwargs):

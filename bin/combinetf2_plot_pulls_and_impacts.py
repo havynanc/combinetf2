@@ -1205,61 +1205,62 @@ def main():
                 "Only global impacts on observables is implemented (use --globalImpacts)"
             )
 
-        model = args.physicsModel[0]
-        instance = args.physicsModel[1]
-        channel = args.physicsModel[2]
-        hists = fitresult[model][instance]["channels"][channel]
+        model_key = " ".join(args.physicsModel)
+        channels = fitresult["physics_models"][model_key]["channels"]
 
-        modes = ["ungrouped", "group"] if args.mode == "both" else [args.mode]
-        for mode in modes:
-            group = mode == "group"
+        for hists in channels.values():
 
-            key = "hist_postfit_inclusive_global_impacts"
-            if group:
-                key += "_grouped"
+            modes = ["ungrouped", "group"] if args.mode == "both" else [args.mode]
+            for mode in modes:
+                group = mode == "group"
 
-            hist_total = hists["hist_postfit_inclusive"].get()
-
-            hist = hists[key].get()
-
-            # TODO: implement ref
-            # hist_ref
-            # hist_total_ref
-
-            # lumi in pb-1
-            lumi = (
-                meta["meta_info_input"]["channel_info"]["ch0"].get("lumi", 0.001) * 1000
-            )
-
-            for idxs in itertools.product(
-                *[np.arange(a.size) for a in hist_total.axes]
-            ):
-                ibin = {a: i for a, i in zip(hist_total.axes.name, idxs)}
-                print(f"Now at {ibin}")
-
-                ibin_str = "_".join([f"{a}{i}" for a, i in ibin.items()])
+                key = "hist_postfit_inclusive_global_impacts"
                 if group:
-                    outfile = f"{impacts_name}_grouped_{ibin_str}.html"
-                else:
-                    outfile = f"{impacts_name}_{ibin_str}.html"
-                    if not args.noPulls:
-                        outfile = f"pulls_and_{outfile}"
+                    key += "_grouped"
 
-                produce_plots_hist(
-                    args,
-                    fitresult,
-                    outdir,
-                    outfile,
-                    hist[ibin],
-                    hist_total[ibin],
-                    ibin,
-                    lumi,
-                    group=group,
-                    grouping=grouping,
-                    hist_impacts_ref=None,
-                    hist_total_ref=None,
-                    **kwargs,
+                hist_total = hists["hist_postfit_inclusive"].get()
+
+                hist = hists[key].get()
+
+                # TODO: implement ref
+                # hist_ref
+                # hist_total_ref
+
+                # lumi in pb-1
+                lumi = (
+                    meta["meta_info_input"]["channel_info"]["ch0"].get("lumi", 0.001)
+                    * 1000
                 )
+
+                for idxs in itertools.product(
+                    *[np.arange(a.size) for a in hist_total.axes]
+                ):
+                    ibin = {a: i for a, i in zip(hist_total.axes.name, idxs)}
+                    print(f"Now at {ibin}")
+
+                    ibin_str = "_".join([f"{a}{i}" for a, i in ibin.items()])
+                    if group:
+                        outfile = f"{impacts_name}_grouped_{ibin_str}.html"
+                    else:
+                        outfile = f"{impacts_name}_{ibin_str}.html"
+                        if not args.noPulls:
+                            outfile = f"pulls_and_{outfile}"
+
+                    produce_plots_hist(
+                        args,
+                        fitresult,
+                        outdir,
+                        outfile,
+                        hist[ibin],
+                        hist_total[ibin],
+                        ibin,
+                        lumi,
+                        group=group,
+                        grouping=grouping,
+                        hist_impacts_ref=None,
+                        hist_total_ref=None,
+                        **kwargs,
+                    )
     else:
         pois = [args.poi] if args.poi else io_tools.get_poi_names(meta)
         for poi in pois:
