@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 
 import argparse
+import itertools
 import os
 
+import hist
 import matplotlib.pyplot as plt
 import mplhep as hep
 import numpy as np
@@ -10,7 +12,7 @@ import seaborn as sns
 
 import combinetf2.io_tools
 
-# from wums import boostHistHelpers as hh  # isort: skip
+from wums import boostHistHelpers as hh  # isort: skip
 from wums import logging, output_tools, plot_tools  # isort: skip
 
 
@@ -254,82 +256,104 @@ def main():
 
             h_cov = instance[hist_cov_key].get()
 
+            suffix = (
+                instance_key.replace(" ", "_")
+                .replace(".", "p")
+                .replace(",", "k")
+                .replace(":", "")
+                .replace("(", "")
+                .replace(")", "")
+            )
+
             plot_matrix(
                 outdir,
                 h_cov,
                 args,
                 config=config,
                 meta=meta,
-                suffix=instance_key.replace(" ", "_")
-                .replace(".", "p")
-                .replace(",", "k")
-                .replace(":", "")
-                .replace("(", "")
-                .replace(")", ""),
+                suffix=suffix,
             )
 
-    # for channel, info in channel_info.items():
-    #     axes = info["axes"]
-    #     start = int(info["start"])
-    #     stop = int(info["stop"])
+            start = 0
+            for channel, info in instance["channels"].items():
+                channel_hist = info[f"hist_postfit_inclusive"].get()
+                axes = [a for a in channel_hist.axes]
+                if len(instance.get("channels", {}).keys()) > 1:
+                    # plot covariance matrix in each channel
+                    nbins = np.prod(channel_hist.shape)
+                    stop = int(start + nbins)
 
-    #     h_cov = hist_cov[{"x": slice(start, stop), "y": slice(start, stop)}]
+                    h_cov_channel = h_cov[start:stop, start:stop]
 
-    #     plot_matrix(
-    #         outdir,
-    #         h_cov,
-    #         args,
-    #         channel,
-    #         [a.name for a in axes],
-    #         config=config,
-    #         meta=meta,
-    #     )
+                    start = stop
 
-    #     selection_axes = [a for a in axes if a.name in args.selectionAxes]
-    #     if (len(models) and channel in [p[0] for p in models.values()]) or len(
-    #         selection_axes
-    #     ) > 0:
-    #         # reshape into original axes
-    #         h1d = hist.Hist(*axes)
-    #         h2d = hh.expand_hist_by_duplicate_axes(
-    #             h1d,
-    #             [a.name for a in axes],
-    #             [f"y_{a.name}" for a in axes],
-    #             put_trailing=True,
-    #         )
+                    plot_matrix(
+                        outdir,
+                        h_cov_channel,
+                        args,
+                        channel=channel,
+                        config=config,
+                        meta=meta,
+                        suffix=suffix,
+                    )
+                else:
+                    h_cov_channel = h_cov
 
-    #         vals = np.reshape(
-    #             h_cov.values(), (h_cov.shape[0], *h2d.shape[: len(h2d.shape) // 2])
-    #         )
-    #         h2d.values()[...] = np.reshape(vals, h2d.shape)
+                selection_axes = [a for a in axes if a.name in args.selectionAxes]
 
-    #     if len(selection_axes) > 0:
-    #         selection_bins = [
-    #             np.arange(a.size) for a in axes if a.name in args.selectionAxes
-    #         ]
-    #         other_axes = [a.name for a in axes if a not in selection_axes]
+                if len(selection_axes) > 0:
+                    # plot covariance matrix in each bin
+                    h1d = hist.Hist(*axes)
+                    h2d = hh.expand_hist_by_duplicate_axes(
+                        h1d,
+                        [a.name for a in axes],
+                        [f"y_{a.name}" for a in axes],
+                        put_trailing=True,
+                    )
 
-    #         for bins in itertools.product(*selection_bins):
-    #             idxs = {a.name: i for a, i in zip(selection_axes, bins)}
-    #             idxs.update({f"y_{a.name}": i for a, i in zip(selection_axes, bins)})
-    #             idxs_centers = {
-    #                 a.name: (
-    #                     a.centers[i]
-    #                     if isinstance(a, (hist.axis.Regular, hist.axis.Variable))
-    #                     else a.edges[i]
-    #                 )
-    #                 for a, i in zip(selection_axes, bins)
-    #             }
-    #             h_cov_i = h2d[idxs]
-    #             suffix = f"{channel}_" + "_".join(
-    #                 [
-    #                     f"{a}_{str(i).replace('.','p').replace('-','m')}"
-    #                     for a, i in idxs_centers.items()
-    #                 ]
-    #             )
-    #             plot_matrix(
-    #                 outdir, h_cov_i, args, suffix, other_axes, config=config, meta=meta
-    #             )
+                    vals = np.reshape(
+                        h_cov_channel.values(),
+                        (h_cov_channel.shape[0], *h2d.shape[: len(h2d.shape) // 2]),
+                    )
+                    h2d.values()[...] = np.reshape(vals, h2d.shape)
+
+                    selection_bins = [
+                        np.arange(a.size) for a in axes if a.name in args.selectionAxes
+                    ]
+                    other_axes = [a.name for a in axes if a not in selection_axes]
+
+                    for bins in itertools.product(*selection_bins):
+                        idxs = {a.name: i for a, i in zip(selection_axes, bins)}
+                        idxs.update(
+                            {f"y_{a.name}": i for a, i in zip(selection_axes, bins)}
+                        )
+                        idxs_centers = {
+                            a.name: (
+                                a.centers[i]
+                                if isinstance(
+                                    a, (hist.axis.Regular, hist.axis.Variable)
+                                )
+                                else a.edges[i]
+                            )
+                            for a, i in zip(selection_axes, bins)
+                        }
+                        h_cov_i = h2d[idxs]
+                        suffix = f"{channel}_" + "_".join(
+                            [
+                                f"{a}_{str(i).replace('.','p').replace('-','m')}"
+                                for a, i in idxs_centers.items()
+                            ]
+                        )
+                        plot_matrix(
+                            outdir,
+                            h_cov_i,
+                            args,
+                            channel=channel,
+                            axes=other_axes,
+                            config=config,
+                            meta=meta,
+                            suffix=suffix,
+                        )
 
     if output_tools.is_eosuser_path(args.outpath) and args.eoscp:
         output_tools.copy_to_eos(outdir, args.outpath, args.outfolder)
