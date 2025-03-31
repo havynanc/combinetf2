@@ -79,10 +79,10 @@ class Project(Basemodel):
         exp = tf.transpose(exp, perm=transpose_idxs)
         return exp
 
-    def compute_per_process(self, observables):
+    def compute_per_process(self, params, observables):
         return self.project(observables, self.exp_shape, self.transpose_idxs)
 
-    def compute(self, observables):
+    def compute(self, params, observables):
         out_shape = self.exp_shape[:-1]
         transpose_idxs = self.transpose_idxs[:-1]
         return self.project(observables, out_shape, transpose_idxs)

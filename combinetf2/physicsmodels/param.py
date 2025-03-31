@@ -21,7 +21,6 @@ class Param(Basemodel):
 
     name = "param"
     need_observables = False
-    need_params = True
     has_data = False
     has_processes = False
     skip_per_process = True

@@ -135,13 +135,13 @@ class Ratio(Basemodel):
             **kwargs,
         )
 
-    def compute(self, observables):
+    def compute(self, params, observables):
         num = self.num.select(observables, inclusive=True)
         den = self.den.select(observables, inclusive=True)
 
         return num / den
 
-    def compute_per_process(self, observables):
+    def compute_per_process(self, params, observables):
         num = self.num.select(observables, inclusive=False)
         den = self.den.select(observables, inclusive=False)
 

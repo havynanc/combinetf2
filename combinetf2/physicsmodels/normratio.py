@@ -12,13 +12,13 @@ class Normratio(Ratio):
     def init(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    def compute(self, observables):
+    def compute(self, params, observables):
         num = self.num.select(observables, normalize=True, inclusive=True)
         den = self.den.select(observables, normalize=True, inclusive=True)
 
         return num / den
 
-    def compute_per_process(self, observables):
+    def compute_per_process(self, params, observables):
         num = self.num.select(observables, normalize=True, inclusive=False)
         den = self.den.select(observables, normalize=True, inclusive=False)
 
