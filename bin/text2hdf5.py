@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 
 import argparse
-import gc
 import os
+from pprint import pprint
 
 from wums import logging
 
@@ -40,6 +40,13 @@ def main():
         help="Make sparse tensor",
     )
     parser.add_argument(
+        "--symmetrize",
+        default=None,
+        choices=[None, "conservative", "average", "linear", "quadratic"],
+        type=str,
+        help="Symmetrize tensor by forcing systematics to 'average'",
+    )
+    parser.add_argument(
         "--mass",
         type=str,
         default="125.38",
@@ -67,9 +74,12 @@ def main():
     global logger
     logger = logging.setup_logger(__file__, args.verbose, args.noColorLogger)
 
-    converter = DatacardConverter(args.datacard, use_root=args.root, mass=args.mass)
-
+    converter = DatacardConverter(
+        args.datacard, use_root=args.root, mass=args.mass, symmetrize=args.symmetrize
+    )
     writer = converter.convert_to_hdf5(sparse=args.sparse)
+
+    pprint(converter.parser.get_summary())
 
     directory = args.output
     if directory is None:
@@ -84,7 +94,6 @@ def main():
     writer.write(outfolder=directory, outfilename=filename)
 
     del converter
-    gc.collect()
 
 
 if __name__ == "__main__":

@@ -1,5 +1,9 @@
 import os
 
+from wums import logging
+
+logger = logging.child_logger(__name__)
+
 
 class DatacardParser:
     """
@@ -197,6 +201,7 @@ class DatacardParser:
         # Parse systematics after the rate line
         for i in range(rate_index + 1, len(lines)):
             line = lines[i]
+            logger.debug(f"Now at line {i}: {line}")
             # Stop when we hit other directives
             if any(
                 line.startswith(directive)

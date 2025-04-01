@@ -16,7 +16,7 @@ class DatacardConverter:
     Convert data from Combine datacards and ROOT files to hdf5 tensor format
     """
 
-    def __init__(self, datacard_file, use_root=False, mass="125.38"):
+    def __init__(self, datacard_file, symmetrize=None, use_root=False, mass="125.38"):
         """
         Initialize the converter with a datacard file
 
@@ -26,6 +26,7 @@ class DatacardConverter:
         self.datacard_file = datacard_file
         self.parser = DatacardParser()
         self.mass = mass
+        self.symmetrize = symmetrize
 
         # For counting experiments
         self.yield_axis = hist.axis.Integer(
@@ -35,8 +36,10 @@ class DatacardConverter:
         self.use_root = use_root
         if self.use_root:
             import ROOT
+            from narf.histutils import root_to_hist
 
             self.io = ROOT
+            self.root_to_hist = root_to_hist
             self.root_files = (
                 {}
             )  # Cache for opened ROOT files and their directories as uproot objects
@@ -175,38 +178,11 @@ class DatacardConverter:
                 return None
         else:
             if self.use_root:
-                values = np.array(
-                    [
-                        histogram.GetBinContent(i)
-                        for i in range(1, histogram.GetNbinsX() + 1)
-                    ]
-                )
-                if edges:
-                    edges = np.array(
-                        [
-                            histogram.GetBinLowEdge(i)
-                            for i in range(1, histogram.GetNbinsX() + 2)
-                        ]
-                    )
-                    return values, edges
-                elif variances:
-                    variances = np.array(
-                        [
-                            histogram.GetBinError(i) ** 2
-                            for i in range(1, histogram.GetNbinsX() + 1)
-                        ]
-                    )
-                    return values, variances
-                else:
-                    return values
+                h = self.root_to_hist(histogram)
+                histogram.Delete()
+                return h
             else:
-                values = histogram.values()
-                if edges:
-                    return values, histogram.axis().edges()
-                elif variances:
-                    return values, histogram.variances()
-                else:
-                    return values
+                return histogram.to_hist()
 
     def convert_to_hdf5(self, sparse=False):
         """
@@ -263,32 +239,28 @@ class DatacardConverter:
                     or shape_map.get(("*", "*"))
                 )
 
-                if process_name == "data_obs":
-                    if shape_info:
-                        values, edges = self.get_histogram(
-                            shape_info, process_name, bin_name, edges=True
-                        )
-                        axes = [hist.axis.Variable(edges)]
-                    else:
-                        values = np.array([self.parser.observations.get(bin_name, 0)])
-                        axes = [self.yield_axis]
-
-                    writer.add_channel(axes, bin_name)
-                    writer.add_data(values, bin_name)
-                else:
-                    if shape_info:
-                        values, variances = self.get_histogram(
-                            shape_info, process_name, bin_name, variances=True
-                        )
-                    else:
-                        values = np.array([self.parser.observations.get(bin_name, 0)])
-                        variances = None
-
-                    writer.add_process(
-                        values,
+                if shape_info:
+                    h_proc = self.get_histogram(
+                        shape_info,
                         process_name,
                         bin_name,
-                        variances=variances,
+                    )
+                else:
+                    # For counting experiments
+                    h_proc = hist.Hist(
+                        self.yield_axis,
+                        data=np.array([self.parser.observations.get(bin_name, 0)]),
+                        storage=hist.storage.Double(),
+                    )
+
+                if process_name == "data_obs":
+                    writer.add_channel(h_proc.axes, bin_name)
+                    writer.add_data(h_proc, bin_name)
+                else:
+                    writer.add_process(
+                        h_proc,
+                        process_name,
+                        bin_name,
                         signal=self.parser.process_indices.get(process_name, 0) <= 0,
                     )
 
@@ -346,6 +318,7 @@ class DatacardConverter:
                                 kfactor=float(effect),
                                 constrained=syst["type"]
                                 != "shapeU",  # TODO check if shapeU is unconstriained
+                                symmetrize=self.symmetrize,
                             )
 
             elif syst["type"] in ["lnN", "lnU"]:
@@ -361,6 +334,6 @@ class DatacardConverter:
 
     def __del__(self):
         if self.use_root:
-            logger.info("Close all root files")
+            logger.info("Close root files")
             for file in self.root_files.values():
                 file.Close()
