@@ -30,13 +30,13 @@ def instance_from_class(class_name, *args, **kwargs):
     # Try to import the module
     module = importlib.import_module(module_name)
 
-    try:
-        cls = getattr(module, class_name)
-    except AttributeError:
-        print(f"Class '{class_name}' not found in module '{module_name}'.")
-        return None
+    model = getattr(module, class_name, None)
+    if model is None:
+        raise AttributeError(
+            f"Class '{class_name}' not found in module '{module_name}'."
+        )
 
-    return cls.parse_args(*args, **kwargs)
+    return model.parse_args(*args, **kwargs)
 
 
 def parse_axis_selection(selection_str):

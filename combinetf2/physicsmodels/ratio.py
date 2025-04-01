@@ -1,4 +1,5 @@
 import hist
+import tensorflow as tf
 
 from combinetf2.physicsmodels import helpers
 from combinetf2.physicsmodels.physicsmodel import PhysicsModel
@@ -157,11 +158,14 @@ class Normratio(Ratio):
     def compute_flat(self, params, observables):
         num = self.num.select(observables, normalize=True, inclusive=True)
         den = self.den.select(observables, normalize=True, inclusive=True)
-
-        return num / den
+        exp = num / den
+        exp = tf.reshape(exp, [-1])
+        return exp
 
     def compute_flat_per_process(self, params, observables):
         num = self.num.select(observables, normalize=True, inclusive=False)
         den = self.den.select(observables, normalize=True, inclusive=False)
-
-        return num / den
+        exp = num / den
+        flat_shape = (-1, exp.shape[-1])
+        exp = tf.reshape(exp, flat_shape)
+        return exp

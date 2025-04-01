@@ -99,48 +99,20 @@ class PhysicsModelChannel(PhysicsModel):
 
     def compute_flat(self, params, observables):
         exp = tf.reshape(observables[self.start : self.stop], tuple(self.channel_shape))
-        return self.compute(params, exp)
+        exp = self.compute(params, exp)
+        exp = tf.reshape(exp, [-1])  # flatten again
+        return exp
 
     def compute_flat_per_process(self, params, observables):
         exp = tf.reshape(
             observables[self.start : self.stop],
             (*self.channel_shape, observables.shape[1]),
         )
-        return self.compute_per_process(params, exp)
-
-
-# class PhysicsModelChannels(PhysicsModelChannel):
-#     """
-#     Abstract physics model to process a set of specific channels
-#     """
-#     def __init__(self, indata, key, channels):
-#         super().__init__(indata, key, *channels)
-
-#         self.channel_values = {
-#             c: lambda x, i=True, s=indata.channel_info[c]["start"], e=indata.channel_info[c]["stop"], r=[len(a) for a in indata.channel_info[c]["axes"]]: select_and_reshape(x, s, e, r, i) for c in channels
-#             }
-
-#     def select_and_reshape(self, values, start, stop, reshape, inclusive=True):
-#         values_selected =  values[start:stop]
-#         if inclusive:
-#             return tf.reshape(values[start:stop], tuple(reshape))
-#         else:
-#             return tf.reshape(values_selected, (*reshape, values_selected.shape[1]))
-
-#     def make_fun(self, fun_flat, params, inclusive=True):
-#         compute = self.compute if inclusive else self.compute_per_process
-
-#         def fun():
-#             exp = fun_flat()
-#             exp = {
-#                 k: f(exp, inclusive)
-#                 for k, f in self.channel_values.items()
-#                 }
-#             exp = compute(params, exp)
-
-#             return exp
-
-#         return fun
+        exp = self.compute_per_process(params, exp)
+        # flatten again
+        flat_shape = (-1, exp.shape[-1])
+        exp = tf.reshape(exp, flat_shape)
+        return exp
 
 
 class Basemodel(PhysicsModel):
