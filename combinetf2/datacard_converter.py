@@ -220,7 +220,6 @@ class DatacardConverter:
 
         logger.info("Convert histograms into hdf5 tensor")
 
-        # TODO: rate params
         # TODO: nuisance groups
 
         writer = tensorwriter.TensorWriter(
@@ -263,6 +262,22 @@ class DatacardConverter:
                         bin_name,
                         signal=self.parser.process_indices.get(process_name, 0) <= 0,
                     )
+
+        # Add rate parameters as unconstrained lnN uncertainties with 1% variation.
+        #   To compare with combine use 'r = exp(100 * r)'
+        for parts in self.parser.rate_params:
+            name = parts[0]
+            channels = [parts[1]] if parts[1] != "*" else self.parser.bins
+            processes = [parts[2]] if parts[2] != "*" else self.parser.processes
+            # TODO: set initial value
+            value = float(parts[3])
+            # TODO: use parameter range
+            if len(parts) >= 5:
+                lo, hi = parts[4][1:-1].split(",")
+                prange = (float(lo), float(hi))
+
+            for c in channels:
+                writer.add_lnN_systematic(name, processes, c, 1.01, constrained=False)
 
         def add_lnN_syst(writer, name, process, channel, effect):
             # Parse the effect (could be asymmetric like 0.9/1.1)

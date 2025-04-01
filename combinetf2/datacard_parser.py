@@ -202,23 +202,21 @@ class DatacardParser:
         for i in range(rate_index + 1, len(lines)):
             line = lines[i]
             logger.debug(f"Now at line {i}: {line}")
-            # Stop when we hit other directives
-            if any(
-                line.startswith(directive)
-                for directive in [
-                    "shapes",
-                    "nuisance",
-                    "param",
-                    "rateParam",
-                    "group",
-                    "extArg",
-                ]
-            ):
-                break
-
             parts = line.split()
+
             if len(parts) < 2:
                 continue
+
+            # Stop when we hit other directives
+            if parts[1] in [
+                "shapes",
+                "nuisance",
+                "param",
+                "rateParam",
+                "group",
+                "extArg",
+            ]:
+                break
 
             # Check if this looks like a systematic entry (name followed by type)
             if parts[1] in ["lnN", "shape", "gmN", "lnU", "shapeN", "shape?", "shapeU"]:
@@ -250,14 +248,18 @@ class DatacardParser:
     def _parse_additional_directives(self, lines):
         """Parse additional directives like param, rateParam, group, etc."""
         for line in lines:
-            if line.startswith("param"):
-                self.param_lines.append(line)
-            elif line.startswith("rateParam"):
-                self.rate_params.append(line)
-            elif line.startswith("group"):
-                self.group_lines.append(line)
-            elif line.startswith("nuisance edit"):
-                self.nuisance_edits.append(line)
+            parts = line.split()
+            if len(parts) < 2:
+                continue
+            reduced_parts = [parts[0], *parts[2:]]
+            if parts[1] == "param":
+                self.param_lines.append(reduced_parts)
+            elif parts[1] == "rateParam":
+                self.rate_params.append(reduced_parts)
+            elif parts[1] == "group":
+                self.group_lines.append(reduced_parts)
+            elif parts[1] == "nuisance edit":
+                self.nuisance_edits.append(reduced_parts)
 
     def get_summary(self):
         """Return a summary of the parsed datacard"""
@@ -282,5 +284,9 @@ class DatacardParser:
             ],
             "systematics_count": len(self.systematics),
             "has_shapes": len(self.shapes) > 0,
+            "rate_params": self.rate_params,
+            "param_lines": self.param_lines,
+            "group_lines": self.group_lines,
+            "nuisance_edits": self.nuisance_edits,
         }
         return summary

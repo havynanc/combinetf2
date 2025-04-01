@@ -1,66 +1,51 @@
 #!/usr/bin/env python
 import argparse
-import os
-import sys
 
-import hist
-import matplotlib.pyplot as plt
 import numpy as np
+from wums import logging
 
 from combinetf2 import debugdata, inputdata
+
+logger = None
 
 
 def debug_input_data(input_file, output_dir=None, verbose=False):
     """
     Debug input data file and report potential issues
-
-    Parameters:
-    -----------
-    input_file : str
-        Path to input data file
-    output_dir : str, optional
-        Directory to save diagnostic plots
-    verbose : bool
-        Whether to print detailed information
     """
-    print(f"Debugging input file: {input_file}")
+    logger.info(f"Debugging input file: {input_file}")
 
     # Load the input data
     indata = inputdata.FitInputData(input_file)
 
     try:
         debug_data = debugdata.FitDebugData(indata)
-        print("✓ Successfully created FitDebugData object")
+        logger.info("✓ Successfully created FitDebugData object")
     except Exception as e:
-        print(f"✗ Failed to create FitDebugData: {str(e)}")
+        logger.info(f"✗ Failed to create FitDebugData: {str(e)}")
         return
-
-    # Create output directory if specified
-    if output_dir:
-        os.makedirs(output_dir, exist_ok=True)
 
     # Check for issues
     issues_found = 0
 
     # 1. Check for channels with no data observations
-    if verbose:
-        print("\nChecking channels with data observations:")
+    logger.info("\nChecking channels with data observations:")
     channels_with_data = list(debug_data.data_obs_hists.keys())
     channels_without_data = [
         ch
         for ch in debug_data.indata.channel_info.keys()
-        if ch not in channels_with_data
+        if ch not in channels_with_data and not indata.channel_info[ch]["masked"]
     ]
 
     if channels_without_data:
         issues_found += 1
-        print(
+        logger.info(
             f"✗ Found {len(channels_without_data)} channels without data observations:"
         )
         for ch in channels_without_data:
-            print(f"  - {ch}")
+            logger.info(f"  - {ch}")
     else:
-        print("✓ All channels have data observations")
+        logger.info("✓ All channels have data observations")
 
     # 2. Check for empty bins in data
     empty_data_channels = []
@@ -70,13 +55,13 @@ def debug_input_data(input_file, output_dir=None, verbose=False):
 
     if empty_data_channels:
         issues_found += 1
-        print(
+        logger.info(
             f"✗ Found {len(empty_data_channels)} channels with empty data observations:"
         )
         for ch in empty_data_channels:
-            print(f"  - {ch}")
+            logger.info(f"  - {ch}")
     else:
-        print("✓ All channels have non-empty data observations")
+        logger.info("✓ All channels have non-empty data observations")
 
     # 3. Check for processes with zero normalization
     zero_norm_procs = {}
@@ -90,11 +75,13 @@ def debug_input_data(input_file, output_dir=None, verbose=False):
 
     if zero_norm_procs:
         issues_found += 1
-        print("✗ Found processes with zero normalization:")
+        logger.info("✗ Found processes with zero normalization:")
         for channel, procs in zero_norm_procs.items():
-            print(f"  - Channel {channel}: {', '.join(np.array(procs, dtype=str))}")
+            logger.info(
+                f"  - Channel {channel}: {', '.join(np.array(procs, dtype=str))}"
+            )
     else:
-        print("✓ All processes have non-zero normalization")
+        logger.info("✓ All processes have non-zero normalization")
 
     # 4. Check for systematics with only zeros
     all_systs = list(debug_data.axis_systs)
@@ -103,11 +90,11 @@ def debug_input_data(input_file, output_dir=None, verbose=False):
 
     if zero_systs:
         issues_found += 1
-        print(f"✗ Found {len(zero_systs)} systematics with only zeros:")
+        logger.info(f"✗ Found {len(zero_systs)} systematics with only zeros:")
         for syst in zero_systs:
-            print(f"  - {syst}")
+            logger.info(f"  - {syst}")
     else:
-        print("✓ All systematics are nonzero")
+        logger.info("✓ All systematics are nonzero")
 
     # 5. Check for processes with no systematic variations
     procs_without_systs = []
@@ -120,13 +107,13 @@ def debug_input_data(input_file, output_dir=None, verbose=False):
 
     if procs_without_systs:
         issues_found += 1
-        print(
+        logger.info(
             f"✗ Found {len(procs_without_systs)} processes with no systematic variations:"
         )
         for proc in procs_without_systs:
-            print(f"  - {proc}")
+            logger.info(f"  - {proc}")
     else:
-        print("✓ All processes have systematic variations")
+        logger.info("✓ All processes have systematic variations")
 
     # 6. Check for extreme systematic variations
     extreme_variations = {}
@@ -159,150 +146,44 @@ def debug_input_data(input_file, output_dir=None, verbose=False):
 
     if extreme_variations:
         issues_found += 1
-        print("✗ Found extreme systematic variations (>100%):")
+        logger.info("✗ Found extreme systematic variations (>100%):")
         for channel, variations in extreme_variations.items():
-            print(f"  Channel: {channel}")
+            logger.info(f"  Channel: {channel}")
             for proc, syst, down, up in variations:
-                print(f"    - Process: {proc}, Systematic: {syst}")
-                print(f"      Down: {down:.2f}x, Up: {up:.2f}x")
+                logger.info(f"    - Process: {proc}, Systematic: {syst}")
+                logger.info(f"      Down: {down:.2f}x, Up: {up:.2f}x")
     else:
-        print("✓ No extreme systematic variations found")
-
-    # 7. Generate diagnostic plots if output_dir is specified
-    if output_dir:
-        # try:
-        for channel, nom_hist in debug_data.nominal_hists.items():
-            # Plot nominal distributions
-            fig, ax = plt.subplots(figsize=(10, 6))
-
-            # Get the first two axes for plotting (assuming they're binned)
-            axes = debug_data.indata.channel_info[channel]["axes"]
-            if len(axes) >= 1:
-                x_axis = axes[0]
-                y_axis = axes[1] if len(axes) >= 2 else None
-                x_bins = len(x_axis)
-                y_bins = 0
-
-                # Sum over all processes
-                summed_values = np.sum(nom_hist.values(), axis=-1)
-                data_values = debug_data.data_obs_hists[channel].values()
-
-                # If 2D histogram
-                if x_bins > 1 and y_bins > 1:
-                    im = ax.imshow(
-                        summed_values.T,
-                        origin="lower",
-                        aspect="auto",
-                        extent=[0, x_bins, 0, y_bins],
-                    )
-                    plt.colorbar(im, ax=ax, label="Events")
-                    ax.set_xlabel(x_axis.name)
-                    ax.set_ylabel(y_axis.name)
-                    ax.set_title(f"Channel: {channel} - Nominal")
-                else:  # 1D histogram
-                    ax.bar(range(len(summed_values)), summed_values, label="prediction")
-                    ax.errorbar(
-                        range(len(summed_values)),
-                        data_values,
-                        yerr=np.sqrt(data_values),
-                        color="black",
-                        marker=".",
-                        linestyle="None",
-                        label="Data",
-                    )
-                    ax.set_xlabel(f"{x_axis.name} bin")
-                    ax.set_ylabel("Events")
-                    ax.set_title(f"Channel: {channel} - Nominal")
-
-            plt.tight_layout()
-            plt.savefig(os.path.join(output_dir, f"{channel}_nominal.png"))
-            plt.close()
-
-            # Plot systematics impact
-            if channel in debug_data.syst_hists:
-                fig, ax = plt.subplots(figsize=(10, 6))
-
-                # For each systematic, compute the total relative impact
-                syst_impact = []
-                syst_impact_down = []
-                syst_names = []
-
-                for isyst, syst in enumerate(debug_data.indata.systs):
-                    # Skip inactive systematics
-                    syst = syst.decode("utf-8")
-                    if syst not in nonzero_systs:
-                        continue
-
-                    syst_hist = debug_data.syst_hists[channel]
-                    down_values = syst_hist[
-                        {"DownUp": "Down", "systs": syst, "processes": hist.sum}
-                    ].values()
-                    up_values = syst_hist[
-                        {"DownUp": "Up", "systs": syst, "processes": hist.sum}
-                    ].values()
-                    nom_values = nom_hist[{"processes": hist.sum}].values()[..., None]
-
-                    # Compute relative impact (maximum of up/down variations)
-                    with np.errstate(divide="ignore", invalid="ignore"):
-                        rel_impact_down = np.where(
-                            nom_values > 0, (down_values - nom_values) / nom_values, 0
-                        )
-                        rel_impact_up = np.where(
-                            nom_values > 0, (up_values - nom_values) / nom_values, 0
-                        )
-
-                    max_impact = np.nanmax(np.maximum(rel_impact_down, rel_impact_up))
-                    min_impact = np.nanmin(np.minimum(rel_impact_down, rel_impact_up))
-                    syst_impact.append(max_impact)
-                    syst_impact_down.append(min_impact)
-                    syst_names.append(syst)
-
-                # Sort by impact
-                sorted_indices = np.argsort(syst_impact)[::-1]
-                sorted_impact = [syst_impact[i] for i in sorted_indices]
-                sorted_impact_down = [syst_impact_down[i] for i in sorted_indices]
-                sorted_names = [syst_names[i] for i in sorted_indices]
-
-                # Plot top 10
-                top_n = min(10, len(sorted_impact))
-                ax.barh(range(top_n), sorted_impact[:top_n])
-                ax.barh(range(top_n), sorted_impact_down[:top_n])
-                ax.set_yticks(range(top_n))
-                ax.set_yticklabels(sorted_names[:top_n])
-                ax.set_xlabel("Maximum relative impact")
-                ax.set_title(f"Channel: {channel} - Top systematics impact")
-
-                # ax.set_xlim(min(sorted_impact_down[:top_n]), max( sorted_impact[:top_n]))
-
-                plt.tight_layout()
-                plt.savefig(os.path.join(output_dir, f"{channel}_syst_impact.png"))
-                plt.close()
-
-        print(f"✓ Generated diagnostic plots in {output_dir}")
-        # except Exception as e:
-        #     print(f"✗ Failed to generate diagnostic plots: {str(e)}")
+        logger.info("✓ No extreme systematic variations found")
 
     # Summary
     if issues_found == 0:
-        print("\n✓ No issues found in the input data!")
+        logger.info("\n✓ No issues found in the input data!")
     else:
-        print(f"\n✗ Found {issues_found} potential issues in the input data")
+        logger.info(f"\n✗ Found {issues_found} potential issues in the input data")
 
     return issues_found == 0
 
 
 def main():
     parser = argparse.ArgumentParser(description="Debug input data for fitting")
-    parser.add_argument("input_file", help="Path to input data file")
-    parser.add_argument("--output-dir", "-o", help="Directory to save diagnostic plots")
+    parser.add_argument("inputFile", help="Path to input data file")
     parser.add_argument(
-        "--verbose", "-v", action="store_true", help="Print detailed information"
+        "-v",
+        "--verbose",
+        type=int,
+        default=3,
+        choices=[0, 1, 2, 3, 4],
+        help="Set verbosity level with logging, the larger the more verbose",
     )
-
+    parser.add_argument(
+        "--noColorLogger", action="store_true", help="Do not use logging with colors"
+    )
     args = parser.parse_args()
 
-    success = debug_input_data(args.input_file, args.output_dir, args.verbose)
-    sys.exit(0 if success else 1)
+    global logger
+    logger = logging.setup_logger(__file__, args.verbose, args.noColorLogger)
+
+    debug_input_data(args.inputFile, args.verbose)
 
 
 if __name__ == "__main__":

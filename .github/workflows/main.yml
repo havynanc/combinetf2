@@ -136,6 +136,9 @@ jobs:
         run: >-
           python tests/make_tensor.py -o $COMBINETF2_OUTDIR/ --sparse --postfix sparse
 
+      - name: debug input
+        run: debug_inutdata.py $COMBINETF2_OUTDIR//test_tensor.hdf5
+
       - name: plot input
         run: >-
           combinetf2_plot_inputdata.py $COMBINETF2_OUTDIR/test_tensor.hdf5 -o $WEB_DIR/$PLOT_DIR 
