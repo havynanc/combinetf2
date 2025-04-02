@@ -114,7 +114,7 @@ class FitDebugData:
         nonzero_systs = []
         for isyst, syst in enumerate(self.indata.systs):
             if isyst in nonzero_syst_idxs:
-                nonzero_systs.append(syst)
+                nonzero_systs.append(syst.decode("utf-8"))
 
         return nonzero_systs
 
