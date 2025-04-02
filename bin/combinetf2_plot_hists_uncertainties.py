@@ -166,11 +166,16 @@ def parseArgs():
         help="Give the uncertainties in absolute numbers (relative by default)",
     )
     parser.add_argument(
-        "--project",
+        "-m",
+        "--physicsModel",
         nargs="+",
         action="append",
         default=[],
-        help='add projection for the prefit and postfit histograms, specifying the channel name followed by the axis names, e.g. "--project ch0 eta pt".  This argument can be called multiple times',
+        help="""
+        Make plot of physics model prefit and postfit histograms. Loop over all by deault. 
+        Can also specify the model name, followed by the arguments, e.g. "-m Project ch0 eta pt". 
+        This argument can be called multiple times.
+        """,
     )
     parser.add_argument(
         "--flterUncertainties",
@@ -414,7 +419,6 @@ def make_plot(
 def make_plots(
     outdir,
     result,
-    axes,
     args=None,
     channel="",
     lumi=1,
@@ -427,6 +431,7 @@ def make_plots(
         hist_impacts = None
 
     hist_total = result["hist_postfit_inclusive"].get()
+    axes = [a for a in hist_total.axes]
 
     if hist_impacts is not None:
         uncertainties = np.array(hist_impacts.axes["impacts"], dtype=str)
@@ -576,34 +581,31 @@ def main():
         config=config,
     )
 
-    for projection in args.project:
-        channel = projection[0]
-        axes = projection[1:]
-        info = channel_info[channel]
-        if len(axes) == 0:
-            axes = ["yield"]
-        result = fitresult["channels"][channel]["projections"]["_".join(axes)]
+    results = fitresult["physics_models"]
+    for margs in args.physicsModel:
+        if margs == []:
+            instance_keys = results.keys()
+        else:
+            model_key = " ".join(margs)
+            instance_keys = [k for k in results.keys() if k.startswith(model_key)]
+            if len(instance_keys) == 0:
+                raise ValueError(f"No model found under {model_key}")
 
-        make_plots(
-            outdir,
-            result,
-            axes=[a for a in info["axes"] if a.name in axes],
-            channel=channel,
-            lumi=info.get("lumi", None),
-            **opts,
-        )
+        for instance_key in instance_keys:
+            instance = results[instance_key]
 
-    for channel, info in channel_info.items():
-        result = fitresult[f"channels"][channel]
+            for channel, result in instance["channels"].items():
+                logger.info(f"Make plot for {instance_key} in channel {channel}")
 
-        make_plots(
-            outdir,
-            result,
-            axes=info["axes"],
-            channel=channel,
-            lumi=info.get("lumi", None),
-            **opts,
-        )
+                info = channel_info.get(channel, {})
+
+                make_plots(
+                    outdir,
+                    result,
+                    channel=channel,
+                    lumi=info.get("lumi", None),
+                    **opts,
+                )
 
     if output_tools.is_eosuser_path(args.outpath) and args.eoscp:
         output_tools.copy_to_eos(outdir, args.outpath, args.outfolder)

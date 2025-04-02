@@ -39,11 +39,12 @@ def parseArgs():
         help="fitresults key in file (e.g. 'asimov'). Leave empty for data fit result.",
     )
     parser.add_argument(
-        "--hist",
+        "-m",
+        "--physicsModel",
         default=None,
         type=str,
         nargs="+",
-        help="Print impacts on observables use '--hist channel' or for projections '--hist channel ax0 ax1'.",
+        help="Print impacts on observables use '-m <model> channel axes' for physics model results.",
     )
     parser.add_argument(
         "--relative",
@@ -123,7 +124,7 @@ def main():
     args = parseArgs()
     fitresult, meta = io_tools.get_fitresult(args.inputFile, args.result, meta=True)
 
-    if args.hist is not None:
+    if args.physicsModel is not None:
         if args.asymImpacts:
             raise NotImplementedError(
                 "Asymetric impacts on observables is not yet implemented"
@@ -133,37 +134,29 @@ def main():
                 "Only global impacts on observables is implemented (use --globalImpacts)"
             )
 
-        channel = args.hist[0]
-        projection_axes = args.hist[1:]
-        channel_hists = fitresult["channels"][channel]
+        model_key = " ".join(args.physicsModel)
+        channels = fitresult["physics_models"][model_key]["channels"]
 
-        if len(projection_axes) > 0:
-            projection_hists = channel_hists["projections"]
-            key = "_".join(projection_axes)
-            if key not in projection_hists.keys():
-                available = [k.split("_") for k in projection_hists.keys()]
-                raise ValueError(
-                    f"Histogram projection with axes {projection_axes} not found! Available histograms: {available}"
-                )
-            hists = projection_hists[key]
-        else:
-            hists = channel_hists
+        for hists in channels.values():
+            key = "hist_postfit_inclusive_global_impacts"
+            if not args.ungroup:
+                key += "_grouped"
 
-        key = "hist_postfit_inclusive_global_impacts"
-        if not args.ungroup:
-            key += "_grouped"
+            hist_total = hists["hist_postfit_inclusive"].get()
 
-        hist_total = hists["hist_postfit_inclusive"].get()
+            hist = hists[key].get()
 
-        hist = hists[key].get()
+            # lumi in pb-1
+            lumi = (
+                meta["meta_info_input"]["channel_info"]["ch0"].get("lumi", 0.001) * 1000
+            )
 
-        # lumi in pb-1
-        lumi = meta["meta_info_input"]["channel_info"]["ch0"].get("lumi", 0.001) * 1000
-
-        for idxs in itertools.product(*[np.arange(a.size) for a in hist_total.axes]):
-            ibin = {a: i for a, i in zip(hist_total.axes.name, idxs)}
-            print(f"Now at {ibin}")
-            printImpactsHist(args, hist[ibin], hist_total[ibin], ibin, lumi)
+            for idxs in itertools.product(
+                *[np.arange(a.size) for a in hist_total.axes]
+            ):
+                ibin = {a: i for a, i in zip(hist_total.axes.name, idxs)}
+                print(f"Now at {ibin}")
+                printImpactsHist(args, hist[ibin], hist_total[ibin], ibin, lumi)
     else:
         for poi in io_tools.get_poi_names(meta):
             print(f"Now at {poi}")
