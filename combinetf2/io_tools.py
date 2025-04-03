@@ -104,15 +104,46 @@ def get_pulls_and_constraints(fitresult, prefit=False, asym=False):
     return labels, pulls, constraints
 
 
-def get_fitresult_data(fitresult):
-    print(
-        f"Prepare theory fit: load measured differential cross secction distribution and covariance matrix"
-    )
+def get_postfit_hist_cov(fitresult, channels=None):
+    """
+    Return postfit histogram and covariance matrix from selected channels (all if channel is None)
+    """
+    print(f"Load postfit histogram and covariance matrix")
 
-    h_data = {
-        c: fitresult["channels"][c]["hist_postfit_inclusive"]
-        for c in fitresult["channels"]
-    }
-    h_cov = fitresult["hist_postfit_inclusive_cov"]
+    result = fitresult["physics_models"]["Basemodel"]
 
-    return h_data, h_cov
+    cov = result["hist_postfit_inclusive_cov"].get().values()
+    if channels is not None:
+        found_channels = [c for c in result["channels"].keys() if c in channels]
+        if list(channels) != list(found_channels):
+            raise RuntimeError(
+                f"Not all channels found in fitresult or the order is wrong, requested: {channels} and found {found_channels}"
+            )
+        h_data = [
+            result["channels"][c]["hist_postfit_inclusive"].get() for c in channels
+        ]
+
+        # select submatric that corresponds to selected channels
+        channel_idxs = [
+            i for i, c in enumerate(result["channels"].keys()) if c in channels
+        ]
+
+        stops = np.cumsum(
+            [
+                len(c["hist_postfit_inclusive"].get().values().flatten())
+                for c in result["channels"].values()
+            ]
+        )
+        starts = np.array([0, *stops[:-1]])
+        starts = starts[channel_idxs]
+        stops = stops[channel_idxs]
+
+        idxs = np.concat([np.arange(s, e) for s, e in zip(starts, stops)])
+
+        cov = cov[np.ix_(idxs, idxs)]
+    else:
+        h_data = [
+            c["hist_postfit_inclusive"].get() for k, c in result["channels"].items()
+        ]
+
+    return h_data, cov

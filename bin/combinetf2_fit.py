@@ -195,16 +195,16 @@ def make_parser():
         help="Do not compute chi2 on prefit/postfit histograms",
     )
     parser.add_argument(
-        "--binByBinStat",
+        "--noBinByBinStat",
         default=False,
         action="store_true",
-        help="add bin-by-bin statistical uncertainties on templates (adding sumW2 on variance)",
+        help="Don't add bin-by-bin statistical uncertainties on templates (by default adding sumW2 on variance)",
     )
     parser.add_argument(
         "--binByBinStatType",
-        default="gamma",
-        choices=["gamma", "normal"],
-        help="probability density for bin-by-bin statistical uncertainties",
+        default="automatic",
+        choices=["automatic", "gamma", "normal"],
+        help="probability density for bin-by-bin statistical uncertainties, ('automatic' is 'gamma' except for data covariance where it is 'normal')",
     )
     parser.add_argument(
         "--externalPostfit",
