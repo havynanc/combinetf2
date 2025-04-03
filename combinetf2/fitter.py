@@ -23,12 +23,16 @@ class FitterCallback:
 class Fitter:
     def __init__(self, indata, options):
         self.indata = indata
-        self.binByBinStat = options.binByBinStat
-        self.binByBinStatType = options.binByBinStatType
+        self.binByBinStat = not options.noBinByBinStat
         self.systgroupsfull = self.indata.systgroups.tolist()
         self.systgroupsfull.append("stat")
         if self.binByBinStat:
             self.systgroupsfull.append("binByBinStat")
+
+        if options.binByBinStatType == "automatic":
+            self.binByBinStatType = "normal" if options.externalCovariance else "gamma"
+        else:
+            self.binByBinStatType = options.binByBinStatType
 
         if options.externalCovariance and not options.chisqFit:
             raise Exception(
@@ -36,8 +40,8 @@ class Fitter:
             )
         if (
             options.externalCovariance
-            and options.binByBinStat
-            and options.binByBinStatType != "normal"
+            and self.binByBinStat
+            and self.binByBinStatType != "normal"
         ):
             raise Exception(
                 'option "--binByBinStat" only for options "--externalCovariance" with "--binByBinStatType normal"'
@@ -139,7 +143,7 @@ class Fitter:
                 # precompute decomposition of composite matrix to speed up
                 # calculation of profiled beta values
                 self.betaauxlu = tf.linalg.lu(
-                    self.data_cov_inv + tf.diag(tf.reciprocal(self.varbeta))
+                    self.data_cov_inv + tf.linalg.diag(tf.math.reciprocal(self.varbeta))
                 )
 
         self.nexpnom = tf.Variable(
@@ -864,7 +868,7 @@ class Fitter:
                     elif self.binByBinStatType == "normal":
                         if self.externalCovariance:
                             beta = tf.linalg.lu_solve(
-                                self.betaauxlu,
+                                *self.betaauxlu,
                                 self.data_cov_inv
                                 @ ((self.nobs - nexp_profile)[:, None])
                                 + (beta0 / self.varbeta)[:, None],
