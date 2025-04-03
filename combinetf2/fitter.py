@@ -143,7 +143,10 @@ class Fitter:
                 # precompute decomposition of composite matrix to speed up
                 # calculation of profiled beta values
                 self.betaauxlu = tf.linalg.lu(
-                    self.data_cov_inv + tf.linalg.diag(tf.math.reciprocal(self.varbeta))
+                    self.data_cov_inv
+                    + tf.linalg.diag(
+                        tf.math.reciprocal(self.varbeta[: self.indata.nbins])
+                    )
                 )
 
         self.nexpnom = tf.Variable(
@@ -851,6 +854,7 @@ class Fitter:
                 nexp_profile = nexp[: self.indata.nbins]
                 kstat = self.indata.kstat[: self.indata.nbins]
                 beta0 = self.beta0[: self.indata.nbins]
+                varbeta = self.varbeta[: self.indata.nbins]
                 # denominator in Gaussian likelihood is treated as a constant when computing
                 # global impacts for example
                 nobs0 = tf.stop_gradient(self.nobs)
@@ -859,7 +863,7 @@ class Fitter:
                     if self.binByBinStatType == "gamma":
                         abeta = nexp_profile**2
                         bbeta = kstat * nobs0 - nexp_profile * self.nobs
-                        cbeta = -kstat * nobs0 * self.beta0
+                        cbeta = -kstat * nobs0 * beta0
                         beta = (
                             0.5
                             * (-bbeta + tf.sqrt(bbeta**2 - 4.0 * abeta * cbeta))
@@ -871,22 +875,20 @@ class Fitter:
                                 *self.betaauxlu,
                                 self.data_cov_inv
                                 @ ((self.nobs - nexp_profile)[:, None])
-                                + (beta0 / self.varbeta)[:, None],
+                                + (beta0 / varbeta)[:, None],
                             )
                             beta = tf.squeeze(beta, axis=-1)
                         else:
                             beta = (
-                                self.varbeta * (self.nobs - nexp_profile)
-                                + nobs0 * beta0
-                            ) / (nobs0 + self.varbeta)
+                                varbeta * (self.nobs - nexp_profile) + nobs0 * beta0
+                            ) / (nobs0 + varbeta)
                 else:
                     if self.binByBinStatType == "gamma":
                         beta = (self.nobs + kstat * beta0) / (nexp_profile + kstat)
                     elif self.binByBinStatType == "normal":
-                        bbeta = self.varbeta + nexp_profile - self.beta0
+                        bbeta = varbeta + nexp_profile - beta0
                         cbeta = (
-                            self.varbeta * (nexp_profile - self.nobs)
-                            - nexp_profile * self.beta0
+                            varbeta * (nexp_profile - self.nobs) - nexp_profile * beta0
                         )
                         beta = 0.5 * (-bbeta + tf.sqrt(bbeta**2 - 4.0 * cbeta))
 
@@ -1149,6 +1151,7 @@ class Fitter:
         if self.binByBinStat:
             kstat = self.indata.kstat[: self.indata.nbins]
             beta0 = self.beta0[: self.indata.nbins]
+            varbeta = self.varbeta[: self.indata.nbins]
             if self.binByBinStatType == "gamma":
                 lbetavfull = -kstat * beta0 * tf.math.log(beta) + kstat * beta
 
@@ -1157,7 +1160,7 @@ class Fitter:
                 lbetafull = tf.reduce_sum(lbetavfull)
                 lbeta = tf.reduce_sum(lbetav)
             elif self.binByBinStatType == "normal":
-                lbetavfull = 0.5 * (beta - beta0) ** 2 / self.varbeta
+                lbetavfull = 0.5 * (beta - beta0) ** 2 / varbeta
 
                 lbetafull = tf.reduce_sum(lbetavfull)
                 lbeta = lbetafull
