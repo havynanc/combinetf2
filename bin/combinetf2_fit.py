@@ -47,6 +47,13 @@ def make_parser():
         help="Postfix to append on output file name",
     )
     parser.add_argument(
+        "--minimizerMethod",
+        default="trust-krylov",
+        type=str,
+        choices=["trust-krylov", "trust-exact"],
+        help="Mnimizer method used in scipy.optimize.minimize for the nominal fit minimization",
+    )
+    parser.add_argument(
         "-t",
         "--toys",
         default=[-1],

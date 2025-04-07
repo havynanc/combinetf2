@@ -57,6 +57,8 @@ class Fitter:
                 f"Invalid systematic_type {self.indata.systematic_type}, valid choices are 'log_normal' or 'normal'"
             )
 
+        self.minimizer_method = options.minimizerMethod
+
         self.chisqFit = options.chisqFit
         self.externalCovariance = options.externalCovariance
         self.prefitUnconstrainedNuisanceUncertainty = (
@@ -622,7 +624,6 @@ class Fitter:
 
     def _chi2(self, res, rescov):
         resv = tf.reshape(res, (-1, 1))
-
         chi_square_value = tf.transpose(resv) @ tf.linalg.solve(rescov, resv)
 
         return chi_square_value[0, 0]
@@ -1263,6 +1264,7 @@ class Fitter:
             def scipy_loss(xval):
                 self.x.assign(xval)
                 val, grad = self.loss_val_grad()
+                # print(f"Gradient: {grad}")
                 return val.__array__(), grad.__array__()
 
             def scipy_hessp(xval, pval):
@@ -1271,18 +1273,36 @@ class Fitter:
                 val, grad, hessp = self.loss_val_grad_hessp(p)
                 return hessp.__array__()
 
+            def scipy_hess(xval):
+                self.x.assign(xval)
+                val, grad, hess = self.loss_val_grad_hess()
+                cond_number = np.linalg.cond(hess.__array__())
+                logger.debug(f"  - Condition number: {cond_number}")
+                return hess.__array__()
+
             xval = self.x.numpy()
             callback = FitterCallback(xval)
+
+            if self.minimizer_method in [
+                "trust-krylov",
+            ]:
+                info_minimize = dict(hessp=scipy_hessp)
+            elif self.minimizer_method in [
+                "trust-exact",
+            ]:
+                info_minimize = dict(hess=scipy_hess)
+            else:
+                info_minimize = dict()
 
             try:
                 res = scipy.optimize.minimize(
                     scipy_loss,
                     xval,
-                    method="trust-krylov",
+                    method=self.minimizer_method,
                     jac=True,
-                    hessp=scipy_hessp,
                     tol=0.0,
                     callback=callback,
+                    **info_minimize,
                 )
             except Exception as ex:
                 # minimizer could have called the loss or hessp functions with "random" values, so restore the
