@@ -12,6 +12,7 @@ import numpy as np
 
 from combinetf2 import fitter, inputdata, io_tools, workspace
 from combinetf2.physicsmodels import helpers as ph
+from combinetf2.tfhelpers import edmval_cov
 
 from wums import output_tools, logging  # isort: skip
 
@@ -411,27 +412,13 @@ def fit(args, fitter, ws, dofit=True):
 
         val, grad, hess = fitter.loss_val_grad_hess()
 
-        # use a Cholesky decomposition to easily detect the non-positive-definite case
-        chol = tf.linalg.cholesky(hess)
+        edmval, cov = edmval_cov(grad, hess)
 
-        # FIXME catch this exception to mark failed toys and continue
-        if tf.reduce_any(tf.math.is_nan(chol)).numpy():
-            raise ValueError(
-                "Cholesky decomposition failed, Hessian is not positive-definite"
-            )
-
-        gradv = grad[..., None]
-        edmval = 0.5 * tf.linalg.matmul(
-            gradv, tf.linalg.cholesky_solve(chol, gradv), transpose_a=True
-        )
-        edmval = edmval[0, 0].numpy()
         logger.info(f"edmval: {edmval}")
 
-        fitter.cov.assign(
-            tf.linalg.cholesky_solve(chol, tf.eye(chol.shape[0], dtype=chol.dtype))
-        )
+        fitter.cov.assign(cov)
 
-        del chol
+        del cov
 
         if args.doImpacts:
             ws.add_impacts_hists(*fitter.impacts_parms(hess))
