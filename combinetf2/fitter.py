@@ -167,7 +167,6 @@ class Fitter:
             self.chisqFit
             and self.indata.symmetric_tensor
             and self.indata.systematic_type == "normal"
-            and self.npoi == 0
             and ((not self.binByBinStat) or self.binByBinStatType == "normal")
         )
 
@@ -757,6 +756,7 @@ class Fitter:
             [poi, tf.ones([self.indata.nproc - poi.shape[0]], dtype=self.indata.dtype)],
             axis=0,
         )
+
         mrnorm = tf.expand_dims(rnorm, -1)
         ernorm = tf.reshape(rnorm, [1, -1])
 
@@ -786,20 +786,21 @@ class Fitter:
                     snorm * self.indata.norm.values
                 )
             elif self.indata.systematic_type == "normal":
-                snormnorm_sparse = self.indata.norm.with_values(
-                    self.indata.norm.values + logsnorm
+                snormnorm_sparse = self.indata.norm * ernorm
+                snormnorm_sparse = snormnorm_sparse.with_values(
+                    snormnorm_sparse.values + logsnorm
                 )
-
-            nexpfullcentral = tf.sparse.sparse_dense_matmul(snormnorm_sparse, mrnorm)
-            nexpfullcentral = tf.squeeze(nexpfullcentral, -1)
 
             if not full and self.indata.nbinsmasked:
                 snormnorm_sparse = simple_sparse_slice0end(
                     snormnorm_sparse, self.indata.nbins
                 )
 
-            nexpcentral = tf.sparse.sparse_dense_matmul(snormnorm_sparse, mrnorm)
-            nexpcentral = tf.squeeze(nexpcentral, -1)
+            if self.indata.systematic_type == "log_normal":
+                nexpcentral = tf.sparse.sparse_dense_matmul(snormnorm_sparse, mrnorm)
+                nexpcentral = tf.squeeze(nexpcentral, -1)
+            elif self.indata.systematic_type == "normal":
+                nexpcentral = tf.sparse.reduce_sum(snormnorm_sparse, axis=-1)
 
             if compute_norm:
                 snormnorm = tf.sparse.to_dense(snormnorm_sparse)
@@ -830,11 +831,10 @@ class Fitter:
             if self.indata.systematic_type == "log_normal":
                 snorm = tf.exp(logsnorm)
                 snormnorm = snorm * norm
+                nexpcentral = tf.matmul(snormnorm, mrnorm)
+                nexpcentral = tf.squeeze(nexpcentral, -1)
             elif self.indata.systematic_type == "normal":
-                snormnorm = norm + logsnorm
-
-            nexpcentral = tf.matmul(snormnorm, mrnorm)
-            nexpcentral = tf.squeeze(nexpcentral, -1)
+                nexpcentral = tf.reduce_sum(norm * ernorm + logsnorm, axis=-1)
 
         if compute_norm:
             normcentral = ernorm * snormnorm

@@ -130,7 +130,7 @@ jobs:
 
       - name: make symmetric tensor
         run: >-
-          python tests/make_tensor.py -o $COMBINETF2_OUTDIR/ --symmetrizeAll --postfix symmetric 
+          python tests/make_tensor.py -o $COMBINETF2_OUTDIR/ --symmetrizeAll --systematicType normal --postfix symmetric 
 
       - name: make sparse tensor
         run: >-
@@ -194,8 +194,14 @@ jobs:
       - name: chi2 fit
         run: >- 
           combinetf2_fit.py $COMBINETF2_OUTDIR/test_tensor.hdf5 -o $COMBINETF2_OUTDIR/ --postfix chi2
-          -t -0 --chisqFit --externalCovariance --doImpacts --globalImpacts 
+          -t 0 --chisqFit --externalCovariance --doImpacts --globalImpacts 
           --saveHists --saveHistsPerProcess --computeHistErrors -m Project ch1 a -m Project ch1 b 
+
+      - name: linearized solution
+        run: >- 
+          combinetf2_fit.py $COMBINETF2_OUTDIR/test_tensor_symmetric.hdf5 -o $COMBINETF2_OUTDIR/ --postfix linearized
+          -t 0 --chisqFit --externalCovariance --doImpacts --globalImpacts --binByBinStatType normal
+          --saveHists --saveHistsPerProcess --computeHistErrors --compueHistImpacts --computeHistCov -m Project ch1 a -m Project ch1 b 
 
 
   plotting:

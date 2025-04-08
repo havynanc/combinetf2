@@ -32,7 +32,12 @@ parser.add_argument(
     action="store_true",
     help="Skip adding masked channels",
 )
-
+parser.add_argument(
+    "--systematicType",
+    choices=["log_normal", "normal"],
+    default="log_normal",
+    help="probability density for systematic variations",
+)
 
 args = parser.parse_args()
 
@@ -168,6 +173,7 @@ cov += np.diag(
 # Build tensor
 writer = tensorwriter.TensorWriter(
     sparse=args.sparse,
+    systematic_type=args.systematicType,
 )
 
 writer.add_channel(h1_data.axes, "ch0")
