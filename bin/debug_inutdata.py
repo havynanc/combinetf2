@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import argparse
 
+import hist
 import numpy as np
 from wums import logging
 
@@ -9,7 +10,7 @@ from combinetf2 import debugdata, inputdata
 logger = None
 
 
-def debug_input_data(input_file, output_dir=None, verbose=False):
+def debug_input_data(input_file, output_dir=None, verbose=False, channels=None):
     """
     Debug input data file and report potential issues
     """
@@ -25,16 +26,23 @@ def debug_input_data(input_file, output_dir=None, verbose=False):
         logger.info(f"✗ Failed to create FitDebugData: {str(e)}")
         return
 
+    if channels is None:
+        channels = [k for k in debug_data.nominal_hists.keys()]
+
     # Check for issues
     issues_found = 0
 
     # 1. Check for channels with no data observations
     logger.info("\nChecking channels with data observations:")
-    channels_with_data = list(debug_data.data_obs_hists.keys())
+    channels_with_data = list(
+        [k for k in debug_data.data_obs_hists.keys() if k in channels]
+    )
     channels_without_data = [
         ch
         for ch in debug_data.indata.channel_info.keys()
-        if ch not in channels_with_data and not indata.channel_info[ch]["masked"]
+        if ch not in channels_with_data
+        and not indata.channel_info[ch]["masked"]
+        and ch in channels
     ]
 
     if channels_without_data:
@@ -47,9 +55,11 @@ def debug_input_data(input_file, output_dir=None, verbose=False):
     else:
         logger.info("✓ All channels have data observations")
 
-    # 2. Check for empty bins in data
+    # 2. Check for empty channels in data
     empty_data_channels = []
     for channel, hist_obj in debug_data.data_obs_hists.items():
+        if channel not in channels:
+            continue
         if np.sum(hist_obj.values()) == 0:
             empty_data_channels.append(channel)
 
@@ -63,9 +73,87 @@ def debug_input_data(input_file, output_dir=None, verbose=False):
     else:
         logger.info("✓ All channels have non-empty data observations")
 
+    # 2.1 Check for bins with low number of data events
+    threshold = 10
+    for channel, hist_obj in debug_data.data_obs_hists.items():
+        if channel not in channels:
+            continue
+        if np.sum(hist_obj.values() < threshold):
+            idxs = np.where(hist_obj.values() < threshold)
+            low_data_bins = idxs
+
+        if low_data_bins:
+            issues_found += 1
+            logger.info(
+                f"✗ Found {len(low_data_bins)} bins in channel {channel} with less than {threshold} data observations:"
+            )
+            for idxs in zip(*low_data_bins):
+                bins_str = ", ".join(
+                    [f"{name}: {idx}" for idx, name in zip(idxs, hist_obj.axes.name)]
+                )
+                logger.info(f"  - {hist_obj.values()[idxs]} events in bin {bins_str}")
+        else:
+            logger.info(
+                f"✓ All bins in channel {channel} have more than {threshold} data observations"
+            )
+
+    # 2.2 Check for bins with low number of prediction
+    threshold_yield = 1
+    for channel, hist_obj in debug_data.nominal_hists.items():
+        if channel not in channels:
+            continue
+        hist_proc = hist_obj[{"processes": hist.sum}]
+
+        if np.sum(hist_proc.values() < threshold_yield):
+            idxs = np.where(hist_proc.values() < threshold_yield)
+            low_yield_bins = idxs
+
+            issues_found += 1
+            logger.info(
+                f"✗ Found {len(low_yield_bins[0])} bins in channel {channel} with less than {threshold_yield} prediction:"
+            )
+            for idxs in zip(*low_yield_bins):
+                bins_str = ", ".join(
+                    [f"{name}: {idx}" for idx, name in zip(idxs, hist_proc.axes.name)]
+                )
+                logger.info(f"  - {hist_proc.values()[idxs]} events in bin {bins_str}")
+        else:
+            logger.info(
+                f"✓ All bins in channel {channel} have more than {threshold_yield} prediction"
+            )
+
+    # 2.3 Check for bins with high relative stat uncertainty in prediction
+    threshold_rel_unc = 1
+    for channel, hist_obj in debug_data.nominal_hists.items():
+        if channel not in channels:
+            continue
+        hist_proc = hist_obj[{"processes": hist.sum}]
+        values = hist_proc.variances() ** 0.5 / hist_proc.values()
+        if np.sum(values > threshold_rel_unc):
+            idxs = np.where(values > threshold_rel_unc)
+            high_unc_bins = idxs
+
+            issues_found += 1
+            logger.info(
+                f"✗ Found {len(high_unc_bins[0])} bins in channel {channel} with relative uncertainty larger than {threshold_rel_unc*100}% in prediction"
+            )
+            for idxs in zip(*high_unc_bins):
+                bins_str = ", ".join(
+                    [f"{name}: {idx}" for idx, name in zip(idxs, hist_proc.axes.name)]
+                )
+                logger.info(
+                    f"  - {values[idxs]} relative uncertainty in bin {bins_str}"
+                )
+        else:
+            logger.info(
+                f"✓ All bins in channel {channel} have less than {threshold_rel_unc*100}% relative uncertainty in prediction"
+            )
+
     # 3. Check for processes with zero normalization
     zero_norm_procs = {}
     for channel, hist_obj in debug_data.nominal_hists.items():
+        if channel not in channels:
+            continue
         proc_sums = np.sum(hist_obj.values(), axis=tuple(range(hist_obj.ndim - 1)))
         zero_procs = [
             debug_data.indata.procs[i] for i, val in enumerate(proc_sums) if val == 0
@@ -120,6 +208,8 @@ def debug_input_data(input_file, output_dir=None, verbose=False):
     threshold = 2.0  # Variation more than 100% up or down
 
     for channel, syst_hist in debug_data.syst_hists.items():
+        if channel not in channels:
+            continue
         nom_hist = debug_data.nominal_hists[channel]
         # Calculate ratio of systematic variation to nominal
         down_values = syst_hist[{"DownUp": "Down"}].values()
@@ -178,12 +268,19 @@ def main():
     parser.add_argument(
         "--noColorLogger", action="store_true", help="Do not use logging with colors"
     )
+    parser.add_argument(
+        "--channels",
+        type=str,
+        help="Only check specified channels",
+        default=None,
+        nargs="+",
+    )
     args = parser.parse_args()
 
     global logger
     logger = logging.setup_logger(__file__, args.verbose, args.noColorLogger)
 
-    debug_input_data(args.inputFile, args.verbose)
+    debug_input_data(args.inputFile, args.verbose, channels=args.channels)
 
 
 if __name__ == "__main__":
