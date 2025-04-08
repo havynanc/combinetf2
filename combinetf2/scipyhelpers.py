@@ -31,16 +31,14 @@ def cho_inv(chol, overwrite_a=False, check_finite=True):
 
 
 def scipy_edmval_cov(grad, hess):
-    hess = hess.__array__()
     # FIXME catch this exception to mark failed toys and continue
     try:
-        chol = cho_factor_clean(hess.__array__(), lower=False)
+        chol = cho_factor_clean(hess, lower=False)
     except scipy.linalg.LinAlgError:
         raise ValueError(
             "Cholesky decomposition failed, Hessian is not positive-definite"
         )
 
-    grad = grad.__array__()
     gradv = grad[..., None]
     edmval = 0.5 * gradv.T @ scipy.linalg.cho_solve(chol, gradv)
     edmval = edmval[0, 0]
@@ -48,3 +46,14 @@ def scipy_edmval_cov(grad, hess):
     cov = cho_inv(chol, overwrite_a=True)
 
     return edmval, cov
+
+
+def scipy_edmval(grad, hess):
+    x = np.linalg.solve(hess, grad)
+    edmval = 0.5 * np.dot(grad, x)
+
+    return edmval
+
+
+def scipy_cond_number(hess):
+    return np.linalg.cond(hess)

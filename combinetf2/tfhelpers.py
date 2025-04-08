@@ -1,6 +1,6 @@
 import tensorflow as tf
 
-from .scipyhelpers import scipy_edmval_cov
+from .scipyhelpers import scipy_cond_number, scipy_edmval, scipy_edmval_cov
 
 
 def simple_sparse_slice0end(in_sparse, end):
@@ -69,4 +69,32 @@ def edmval_cov(grad, hess):
     if is_on_gpu(hess):
         return tf_edmval_cov(grad, hess)
     else:
-        return scipy_edmval_cov(grad, hess)
+        return scipy_edmval_cov(grad.__array__(), hess.__array__())
+
+
+def tf_edmval(grad, hess):
+    # Ensure proper shapes
+    grad = tf.reshape(grad, (-1, 1))  # shape (n, 1)
+
+    # Solve H x = g for x
+    x = tf.linalg.solve(hess, grad)  # shape (n, 1)
+
+    # Compute EDM = 0.5 * g^T x
+    edm = 0.5 * tf.squeeze(tf.matmul(tf.transpose(grad), x))
+
+    return edmval
+
+
+def edmval(grad, hess):
+    # scipy is faster than tensorflow on CPU so use it as appropriate
+    if is_on_gpu(hess):
+        return tf_edmval(grad, hess)
+    else:
+        return scipy_edmval(grad.__array__(), hess.__array__())
+
+
+def cond_number(hess):
+    if is_on_gpu(hess):
+        tf.linalg.cond(hess)
+    else:
+        scipy_cond_number(hess.__array__())

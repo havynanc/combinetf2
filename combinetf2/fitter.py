@@ -4,7 +4,7 @@ import tensorflow as tf
 import tensorflow_probability as tfp
 from wums import logging
 
-from combinetf2.tfhelpers import is_diag, simple_sparse_slice0end
+from combinetf2 import tfhelpers as tfh
 
 logger = logging.child_logger(__name__)
 
@@ -355,7 +355,7 @@ class Fitter:
             # in case the prefit covariance has zero for some uncertainties (which is the default
             # for unconstrained nuisances for example) since the multivariate normal distribution
             # requires a positive-definite covariance matrix
-            if is_diag(self.cov):
+            if tfh.is_diag(self.cov):
                 self.x.assign(
                     tf.random.normal(
                         shape=[],
@@ -795,7 +795,7 @@ class Fitter:
             nexpfullcentral = tf.squeeze(nexpfullcentral, -1)
 
             if not full and self.indata.nbinsmasked:
-                snormnorm_sparse = simple_sparse_slice0end(
+                snormnorm_sparse = tfh.simple_sparse_slice0end(
                     snormnorm_sparse, self.indata.nbins
                 )
 
@@ -1276,8 +1276,11 @@ class Fitter:
             def scipy_hess(xval):
                 self.x.assign(xval)
                 val, grad, hess = self.loss_val_grad_hess()
-                cond_number = np.linalg.cond(hess.__array__())
-                logger.debug(f"  - Condition number: {cond_number}")
+                if logger.isEnabledFor(logging.logging.DEBUG):
+                    cond_number = tfh.cond_number(hess)
+                    logger.debug(f"  - Condition number: {cond_number}")
+                    edmval = tfh.edmval(grad, hess)
+                    logger.debug(f"  - edmval: {edmval}")
                 return hess.__array__()
 
             xval = self.x.numpy()
