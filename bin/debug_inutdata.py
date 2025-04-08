@@ -82,7 +82,6 @@ def debug_input_data(input_file, output_dir=None, verbose=False, channels=None):
             idxs = np.where(hist_obj.values() < threshold)
             low_data_bins = idxs
 
-        if low_data_bins:
             issues_found += 1
             logger.info(
                 f"✗ Found {len(low_data_bins)} bins in channel {channel} with less than {threshold} data observations:"
