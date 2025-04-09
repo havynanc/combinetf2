@@ -760,6 +760,7 @@ class Fitter:
         mrnorm = tf.expand_dims(rnorm, -1)
         ernorm = tf.reshape(rnorm, [1, -1])
 
+        normcentral = None
         if self.indata.symmetric_tensor:
             mthetaalpha = tf.reshape(theta, [self.indata.nsyst, 1])
         else:
@@ -799,11 +800,13 @@ class Fitter:
             if self.indata.systematic_type == "log_normal":
                 nexpcentral = tf.sparse.sparse_dense_matmul(snormnorm_sparse, mrnorm)
                 nexpcentral = tf.squeeze(nexpcentral, -1)
+                if compute_norm:
+                    snormnorm = tf.sparse.to_dense(snormnorm_sparse)
+                    normcentral = ernorm * snormnorm
             elif self.indata.systematic_type == "normal":
+                if compute_norm:
+                    normcentral = tf.sparse.to_dense(snormnorm_sparse)
                 nexpcentral = tf.sparse.reduce_sum(snormnorm_sparse, axis=-1)
-
-            if compute_norm:
-                snormnorm = tf.sparse.to_dense(snormnorm_sparse)
         else:
             if full or self.indata.nbinsmasked == 0:
                 nbins = self.indata.nbinsfull
@@ -833,13 +836,11 @@ class Fitter:
                 snormnorm = snorm * norm
                 nexpcentral = tf.matmul(snormnorm, mrnorm)
                 nexpcentral = tf.squeeze(nexpcentral, -1)
+                if compute_norm:
+                    normcentral = ernorm * snormnorm
             elif self.indata.systematic_type == "normal":
-                nexpcentral = tf.reduce_sum(norm * ernorm + logsnorm, axis=-1)
-
-        if compute_norm:
-            normcentral = ernorm * snormnorm
-        else:
-            normcentral = None
+                normcentral = norm * ernorm + logsnorm
+                nexpcentral = tf.reduce_sum(normcentral, axis=-1)
 
         return nexpcentral, normcentral
 
