@@ -74,6 +74,12 @@ def parseArgs():
         "--dataName", type=str, default="Data", help="Data name for plot labeling"
     )
     parser.add_argument(
+        "--xlabel", type=str, default=None, help="x-axis label for plot labeling"
+    )
+    parser.add_argument(
+        "--ylabel", type=str, default=None, help="y-axis label for plot labeling"
+    )
+    parser.add_argument(
         "--processGrouping", type=str, default=None, help="key for grouping processes"
     )
 
@@ -290,6 +296,9 @@ def make_plot(
         binwnorm = None
         ylabel = "Events/bin"
 
+    if args.ylabel is not None:
+        ylabel = args.ylabel
+
     if len(axes_names) == 1:
         fu = lambda h: h.project(*axes_names)
     else:
@@ -301,7 +310,7 @@ def make_plot(
     if hist_data is not None:
         h_data = fu(hist_data)
 
-    xlabel = plot_tools.get_axis_label(config, axes_names, axes_names)
+    xlabel = plot_tools.get_axis_label(config, axes_names, args.xlabel)
 
     if args.splitByProcess:
         hists_pred = h_stack
@@ -465,20 +474,19 @@ def make_plot(
                 if key == "charge":
                     label = f"charge = {'-1' if hi==0 else '+1'}"
                 else:
-                    xlabel = plot_tools.get_axis_label(config, key, args.xlabel)
+                    label = plot_tools.get_axis_label(config, key, key)
                     if lo != None:
                         label = f"{lo} < {label}"
                     if hi != None:
                         label = f"{label} < {hi}"
 
-                ax1.text(
+                plot_tools.wrap_text(
+                    [label],
+                    ax1,
                     0.05,
                     0.96 - i * 0.08,
-                    label,
-                    horizontalalignment="left",
-                    verticalalignment="top",
-                    transform=ax1.transAxes,
-                    fontsize=20 * args.scaleleg * scale,
+                    ha="left",
+                    text_size="small",
                 )
 
         if not args.noRatio:
@@ -642,9 +650,8 @@ def main():
                 else:
                     h_data = None
 
-                if len(systematics):
-                    hs_syst_dn = [h[idxs] for h in hists_syst_dn]
-                    hs_syst_up = [h[idxs] for h in hists_syst_up]
+                hs_syst_dn = [h[idxs] for h in hists_syst_dn]
+                hs_syst_up = [h[idxs] for h in hists_syst_up]
 
                 make_plots(
                     args,

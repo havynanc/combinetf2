@@ -12,6 +12,7 @@ import numpy as np
 
 from combinetf2 import fitter, inputdata, io_tools, workspace
 from combinetf2.physicsmodels import helpers as ph
+from combinetf2.tfhelpers import edmval_cov
 
 from wums import output_tools, logging  # isort: skip
 
@@ -37,6 +38,11 @@ def make_parser():
         default=False,
         help="Run tensorflow in eager mode (for debugging)",
     )
+    parser.add_argument(
+        "--diagnostics",
+        action="store_true",
+        help="Calculate and print additional info for diagnostics (condition number, edm value)",
+    )
     parser.add_argument("filename", help="filename of the main hdf5 input")
     parser.add_argument("-o", "--output", default="./", help="output directory")
     parser.add_argument("--outname", default="fitresults.hdf5", help="output file name")
@@ -45,6 +51,13 @@ def make_parser():
         default=None,
         type=str,
         help="Postfix to append on output file name",
+    )
+    parser.add_argument(
+        "--minimizerMethod",
+        default="trust-krylov",
+        type=str,
+        choices=["trust-krylov", "trust-exact"],
+        help="Mnimizer method used in scipy.optimize.minimize for the nominal fit minimization",
     )
     parser.add_argument(
         "-t",
@@ -404,27 +417,13 @@ def fit(args, fitter, ws, dofit=True):
 
         val, grad, hess = fitter.loss_val_grad_hess()
 
-        # use a Cholesky decomposition to easily detect the non-positive-definite case
-        chol = tf.linalg.cholesky(hess)
+        edmval, cov = edmval_cov(grad, hess)
 
-        # FIXME catch this exception to mark failed toys and continue
-        if tf.reduce_any(tf.math.is_nan(chol)).numpy():
-            raise ValueError(
-                "Cholesky decomposition failed, Hessian is not positive-definite"
-            )
-
-        gradv = grad[..., None]
-        edmval = 0.5 * tf.linalg.matmul(
-            gradv, tf.linalg.cholesky_solve(chol, gradv), transpose_a=True
-        )
-        edmval = edmval[0, 0].numpy()
         logger.info(f"edmval: {edmval}")
 
-        fitter.cov.assign(
-            tf.linalg.cholesky_solve(chol, tf.eye(chol.shape[0], dtype=chol.dtype))
-        )
+        fitter.cov.assign(cov)
 
-        del chol
+        del cov
 
         if args.doImpacts:
             ws.add_impacts_hists(*fitter.impacts_parms(hess))

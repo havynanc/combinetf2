@@ -1,5 +1,7 @@
 import tensorflow as tf
 
+from .scipyhelpers import scipy_cond_number, scipy_edmval, scipy_edmval_cov
+
 
 def simple_sparse_slice0end(in_sparse, end):
     """
@@ -29,3 +31,70 @@ def is_diag(x):
     return tf.math.equal(
         tf.math.count_nonzero(x), tf.math.count_nonzero(tf.linalg.diag_part(x))
     )
+
+
+def is_on_gpu(tensor):
+    """
+    Check if tensor is on a GPU device
+    """
+
+    device = tensor.device
+    device_type = device.split(":")[-2]
+    return device_type == "GPU"
+
+
+def tf_edmval_cov(grad, hess):
+    # use a Cholesky decomposition to easily detect the non-positive-definite case
+    chol = tf.linalg.cholesky(hess)
+
+    # FIXME catch this exception to mark failed toys and continue
+    if tf.reduce_any(tf.math.is_nan(chol)).numpy():
+        raise ValueError(
+            "Cholesky decomposition failed, Hessian is not positive-definite"
+        )
+
+    gradv = grad[..., None]
+    edmval = 0.5 * tf.linalg.matmul(
+        gradv, tf.linalg.cholesky_solve(chol, gradv), transpose_a=True
+    )
+    edmval = edmval[0, 0].numpy()
+
+    cov = tf.linalg.cholesky_solve(chol, tf.eye(chol.shape[0], dtype=chol.dtype))
+
+    return edmval, cov
+
+
+def edmval_cov(grad, hess):
+    # scipy is faster than tensorflow on CPU so use it as appropriate
+    if is_on_gpu(hess):
+        return tf_edmval_cov(grad, hess)
+    else:
+        return scipy_edmval_cov(grad.__array__(), hess.__array__())
+
+
+def tf_edmval(grad, hess):
+    # Ensure proper shapes
+    grad = tf.reshape(grad, (-1, 1))  # shape (n, 1)
+
+    # Solve H x = g for x
+    x = tf.linalg.solve(hess, grad)  # shape (n, 1)
+
+    # Compute EDM = 0.5 * g^T x
+    edm = 0.5 * tf.squeeze(tf.matmul(tf.transpose(grad), x))
+
+    return edmval
+
+
+def edmval(grad, hess):
+    # scipy is faster than tensorflow on CPU so use it as appropriate
+    if is_on_gpu(hess):
+        return tf_edmval(grad, hess)
+    else:
+        return scipy_edmval(grad.__array__(), hess.__array__())
+
+
+def cond_number(hess):
+    if is_on_gpu(hess):
+        tf.linalg.cond(hess)
+    else:
+        scipy_cond_number(hess.__array__())
