@@ -57,6 +57,7 @@ class Fitter:
                 f"Invalid systematic_type {self.indata.systematic_type}, valid choices are 'log_normal' or 'normal'"
             )
 
+        self.diagnostics = options.diagnostics
         self.minimizer_method = options.minimizerMethod
 
         self.chisqFit = options.chisqFit
@@ -1278,11 +1279,11 @@ class Fitter:
             def scipy_hess(xval):
                 self.x.assign(xval)
                 val, grad, hess = self.loss_val_grad_hess()
-                if logger.isEnabledFor(logging.logging.DEBUG):
+                if self.diagnostics:
                     cond_number = tfh.cond_number(hess)
-                    logger.debug(f"  - Condition number: {cond_number}")
+                    logger.info(f"  - Condition number: {cond_number}")
                     edmval = tfh.edmval(grad, hess)
-                    logger.debug(f"  - edmval: {edmval}")
+                    logger.info(f"  - edmval: {edmval}")
                 return hess.__array__()
 
             xval = self.x.numpy()

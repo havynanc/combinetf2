@@ -38,6 +38,11 @@ def make_parser():
         default=False,
         help="Run tensorflow in eager mode (for debugging)",
     )
+    parser.add_argument(
+        "--diagnostics",
+        action="store_true",
+        help="Calculate and print additional info for diagnostics (condition number, edm value)",
+    )
     parser.add_argument("filename", help="filename of the main hdf5 input")
     parser.add_argument("-o", "--output", default="./", help="output directory")
     parser.add_argument("--outname", default="fitresults.hdf5", help="output file name")
