@@ -48,20 +48,31 @@ class FitDebugData:
             logk_array = np.asarray(
                 memoryview(tf.reshape(self.indata.logk[ibin:stop, :], shape_logk))
             )
+
+            if self.indata.systematic_type == "log_normal":
+
+                def get_syst(logk, nominal):
+                    return np.exp(logk) * nominal
+
+            elif self.indata.systematic_type == "normal":
+
+                def get_syst(logk, nominal):
+                    return logk + nominal
+
+            norm = nominal_hist.values()[..., None]
             if self.indata.symmetric_tensor:
                 logkavg = logk_array[..., :]
-                syst_down = np.exp(-logkavg) * nominal_hist.values()[..., None]
-                syst_up = np.exp(logkavg) * nominal_hist.values()[..., None]
+                syst_down = get_syst(-logkavg, norm)
+                syst_up = get_syst(logkavg, norm)
+
                 nonzero = np.abs(logkavg) > 0.0
             else:
                 logkavg = logk_array[..., 0, :]
                 logkhalfdiff = logk_array[..., 1, :]
-                syst_down = (
-                    np.exp(-logkavg + logkhalfdiff) * nominal_hist.values()[..., None]
-                )
-                syst_up = (
-                    np.exp(logkavg + logkhalfdiff) * nominal_hist.values()[..., None]
-                )
+
+                syst_down = get_syst(-logkavg + logkhalfdiff, norm)
+                syst_up = get_syst(logkavg + logkhalfdiff, norm)
+
                 nonzero = np.logical_or(
                     np.abs(logkavg) > 0.0, np.abs(logkhalfdiff) > 0.0
                 )
