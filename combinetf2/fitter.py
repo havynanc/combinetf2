@@ -165,6 +165,7 @@ class Fitter:
         # determine if problem is linear (ie likelihood is purely quadratic)
         self.is_linear = (
             self.chisqFit
+            and (self.npoi == 0 or self.allowNegativePOI)
             and self.indata.symmetric_tensor
             and self.indata.systematic_type == "normal"
             and ((not self.binByBinStat) or self.binByBinStatType == "normal")

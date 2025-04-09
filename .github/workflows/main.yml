@@ -200,7 +200,7 @@ jobs:
       - name: linearized solution
         run: >- 
           combinetf2_fit.py $COMBINETF2_OUTDIR/test_tensor_symmetric.hdf5 -o $COMBINETF2_OUTDIR/ --postfix linearized
-          -t 0 --chisqFit --doImpacts --globalImpacts --binByBinStatType normal
+          -t 0 --chisqFit --doImpacts --globalImpacts --binByBinStatType normal --allowNegativePOI
           --saveHists --saveHistsPerProcess --computeHistErrors --computeHistImpacts --computeHistCov -m Project ch1 a -m Project ch1 b 
 
 
