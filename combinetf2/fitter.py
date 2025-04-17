@@ -655,6 +655,20 @@ class Fitter:
         expvar = tf.reshape(expvar, tf.shape(expected))
 
         if compute_global_impacts:
+            # the fully general contribution to the covariance matrix
+            # for a factorized likelihood L = sum_i L_i can be written as
+            # cov_i = dexpdx @ cov_x @ d2L_i/dx2 @ cov_x @ dexpdx.T
+            # This is totally general and always adds up to the total covariance matrix
+
+            # This can be factorized into impacts only if the individual contributions
+            # are rank 1.  This is not the case in general for the data stat uncertainties,
+            # in particular where postfit nexpected != nobserved and nexpected is not a linear
+            # function of the poi's and nuisance parameters x
+
+            # For the systematic and MC stat uncertainties this is equivalent to the
+            # more conventional global impact calculation (and without needing to insert the uncertainty on
+            # the global observables "by hand", which can be non-trivial beyond the Gaussian case)
+
             if self.binByBinStat:
                 with tf.GradientTape(persistent=True) as t2:
                     t2.watch([self.x, self.ubeta])
