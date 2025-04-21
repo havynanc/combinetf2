@@ -516,7 +516,7 @@ class Fitter:
         if self.binByBinStat:
             impacts_grouped = tf.stack([impacts_nobs, impacts_beta0], axis=-1)
         else:
-            impacts_grouped = impacts_nobs
+            impacts_grouped = impacts_nobs[..., None]
 
         if len(self.indata.systgroupidxs):
             impacts_grouped_syst = tf.map_fn(
@@ -690,7 +690,7 @@ class Fitter:
             else:
                 with tf.GradientTape() as t2:
                     with tf.GradientTape() as t1:
-                        ln, lc, lbeta, lnfull, lcfull, lbetafull = (
+                        ln, lc, lbeta, lnfull, lcfull, lbetafull, beta = (
                             self._compute_nll_components(profile=profile)
                         )
                     dlcdx = t1.gradient(lc, self.x)
@@ -739,7 +739,7 @@ class Fitter:
             if self.binByBinStat:
                 impacts_grouped = tf.stack([impacts_nobs, impacts_beta0], axis=-1)
             else:
-                impacts_grouped = impacts_nobs
+                impacts_grouped = impacts_nobs[..., None]
 
             if len(self.indata.systgroupidxs):
                 impacts_grouped_syst = tf.map_fn(
