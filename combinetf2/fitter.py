@@ -139,20 +139,25 @@ class Fitter:
 
         # cache the constraint variance since it's used in several places
         # this is treated as a constant
+        # FIXME the case where the expected yield is zero is not consistently handled currently
         if self.binByBinStatType == "gamma":
             self.varbeta = tf.stop_gradient(tf.math.reciprocal(self.indata.kstat))
         elif self.binByBinStatType == "normal":
             n0 = self.expected_events_nominal()
-            self.varbeta = tf.stop_gradient(n0**2 / self.indata.kstat)
+            varbeta = n0**2 / self.indata.kstat
+            varbeta = tf.where(varbeta == 0.0, 1.0, varbeta)
+            varbeta = tf.stop_gradient(varbeta)
+            self.varbeta = varbeta
 
             if self.binByBinStat and self.externalCovariance:
                 # precompute decomposition of composite matrix to speed up
                 # calculation of profiled beta values
+                varbeta_m = tf.linalg.LinearOperatorDiag(
+                    self.varbeta[: self.indata.nbins]
+                )
                 self.betaauxlu = tf.linalg.lu(
-                    self.data_cov_inv
-                    + tf.linalg.diag(
-                        tf.math.reciprocal(self.varbeta[: self.indata.nbins])
-                    )
+                    varbeta_m @ self.data_cov_inv
+                    + tf.eye(self.data_cov_inv.shape[0], dtype=self.data_cov_inv.dtype)
                 )
 
         self.nexpnom = tf.Variable(
@@ -939,11 +944,15 @@ class Fitter:
                         )
                     elif self.binByBinStatType == "normal":
                         if self.externalCovariance:
+                            varbeta_m = tf.linalg.LinearOperatorDiag(
+                                self.varbeta[: self.indata.nbins]
+                            )
                             beta = tf.linalg.lu_solve(
                                 *self.betaauxlu,
-                                self.data_cov_inv
+                                varbeta_m
+                                @ self.data_cov_inv
                                 @ ((self.nobs - nexp_profile)[:, None])
-                                + (beta0 / varbeta)[:, None],
+                                + beta0[:, None],
                             )
                             beta = tf.squeeze(beta, axis=-1)
                         else:
