@@ -477,7 +477,7 @@ class Fitter:
         else:
             with tf.GradientTape() as t2:
                 with tf.GradientTape() as t1:
-                    ln, lc, lbeta, lnfull, lcfull, lbetafull = (
+                    ln, lc, lbeta, lnfull, lcfull, lbetafull, beta = (
                         self._compute_nll_components(profile=True)
                     )
                 pdlcdx = t1.gradient(lc, self.x)
