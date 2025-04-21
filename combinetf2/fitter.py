@@ -256,6 +256,7 @@ class Fitter:
 
         if self.binByBinStat:
             if self.binByBinStatType == "gamma":
+                # FIXME this is only valid for beta0=1 (but this should always be the case when throwing toys)
                 self.beta.assign(
                     tf.random.gamma(
                         shape=[],
@@ -282,6 +283,7 @@ class Fitter:
         )
         if self.binByBinStat:
             if self.binByBinStatType == "gamma":
+                # FIXME this is only valid for beta0=1 (but this should always be the case when throwing toys)
                 self.beta0.assign(
                     tf.random.poisson(
                         shape=[],
@@ -573,11 +575,11 @@ class Fitter:
             observables = self._compute_yields(
                 inclusive=inclusive, profile=profile, full=full
             )
+            expected = fun_exp(self.x, observables)
         else:
-            observables = None
-        expected = fun_exp(self.x, observables)
-        expected_flat = tf.reshape(expected, (-1,))
-        return expected_flat
+            expected = fun_exp(self.x)
+
+        return expected
 
     def _expvar(
         self,
@@ -595,18 +597,19 @@ class Fitter:
         def compute_derivatives(dvars):
             with tf.GradientTape(watch_accessed_variables=False) as t:
                 t.watch(dvars)
-                expected_flat = self._compute_expected(
+                expected = self._compute_expected(
                     fun_exp,
                     inclusive=inclusive,
                     profile=profile,
                     full=full,
                     need_observables=need_observables,
                 )
+                expected_flat = tf.reshape(expected, (-1,))
             jacs = t.jacobian(
                 expected_flat,
                 dvars,
             )
-            return expected_flat, *jacs
+            return expected, *jacs
 
         if self.binByBinStat:
             dvars = [self.x, self.ubeta]
@@ -651,8 +654,8 @@ class Fitter:
             pd2ldbeta2_pdexpdbeta = pd2ldbeta2.solve(pdexpdbeta, adjoint_arg=True)
             expcov += pdexpdbeta @ pd2ldbeta2_pdexpdbeta
 
-        expvar = tf.linalg.diag_part(expcov)
-        expvar = tf.reshape(expvar, tf.shape(expected))
+        expvar_flat = tf.linalg.diag_part(expcov)
+        expvar = tf.reshape(expvar_flat, tf.shape(expected))
 
         if compute_global_impacts:
             # the fully general contribution to the covariance matrix
@@ -690,7 +693,7 @@ class Fitter:
                         ln, lc, lbeta, lnfull, lcfull, lbetafull = (
                             self._compute_nll_components(profile=profile)
                         )
-                    pdlcdx = t1.gradient(lc, self.x)
+                    dlcdx = t1.gradient(lc, self.x)
                 # d2lcdx2 is diagonal so we can use gradient instead of jacobian
                 d2lcdx2_diag = t2.gradient(dlcdx, self.x)
 
@@ -708,7 +711,7 @@ class Fitter:
             impacts_theta0_sq = tf.square(impacts_theta0)
             var_theta0 = tf.reduce_sum(impacts_theta0_sq, axis=-1)
 
-            var_nobs = expvar - var_theta0
+            var_nobs = expvar_flat - var_theta0
 
             if self.binByBinStat:
                 # this the cholesky decomposition of pd2lbetadbeta2
@@ -717,7 +720,7 @@ class Fitter:
                 )
 
                 impacts_beta0 = tf.zeros(
-                    shape=(*self.beta.shape, *expvar.shape), dtype=expvar.dtype
+                    shape=(*self.beta.shape, *expvar_flat.shape), dtype=expvar.dtype
                 )
 
                 if pdexpdbeta is not None:
@@ -750,18 +753,38 @@ class Fitter:
                     ),
                 )
                 impacts_grouped_syst = tf.transpose(impacts_grouped_syst)
+
                 impacts_grouped = tf.concat(
-                    [impacts_grouped_syst, impacts_grouped], axis=1
+                    [impacts_grouped_syst, impacts_grouped], axis=-1
                 )
+
+            impacts = tf.reshape(impacts, [*expvar.shape, impacts.shape[-1]])
+            impacts_grouped_syst = tf.reshape(
+                impacts_grouped_syst, [*expvar.shape, impacts_grouped_syst.shape[-1]]
+            )
         else:
             impacts = None
             impacts_grouped = None
 
         return expected, expvar, expcov, impacts, impacts_grouped
 
-    def _expvariations(self, fun_exp, correlations):
+    def _expvariations(
+        self,
+        fun_exp,
+        correlations,
+        profile=False,
+        inclusive=True,
+        full=True,
+        need_observables=True,
+    ):
         with tf.GradientTape() as t:
-            expected = fun_exp()
+            expected = self._compute_expected(
+                fun_exp,
+                inclusive=inclusive,
+                profile=profile,
+                full=full,
+                need_observables=need_observables,
+            )
             expected_flat = tf.reshape(expected, (-1,))
         dexpdx = t.jacobian(expected_flat, self.x)
 
@@ -937,20 +960,18 @@ class Fitter:
                         )
                         beta = 0.5 * (-bbeta + tf.sqrt(bbeta**2 - 4.0 * cbeta))
 
-                if full and self.indata.nbinsmasked:
-                    beta = tf.concat([beta, self.beta[self.indata.nbins :]], axis=0)
+                if self.indata.nbinsmasked:
+                    beta = tf.concat([beta, self.beta0[self.indata.nbins :]], axis=0)
             else:
                 beta = self.beta
-                if (not full) and self.indata.nbinsmasked:
-                    beta = beta[: self.indata.nbins]
 
             # multiply with dummy tensor to allow convenient differentiation by beta even when profiling
-            beta = beta + self.ubeta[: beta.shape[0]]
+            beta = beta + self.ubeta
 
             if self.binByBinStatType == "gamma":
-                nexp = nexp * beta
+                nexp = nexp * beta[: nexp.shape[0]]
             elif self.binByBinStatType == "normal":
-                nexp = nexp + beta
+                nexp = nexp + beta[: nexp.shape[0]]
 
             if compute_norm:
                 norm = beta[..., None] * norm
@@ -961,7 +982,7 @@ class Fitter:
 
     @tf.function
     def _profile_beta(self):
-        nexp, norm, beta = self._compute_yields_with_beta()
+        nexp, norm, beta = self._compute_yields_with_beta(full=False)
         self.beta.assign(beta)
 
     @tf.function
@@ -1011,8 +1032,23 @@ class Fitter:
         )
 
     @tf.function
-    def expected_variations(self, fun, correlations=False):
-        return self._expvariations(fun, correlations=correlations)
+    def expected_variations(
+        self,
+        fun,
+        correlations=False,
+        profile=False,
+        inclusive=True,
+        full=True,
+        need_observables=True,
+    ):
+        return self._expvariations(
+            fun,
+            correlations=correlations,
+            profile=profile,
+            inclusive=inclusive,
+            full=full,
+            need_observables=need_observables,
+        )
 
     def expected_events(
         self,
@@ -1048,9 +1084,20 @@ class Fitter:
             )
             aux = [exp_var, exp_cov, exp_impacts, exp_impacts_grouped]
         elif compute_variations:
-            exp = self.expected_variations(fun, correlations=correlated_variations)
+            exp = self.expected_variations(
+                fun,
+                correlations=correlated_variations,
+                inclusive=inclusive,
+                profile=profile,
+                need_observables=model.need_observables,
+            )
         else:
-            exp = self._compute_expected(fun, inclusive=inclusive, profile=profile)
+            exp = self._compute_expected(
+                fun,
+                inclusive=inclusive,
+                profile=profile,
+                need_observables=model.need_observables,
+            )
 
         if compute_chi2:
             data, data_var, data_cov = model.get_data(self.nobs, self.data_cov_inv)
@@ -1200,9 +1247,9 @@ class Fitter:
         lcfull = lc
 
         if self.binByBinStat:
-            kstat = self.indata.kstat[: self.indata.nbins]
-            beta0 = self.beta0[: self.indata.nbins]
-            varbeta = self.varbeta[: self.indata.nbins]
+            kstat = self.indata.kstat
+            beta0 = self.beta0
+            varbeta = self.varbeta
             if self.binByBinStatType == "gamma":
                 lbetavfull = -kstat * beta0 * tf.math.log(beta) + kstat * beta
 
