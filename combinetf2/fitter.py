@@ -454,7 +454,7 @@ class Fitter:
         # TODO migrate this to a physics model to avoid the below code which is largely duplicated
 
         idxs_poi = tf.range(self.npoi, dtype=tf.int64)
-        idxs_noi = tf.constant(self.indata.noigroupidxs, dtype=tf.int64)
+        idxs_noi = tf.constant(self.npoi + self.indata.noigroupidxs, dtype=tf.int64)
         idxsout = tf.concat([idxs_poi, idxs_noi], axis=0)
 
         dexpdx = tf.one_hot(idxsout, depth=self.cov.shape[0], dtype=self.cov.dtype)
