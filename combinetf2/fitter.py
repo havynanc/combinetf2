@@ -480,7 +480,7 @@ class Fitter:
                     ln, lc, lbeta, lnfull, lcfull, lbetafull, beta = (
                         self._compute_nll_components(profile=True)
                     )
-                pdlcdx = t1.gradient(lc, self.x)
+                dlcdx = t1.gradient(lc, self.x)
             # d2lcdx2 is diagonal so we can use gradient instead of jacobian
             d2lcdx2_diag = t2.gradient(dlcdx, self.x)
 
