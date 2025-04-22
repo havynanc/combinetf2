@@ -118,8 +118,8 @@ def plotImpacts(
 
     ndisplay = len(df)
     fig.update_layout(
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(100%,100%,100%,100%)",
+        plot_bgcolor="rgba(100%,100%,100%,100%)",
         xaxis_title=impact_title if impacts else "Pull",
         margin=dict(l=loffset, r=20, t=50, b=20),
         yaxis=dict(range=[-1, ndisplay]),

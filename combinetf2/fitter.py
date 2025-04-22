@@ -134,22 +134,30 @@ class Fitter:
         # nuisance parameters for mc stat uncertainty
         self.beta = tf.Variable(self.beta0, trainable=False, name="beta")
 
+        # dummy tensor to allow differentiation
+        self.ubeta = tf.zeros_like(self.beta)
+
         # cache the constraint variance since it's used in several places
         # this is treated as a constant
+        # FIXME the case where the expected yield is zero is not consistently handled currently
         if self.binByBinStatType == "gamma":
             self.varbeta = tf.stop_gradient(tf.math.reciprocal(self.indata.kstat))
         elif self.binByBinStatType == "normal":
             n0 = self.expected_events_nominal()
-            self.varbeta = tf.stop_gradient(n0**2 / self.indata.kstat)
+            varbeta = n0**2 / self.indata.kstat
+            varbeta = tf.where(varbeta == 0.0, 1.0, varbeta)
+            varbeta = tf.stop_gradient(varbeta)
+            self.varbeta = varbeta
 
             if self.binByBinStat and self.externalCovariance:
                 # precompute decomposition of composite matrix to speed up
                 # calculation of profiled beta values
+                varbeta_m = tf.linalg.LinearOperatorDiag(
+                    self.varbeta[: self.indata.nbins]
+                )
                 self.betaauxlu = tf.linalg.lu(
-                    self.data_cov_inv
-                    + tf.linalg.diag(
-                        tf.math.reciprocal(self.varbeta[: self.indata.nbins])
-                    )
+                    varbeta_m @ self.data_cov_inv
+                    + tf.eye(self.data_cov_inv.shape[0], dtype=self.data_cov_inv.dtype)
                 )
 
         self.nexpnom = tf.Variable(
@@ -253,6 +261,7 @@ class Fitter:
 
         if self.binByBinStat:
             if self.binByBinStatType == "gamma":
+                # FIXME this is only valid for beta0=1 (but this should always be the case when throwing toys)
                 self.beta.assign(
                     tf.random.gamma(
                         shape=[],
@@ -279,6 +288,7 @@ class Fitter:
         )
         if self.binByBinStat:
             if self.binByBinStatType == "gamma":
+                # FIXME this is only valid for beta0=1 (but this should always be the case when throwing toys)
                 self.beta0.assign(
                     tf.random.poisson(
                         shape=[],
@@ -441,156 +451,90 @@ class Fitter:
 
     @tf.function
     def global_impacts_parms(self):
-        # compute impacts for pois and nois
-        dxdtheta0, dxdnobs, dxdbeta0 = self._compute_derivatives_x()
+        # TODO migrate this to a physics model to avoid the below code which is largely duplicated
 
-        dxdtheta0_poi = dxdtheta0[: self.npoi]
-        dxdtheta0_noi = tf.gather(dxdtheta0[self.npoi :], self.indata.noigroupidxs)
-        dxdtheta0 = tf.concat([dxdtheta0_poi, dxdtheta0_noi], axis=0)
-        dxdtheta0_squared = tf.square(dxdtheta0)
+        idxs_poi = tf.range(self.npoi, dtype=tf.int64)
+        idxs_noi = tf.constant(self.npoi + self.indata.noigroupidxs, dtype=tf.int64)
+        idxsout = tf.concat([idxs_poi, idxs_noi], axis=0)
 
-        # global impact data stat
-        dxdnobs_poi = dxdnobs[: self.npoi]
-        dxdnobs_noi = tf.gather(dxdnobs[self.npoi :], self.indata.noigroupidxs)
-        dxdnobs = tf.concat([dxdnobs_poi, dxdnobs_noi], axis=0)
+        dexpdx = tf.one_hot(idxsout, depth=self.cov.shape[0], dtype=self.cov.dtype)
 
-        if self.externalCovariance:
-            data_cov = tf.linalg.inv(self.data_cov_inv)
-            # equivalent to tf.linalg.diag_part(dxdnobs @ data_cov @ tf.transpose(dxdnobs)) but avoiding computing full matrix
-            data_stat = tf.einsum("ij,jk,ik->i", dxdnobs, data_cov, dxdnobs)
-        else:
-            data_stat = tf.reduce_sum(tf.square(dxdnobs) * self.nobs, axis=-1)
+        cov_dexpdx = tf.matmul(self.cov, dexpdx, transpose_b=True)
 
-        data_stat = tf.sqrt(data_stat)
-        impacts_data_stat = tf.reshape(data_stat, (-1, 1))
+        var_total = tf.linalg.diag_part(self.cov)
+        var_total = tf.gather(var_total, idxsout)
 
         if self.binByBinStat:
-            # global impact bin-by-bin stat
-            dxdbeta0_poi = dxdbeta0[: self.npoi]
-            dxdbeta0_noi = tf.gather(dxdbeta0[self.npoi :], self.indata.noigroupidxs)
-            dxdbeta0 = tf.concat([dxdbeta0_poi, dxdbeta0_noi], axis=0)
-
-            # FIXME consider implications of using kstat*beta as the variance
-            impacts_bbb = tf.sqrt(
-                tf.reduce_sum(tf.square(dxdbeta0) * self.varbeta, axis=-1)
-            )
-            impacts_bbb = tf.reshape(impacts_bbb, (-1, 1))
-            impacts_grouped = tf.concat([impacts_data_stat, impacts_bbb], axis=1)
+            with tf.GradientTape(persistent=True) as t2:
+                t2.watch([self.x, self.ubeta])
+                with tf.GradientTape(persistent=True) as t1:
+                    t1.watch([self.x, self.ubeta])
+                    ln, lc, lbeta, lnfull, lcfull, lbetafull, beta = (
+                        self._compute_nll_components(profile=True)
+                    )
+                pdlbetadbeta = t1.gradient(lbeta, self.ubeta)
+                dlcdx = t1.gradient(lc, self.x)
+                dbetadx = t1.jacobian(beta, self.x)
+            # pd2lbetadbeta2 is diagonal so we can use gradient instead of jacobian
+            pd2lbetadbeta2_diag = t2.gradient(pdlbetadbeta, self.ubeta)
+            # d2lcdx2 is diagonal so we can use gradient instead of jacobian
+            d2lcdx2_diag = t2.gradient(dlcdx, self.x)
         else:
-            impacts_grouped = impacts_data_stat
+            with tf.GradientTape() as t2:
+                with tf.GradientTape() as t1:
+                    ln, lc, lbeta, lnfull, lcfull, lbetafull, beta = (
+                        self._compute_nll_components(profile=True)
+                    )
+                dlcdx = t1.gradient(lc, self.x)
+            # d2lcdx2 is diagonal so we can use gradient instead of jacobian
+            d2lcdx2_diag = t2.gradient(dlcdx, self.x)
+
+        # sc is the cholesky decomposition of d2lcdx2
+        sc = tf.linalg.LinearOperatorDiag(tf.sqrt(d2lcdx2_diag), is_self_adjoint=True)
+
+        impacts_x0 = sc @ cov_dexpdx
+        impacts_theta0 = impacts_x0[self.npoi :]
+
+        impacts_theta0 = tf.transpose(impacts_theta0)
+        impacts = impacts_theta0
+
+        impacts_theta0_sq = tf.square(impacts_theta0)
+        var_theta0 = tf.reduce_sum(impacts_theta0_sq, axis=-1)
+
+        var_nobs = var_total - var_theta0
+
+        if self.binByBinStat:
+            # this the cholesky decomposition of pd2lbetadbeta2
+            sbeta = tf.linalg.LinearOperatorDiag(
+                tf.sqrt(pd2lbetadbeta2_diag), is_self_adjoint=True
+            )
+
+            impacts_beta0 = sbeta @ dbetadx @ cov_dexpdx
+
+            var_beta0 = tf.reduce_sum(tf.square(impacts_beta0), axis=0)
+            var_nobs -= var_beta0
+
+            impacts_beta0 = tf.math.sqrt(var_beta0)
+
+        impacts_nobs = tf.math.sqrt(var_nobs)
+
+        if self.binByBinStat:
+            impacts_grouped = tf.stack([impacts_nobs, impacts_beta0], axis=-1)
+        else:
+            impacts_grouped = impacts_nobs[..., None]
 
         if len(self.indata.systgroupidxs):
             impacts_grouped_syst = tf.map_fn(
-                lambda idxs: self._compute_global_impact_group(dxdtheta0_squared, idxs),
-                tf.ragged.constant(self.indata.systgroupidxs, dtype=tf.int32),
+                lambda idxs: self._compute_global_impact_group(impacts_theta0_sq, idxs),
+                tf.ragged.constant(self.indata.systgroupidxs, dtype=tf.int64),
                 fn_output_signature=tf.TensorSpec(
-                    shape=(dxdtheta0_squared.shape[0],), dtype=tf.float64
+                    shape=(impacts_theta0_sq.shape[0],), dtype=impacts_theta0_sq.dtype
                 ),
             )
             impacts_grouped_syst = tf.transpose(impacts_grouped_syst)
             impacts_grouped = tf.concat([impacts_grouped_syst, impacts_grouped], axis=1)
 
-        # global impacts of unconstrained parameters are always 0, only store impacts of constrained ones
-        impacts = dxdtheta0[:, self.indata.nsystnoconstraint :]
-
         return impacts, impacts_grouped
-
-    def _expvar_profiled(
-        self, fun_exp, compute_cov=False, compute_global_impacts=False
-    ):
-
-        with tf.GradientTape() as t:
-            t.watch([self.theta0, self.nobs, self.beta0])
-            expected = fun_exp()
-            expected_flat = tf.reshape(expected, (-1,))
-
-        pdexpdx, pdexpdtheta0, pdexpdnobs, pdexpdbeta0 = t.jacobian(
-            expected_flat,
-            [self.x, self.theta0, self.nobs, self.beta0],
-            unconnected_gradients="zero",
-        )
-
-        dxdtheta0, dxdnobs, dxdbeta0 = self._compute_derivatives_x()
-
-        dexpdtheta0 = pdexpdtheta0 + pdexpdx @ dxdtheta0
-        dexpdnobs = pdexpdnobs + pdexpdx @ dxdnobs
-        dexpdbeta0 = pdexpdbeta0 + pdexpdx @ dxdbeta0
-
-        # FIXME factorize this part better with the global impacts calculation
-
-        var_theta0 = tf.where(
-            self.indata.constraintweights == 0.0,
-            tf.zeros_like(self.indata.constraintweights),
-            tf.math.reciprocal(self.indata.constraintweights),
-        )
-
-        dtheta0 = tf.math.sqrt(var_theta0)
-        dnobs = tf.math.sqrt(self.nobs)
-        # FIXME consider implications of using kstat*beta as the variance
-        dbeta0 = tf.math.sqrt(self.varbeta)
-
-        dexpdtheta0 *= dtheta0[None, :]
-        dexpdnobs *= dnobs[None, :]
-        dexpdbeta0 *= dbeta0[None, :]
-
-        if compute_cov:
-            expcov_stat = dexpdnobs @ tf.transpose(dexpdnobs)
-            expcov = dexpdtheta0 @ tf.transpose(dexpdtheta0) + expcov_stat
-            if self.binByBinStat:
-                expcov_binByBinStat = dexpdbeta0 @ tf.transpose(dexpdbeta0)
-                expcov += expcov_binByBinStat
-
-            expvar = tf.linalg.diag_part(expcov)
-        else:
-            expcov = None
-            expvar_stat = tf.reduce_sum(tf.square(dexpdnobs), axis=-1)
-            expvar = tf.reduce_sum(tf.square(dexpdtheta0), axis=-1) + expvar_stat
-            if self.binByBinStat:
-                expvar_binByBinStat = tf.reduce_sum(tf.square(dexpdbeta0), axis=-1)
-                expvar += expvar_binByBinStat
-
-        expvar = tf.reshape(expvar, tf.shape(expected))
-
-        if compute_global_impacts:
-            # global impacts of unconstrained parameters are always 0, only store impacts of constrained ones
-            impacts = dexpdtheta0[:, self.indata.nsystnoconstraint :]
-
-            if compute_cov:
-                expvar_stat = tf.linalg.diag_part(expcov_stat)
-            impacts_stat = tf.sqrt(expvar_stat)
-            impacts_stat = tf.reshape(impacts_stat, (-1, 1))
-
-            if self.binByBinStat:
-                if compute_cov:
-                    expvar_binByBinStat = tf.linalg.diag_part(expcov_binByBinStat)
-                impacts_binByBinStat = tf.sqrt(expvar_binByBinStat)
-                impacts_binByBinStat = tf.reshape(impacts_binByBinStat, (-1, 1))
-                impacts_grouped = tf.concat(
-                    [impacts_stat, impacts_binByBinStat], axis=1
-                )
-            else:
-                impacts_grouped = impacts_stat
-
-            if len(self.indata.systgroupidxs):
-                dexpdtheta0_squared = tf.square(dexpdtheta0)
-                impacts_grouped_syst = tf.map_fn(
-                    lambda idxs: self._compute_global_impact_group(
-                        dexpdtheta0_squared, idxs
-                    ),
-                    tf.ragged.constant(self.indata.systgroupidxs, dtype=tf.int32),
-                    fn_output_signature=tf.TensorSpec(
-                        shape=(dexpdtheta0_squared.shape[0],), dtype=tf.float64
-                    ),
-                )
-                impacts_grouped_syst = tf.transpose(impacts_grouped_syst)
-                impacts_grouped = tf.concat(
-                    [impacts_grouped_syst, impacts_grouped], axis=1
-                )
-        else:
-            impacts = None
-            impacts_grouped = None
-
-        return expected, expvar, expcov, impacts, impacts_grouped
 
     def _expvar_optimized(self, fun_exp, skipBinByBinStat=False):
         # compute uncertainty on expectation propagating through uncertainty on fit parameters using full covariance matrix
@@ -629,98 +573,223 @@ class Fitter:
 
         return chi_square_value[0, 0]
 
-    def _expvar(self, fun_exp, compute_cov=False, compute_global_impacts=False):
+    def _compute_expected(
+        self, fun_exp, inclusive=True, profile=False, full=True, need_observables=True
+    ):
+        if need_observables:
+            observables = self._compute_yields(
+                inclusive=inclusive, profile=profile, full=full
+            )
+            expected = fun_exp(self.x, observables)
+        else:
+            expected = fun_exp(self.x)
+
+        return expected
+
+    def _expvar(
+        self,
+        fun_exp,
+        compute_cov=False,
+        compute_global_impacts=False,
+        profile=False,
+        inclusive=True,
+        full=True,
+        need_observables=True,
+    ):
         # compute uncertainty on expectation propagating through uncertainty on fit parameters using full covariance matrix
         # FIXME switch back to optimized version at some point?
 
-        with tf.GradientTape() as t:
-            t.watch([self.theta0, self.nobs, self.beta])
-            expected = fun_exp()
-            expected_flat = tf.reshape(expected, (-1,))
-        pdexpdx, pdexpdnobs, pdexpdbeta = t.jacobian(
-            expected_flat,
-            [self.x, self.nobs, self.beta],
-        )
+        def compute_derivatives(dvars):
+            with tf.GradientTape(watch_accessed_variables=False) as t:
+                t.watch(dvars)
+                expected = self._compute_expected(
+                    fun_exp,
+                    inclusive=inclusive,
+                    profile=profile,
+                    full=full,
+                    need_observables=need_observables,
+                )
+                expected_flat = tf.reshape(expected, (-1,))
+            jacs = t.jacobian(
+                expected_flat,
+                dvars,
+            )
+            return expected, *jacs
 
-        expcov = pdexpdx @ tf.matmul(self.cov, pdexpdx, transpose_b=True)
-
-        if pdexpdnobs is not None:
-            varnobs = self.nobs
-            exp_cov_stat = pdexpdnobs @ (varnobs[:, None] * tf.transpose(pdexpdnobs))
-            expcov += exp_cov_stat
-
-        expcov_noBBB = expcov
         if self.binByBinStat:
-            varbeta = self.varbeta
-            exp_cov_BBB = pdexpdbeta @ (varbeta[:, None] * tf.transpose(pdexpdbeta))
-            expcov += exp_cov_BBB
+            dvars = [self.x, self.ubeta]
+            expected, dexpdx, pdexpdbeta = compute_derivatives(dvars)
+        else:
+            dvars = [self.x]
+            expected, dexpdx = compute_derivatives(dvars)
+            pdexpdbeta = None
+
+        cov_dexpdx = tf.matmul(self.cov, dexpdx, transpose_b=True)
+        expcov = dexpdx @ cov_dexpdx
+
+        if pdexpdbeta is not None:
+            with tf.GradientTape(watch_accessed_variables=False) as t2:
+                t2.watch([self.ubeta])
+                with tf.GradientTape(watch_accessed_variables=False) as t1:
+                    t1.watch([self.ubeta])
+                    if profile:
+                        val = self._compute_loss(profile=profile)
+                    else:
+                        # TODO this principle can probably be generalized to other parts of the code
+                        # to further reduce special cases
+
+                        # if not profiling, likelihood doesn't include the data contribution
+                        ln, lc, lbeta, lnfull, lcfull, lbetafull, beta = (
+                            self._compute_nll_components(profile=profile)
+                        )
+                        val = lc + lbeta
+                pdldbeta = t1.gradient(val, self.ubeta)
+            if self.externalCovariance:
+                pd2ldbeta2_matrix = t2.jacobian(pdldbeta, self.ubeta)
+                pd2ldbeta2 = tf.linalg.LinearOperatorFullMatrix(
+                    pd2ldbeta2_matrix, is_self_adjoint=True
+                )
+            else:
+                # pd2ldbeta2 is diagonal, so we can use gradient instead of jacobian
+                pd2ldbeta2_diag = t2.gradient(pdldbeta, self.ubeta)
+                pd2ldbeta2 = tf.linalg.LinearOperatorDiag(
+                    pd2ldbeta2_diag, is_self_adjoint=True
+                )
+
+            pd2ldbeta2_pdexpdbeta = pd2ldbeta2.solve(pdexpdbeta, adjoint_arg=True)
+            expcov += pdexpdbeta @ pd2ldbeta2_pdexpdbeta
+
+        expvar_flat = tf.linalg.diag_part(expcov)
+        expvar = tf.reshape(expvar_flat, tf.shape(expected))
 
         if compute_global_impacts:
-            raise NotImplementedError(
-                "WARNING: Global impacts on observables without profiling is under development!"
-            )
-            # FIXME This is not correct
+            # the fully general contribution to the covariance matrix
+            # for a factorized likelihood L = sum_i L_i can be written as
+            # cov_i = dexpdx @ cov_x @ d2L_i/dx2 @ cov_x @ dexpdx.T
+            # This is totally general and always adds up to the total covariance matrix
 
-            dxdtheta0, dxdnobs, dxdbeta0 = self._compute_derivatives_x()
+            # This can be factorized into impacts only if the individual contributions
+            # are rank 1.  This is not the case in general for the data stat uncertainties,
+            # in particular where postfit nexpected != nobserved and nexpected is not a linear
+            # function of the poi's and nuisance parameters x
 
-            # dexpdtheta0 = pdexpdtheta0 + pdexpdx @ dxdtheta0 # TODO: pdexpdtheta0 not available?
-            dexpdtheta0 = pdexpdx @ dxdtheta0
-
-            # TODO: including effect of beta0
-
-            var_theta0 = tf.where(
-                self.indata.constraintweights == 0.0,
-                tf.zeros_like(self.indata.constraintweights),
-                tf.math.reciprocal(self.indata.constraintweights),
-            )
-            dtheta0 = tf.math.sqrt(var_theta0)
-            dexpdtheta0 *= dtheta0[None, :]
-
-            dexpdtheta0_squared = tf.square(dexpdtheta0)
-
-            # global impacts of unconstrained parameters are always 0, only store impacts of constrained ones
-            impacts = dexpdtheta0[:, self.indata.nsystnoconstraint :]
-
-            # stat global impact from all unconstrained parameters, not sure if this is correct TODO: check
-            impacts_stat = tf.sqrt(
-                tf.linalg.diag_part(expcov_noBBB)
-                - tf.reduce_sum(dexpdtheta0_squared, axis=-1)
-            )
-            impacts_stat = tf.reshape(impacts_stat, (-1, 1))
+            # For the systematic and MC stat uncertainties this is equivalent to the
+            # more conventional global impact calculation (and without needing to insert the uncertainty on
+            # the global observables "by hand", which can be non-trivial beyond the Gaussian case)
 
             if self.binByBinStat:
-                impacts_BBB_stat = tf.sqrt(tf.linalg.diag_part(exp_cov_BBB))
-                impacts_BBB_stat = tf.reshape(impacts_BBB_stat, (-1, 1))
-                impacts_grouped = tf.concat([impacts_stat, impacts_BBB_stat], axis=1)
+                with tf.GradientTape(persistent=True) as t2:
+                    t2.watch([self.x, self.ubeta])
+                    with tf.GradientTape(persistent=True) as t1:
+                        t1.watch([self.x, self.ubeta])
+                        ln, lc, lbeta, lnfull, lcfull, lbetafull, beta = (
+                            self._compute_nll_components(profile=profile)
+                        )
+                    pdlbetadbeta = t1.gradient(lbeta, self.ubeta)
+                    dlcdx = t1.gradient(lc, self.x)
+                    dbetadx = t1.jacobian(beta, self.x)
+                # pd2lbetadbeta2 is diagonal so we can use gradient instead of jacobian
+                pd2lbetadbeta2_diag = t2.gradient(pdlbetadbeta, self.ubeta)
+                # d2lcdx2 is diagonal so we can use gradient instead of jacobian
+                d2lcdx2_diag = t2.gradient(dlcdx, self.x)
             else:
-                impacts_grouped = impacts_stat
+                with tf.GradientTape() as t2:
+                    with tf.GradientTape() as t1:
+                        ln, lc, lbeta, lnfull, lcfull, lbetafull, beta = (
+                            self._compute_nll_components(profile=profile)
+                        )
+                    dlcdx = t1.gradient(lc, self.x)
+                # d2lcdx2 is diagonal so we can use gradient instead of jacobian
+                d2lcdx2_diag = t2.gradient(dlcdx, self.x)
+
+            # sc is the cholesky decomposition of d2lcdx2
+            sc = tf.linalg.LinearOperatorDiag(
+                tf.sqrt(d2lcdx2_diag), is_self_adjoint=True
+            )
+
+            impacts_x0 = sc @ tf.matmul(self.cov, dexpdx, transpose_b=True)
+            impacts_theta0 = impacts_x0[self.npoi :]
+
+            impacts_theta0 = tf.transpose(impacts_theta0)
+            impacts = impacts_theta0
+
+            impacts_theta0_sq = tf.square(impacts_theta0)
+            var_theta0 = tf.reduce_sum(impacts_theta0_sq, axis=-1)
+
+            var_nobs = expvar_flat - var_theta0
+
+            if self.binByBinStat:
+                # this the cholesky decomposition of pd2lbetadbeta2
+                sbeta = tf.linalg.LinearOperatorDiag(
+                    tf.sqrt(pd2lbetadbeta2_diag), is_self_adjoint=True
+                )
+
+                impacts_beta0 = tf.zeros(
+                    shape=(*self.beta.shape, *expvar_flat.shape), dtype=expvar.dtype
+                )
+
+                if pdexpdbeta is not None:
+                    impacts_beta0 += sbeta @ pd2ldbeta2_pdexpdbeta
+
+                if dbetadx is not None:
+                    impacts_beta0 += sbeta @ dbetadx @ cov_dexpdx
+
+                var_beta0 = tf.reduce_sum(tf.square(impacts_beta0), axis=0)
+                var_nobs -= var_beta0
+
+                impacts_beta0 = tf.math.sqrt(var_beta0)
+
+            impacts_nobs = tf.math.sqrt(var_nobs)
+
+            if self.binByBinStat:
+                impacts_grouped = tf.stack([impacts_nobs, impacts_beta0], axis=-1)
+            else:
+                impacts_grouped = impacts_nobs[..., None]
 
             if len(self.indata.systgroupidxs):
                 impacts_grouped_syst = tf.map_fn(
                     lambda idxs: self._compute_global_impact_group(
-                        dexpdtheta0_squared, idxs
+                        impacts_theta0_sq, idxs
                     ),
-                    tf.ragged.constant(self.indata.systgroupidxs, dtype=tf.int32),
+                    tf.ragged.constant(self.indata.systgroupidxs, dtype=tf.int64),
                     fn_output_signature=tf.TensorSpec(
-                        shape=(dexpdtheta0_squared.shape[0],), dtype=tf.float64
+                        shape=(impacts_theta0_sq.shape[0],),
+                        dtype=impacts_theta0_sq.dtype,
                     ),
                 )
                 impacts_grouped_syst = tf.transpose(impacts_grouped_syst)
+
                 impacts_grouped = tf.concat(
-                    [impacts_grouped_syst, impacts_grouped], axis=1
+                    [impacts_grouped_syst, impacts_grouped], axis=-1
                 )
+
+            impacts = tf.reshape(impacts, [*expvar.shape, impacts.shape[-1]])
+            impacts_grouped_syst = tf.reshape(
+                impacts_grouped_syst, [*expvar.shape, impacts_grouped_syst.shape[-1]]
+            )
         else:
             impacts = None
             impacts_grouped = None
 
-        expvar = tf.linalg.diag_part(expcov)
-        expvar = tf.reshape(expvar, tf.shape(expected))
-
         return expected, expvar, expcov, impacts, impacts_grouped
 
-    def _expvariations(self, fun_exp, correlations):
+    def _expvariations(
+        self,
+        fun_exp,
+        correlations,
+        profile=False,
+        inclusive=True,
+        full=True,
+        need_observables=True,
+    ):
         with tf.GradientTape() as t:
-            expected = fun_exp()
+            expected = self._compute_expected(
+                fun_exp,
+                inclusive=inclusive,
+                profile=profile,
+                full=full,
+                need_observables=need_observables,
+            )
             expected_flat = tf.reshape(expected, (-1,))
         dexpdx = t.jacobian(expected_flat, self.x)
 
@@ -875,11 +944,15 @@ class Fitter:
                         )
                     elif self.binByBinStatType == "normal":
                         if self.externalCovariance:
+                            varbeta_m = tf.linalg.LinearOperatorDiag(
+                                self.varbeta[: self.indata.nbins]
+                            )
                             beta = tf.linalg.lu_solve(
                                 *self.betaauxlu,
-                                self.data_cov_inv
+                                varbeta_m
+                                @ self.data_cov_inv
                                 @ ((self.nobs - nexp_profile)[:, None])
-                                + (beta0 / varbeta)[:, None],
+                                + beta0[:, None],
                             )
                             beta = tf.squeeze(beta, axis=-1)
                         else:
@@ -896,17 +969,18 @@ class Fitter:
                         )
                         beta = 0.5 * (-bbeta + tf.sqrt(bbeta**2 - 4.0 * cbeta))
 
-                if full and self.indata.nbinsmasked:
-                    beta = tf.concat([beta, self.beta[self.indata.nbins :]], axis=0)
+                if self.indata.nbinsmasked:
+                    beta = tf.concat([beta, self.beta0[self.indata.nbins :]], axis=0)
             else:
                 beta = self.beta
-                if (not full) and self.indata.nbinsmasked:
-                    beta = beta[: self.indata.nbins]
+
+            # multiply with dummy tensor to allow convenient differentiation by beta even when profiling
+            beta = beta + self.ubeta
 
             if self.binByBinStatType == "gamma":
-                nexp = nexp * beta
+                nexp = nexp * beta[: nexp.shape[0]]
             elif self.binByBinStatType == "normal":
-                nexp = nexp + beta
+                nexp = nexp + beta[: nexp.shape[0]]
 
             if compute_norm:
                 norm = beta[..., None] * norm
@@ -917,7 +991,7 @@ class Fitter:
 
     @tf.function
     def _profile_beta(self):
-        nexp, norm, beta = self._compute_yields_with_beta()
+        nexp, norm, beta = self._compute_yields_with_beta(full=False)
         self.beta.assign(beta)
 
     @tf.function
@@ -947,16 +1021,43 @@ class Fitter:
 
     @tf.function
     def expected_with_variance(
-        self, fun, profile=False, compute_cov=False, compute_global_impacts=False
+        self,
+        fun,
+        profile=False,
+        compute_cov=False,
+        compute_global_impacts=False,
+        inclusive=True,
+        full=True,
+        need_observables=True,
     ):
-        if profile:
-            return self._expvar_profiled(fun, compute_cov, compute_global_impacts)
-        else:
-            return self._expvar(fun, compute_cov, compute_global_impacts)
+        return self._expvar(
+            fun_exp=fun,
+            compute_cov=compute_cov,
+            compute_global_impacts=compute_global_impacts,
+            profile=profile,
+            inclusive=inclusive,
+            full=full,
+            need_observables=need_observables,
+        )
 
     @tf.function
-    def expected_variations(self, fun, correlations=False):
-        return self._expvariations(fun, correlations=correlations)
+    def expected_variations(
+        self,
+        fun,
+        correlations=False,
+        profile=False,
+        inclusive=True,
+        full=True,
+        need_observables=True,
+    ):
+        return self._expvariations(
+            fun,
+            correlations=correlations,
+            profile=profile,
+            inclusive=inclusive,
+            full=full,
+            need_observables=need_observables,
+        )
 
     def expected_events(
         self,
@@ -971,48 +1072,52 @@ class Fitter:
         compute_chi2=False,
     ):
 
-        def flat_fun():
-            return self._compute_yields(
-                inclusive=inclusive,
-                profile=profile,
-            )
-
         if compute_variations and (
             compute_variance or compute_cov or compute_global_impacts
         ):
             raise NotImplementedError()
 
-        fun = model.make_fun(flat_fun, self.x, inclusive)
+        fun = model.compute_flat if inclusive else model.compute_flat_per_process
 
         aux = [None] * 4
         if compute_cov or compute_variance or compute_global_impacts:
             exp, exp_var, exp_cov, exp_impacts, exp_impacts_grouped = (
                 self.expected_with_variance(
-                    fun,
+                    fun=fun,
                     profile=profile,
                     compute_cov=compute_cov,
                     compute_global_impacts=compute_global_impacts,
+                    need_observables=model.need_observables,
+                    inclusive=inclusive,
                 )
             )
             aux = [exp_var, exp_cov, exp_impacts, exp_impacts_grouped]
         elif compute_variations:
-            exp = self.expected_variations(fun, correlations=correlated_variations)
+            exp = self.expected_variations(
+                fun,
+                correlations=correlated_variations,
+                inclusive=inclusive,
+                profile=profile,
+                need_observables=model.need_observables,
+            )
         else:
-            exp = tf.function(fun)()
+            exp = self._compute_expected(
+                fun,
+                inclusive=inclusive,
+                profile=profile,
+                need_observables=model.need_observables,
+            )
 
         if compute_chi2:
             data, data_var, data_cov = model.get_data(self.nobs, self.data_cov_inv)
 
-            # need to calculate prediction excluding masked channels
-            def flat_fun():
-                return self._compute_yields(
-                    inclusive=inclusive, profile=profile, full=False
-                )
-
+            # need to calculate prediction inclusive in processes, and excluding masked channels
             pred, pred_var, pred_cov, _1, _2 = self.expected_with_variance(
-                model.make_fun(flat_fun, self.x, inclusive),
+                model.compute_flat,
                 profile=profile,
+                full=False,
                 compute_cov=True,
+                inclusive=True,
             )
 
             chi2val = self.chi2(pred - data, pred_cov + data_cov).numpy()
@@ -1097,7 +1202,7 @@ class Fitter:
         l, lfull = self._compute_nll()
         return l
 
-    def _compute_nll(self, profile=True):
+    def _compute_nll_components(self, profile=True):
         theta = self.x[self.npoi :]
 
         nexpfullcentral, _, beta = self._compute_yields_with_beta(
@@ -1148,14 +1253,12 @@ class Fitter:
         lc = tf.reduce_sum(
             self.indata.constraintweights * 0.5 * tf.square(theta - self.theta0)
         )
-
-        l = ln + lc
-        lfull = lnfull + lc
+        lcfull = lc
 
         if self.binByBinStat:
-            kstat = self.indata.kstat[: self.indata.nbins]
-            beta0 = self.beta0[: self.indata.nbins]
-            varbeta = self.varbeta[: self.indata.nbins]
+            kstat = self.indata.kstat
+            beta0 = self.beta0
+            varbeta = self.varbeta
             if self.binByBinStatType == "gamma":
                 lbetavfull = -kstat * beta0 * tf.math.log(beta) + kstat * beta
 
@@ -1168,7 +1271,20 @@ class Fitter:
 
                 lbetafull = tf.reduce_sum(lbetavfull)
                 lbeta = lbetafull
+        else:
+            lbeta = None
+            lbetafull = None
 
+        return ln, lc, lbeta, lnfull, lcfull, lbetafull, beta
+
+    def _compute_nll(self, profile=True):
+        ln, lc, lbeta, lnfull, lcfull, lbetafull, beta = self._compute_nll_components(
+            profile=profile
+        )
+        l = ln + lc
+        lfull = lnfull + lcfull
+
+        if lbeta is not None:
             l = l + lbeta
             lfull = lfull + lbetafull
 
