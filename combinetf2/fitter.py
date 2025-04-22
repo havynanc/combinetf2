@@ -146,16 +146,10 @@ class Fitter:
             self.betamask = self.indata.sumw2 == 0.0
             self.kstat = tf.where(self.betamask, 1.0, self.kstat)
         elif self.binByBinStatType == "normal":
-            n0 = self.expected_events_nominal()
-            varbeta = n0**2 / self.kstat
-            varbeta = tf.where(varbeta == 0.0, 1.0, varbeta)
-            varbeta = tf.stop_gradient(varbeta)
-            self.varbeta = varbeta
-
             if self.binByBinStat and self.externalCovariance:
                 # precompute decomposition of composite matrix to speed up
                 # calculation of profiled beta values
-                varbeta = self.varbeta[: self.indata.nbins]
+                varbeta = self.indata.sumw2[: self.indata.nbins]
                 sbeta = tf.math.sqrt(varbeta)
                 sbeta_m = tf.linalg.LinearOperatorDiag(sbeta)
                 self.betaauxlu = tf.linalg.lu(
@@ -981,7 +975,7 @@ class Fitter:
                         varbeta = self.indata.sumw2[: self.indata.nbins]
                         sbeta = tf.math.sqrt(varbeta)
                         abeta = sbeta
-                        abeta = tf.where(varbeta == 0.0, 1.0, abeta)
+                        abeta = tf.where(varbeta == 0.0, tf.ones_like(abeta), abeta)
                         bbeta = varbeta + nexp_profile - sbeta * beta0
                         cbeta = (
                             sbeta * (nexp_profile - self.nobs) - nexp_profile * beta0
@@ -1009,9 +1003,13 @@ class Fitter:
             elif self.binByBinStatType == "normal":
                 varbeta = self.indata.sumw2[: nexp.shape[0]]
                 sbeta = tf.math.sqrt(varbeta)
+                nexpnorm = nexp[..., None]
                 nexp = nexp + sbeta * betasel
                 if compute_norm:
-                    raise NotImplementedError
+                    # distribute the change in yields proportionally across processes
+                    norm = (
+                        norm + sbeta[..., None] * betasel[..., None] * norm / nexpnorm
+                    )
         else:
             beta = None
 
@@ -1270,9 +1268,10 @@ class Fitter:
         lcfull = lc
 
         if self.binByBinStat:
-            kstat = self.kstat
             beta0 = self.beta0
             if self.binByBinStatType == "gamma":
+                kstat = self.kstat
+
                 lbetavfull = -kstat * beta0 * tf.math.log(beta) + kstat * beta
 
                 lbetav = -kstat * beta0 * tf.math.log(beta) + kstat * (beta - 1.0)
