@@ -780,16 +780,16 @@ class Fitter:
         self,
         fun_exp,
         correlations,
-        profile=False,
         inclusive=True,
         full=True,
         need_observables=True,
     ):
         with tf.GradientTape() as t:
+            # note that beta should only be profiled if correlations are taken into account
             expected = self._compute_expected(
                 fun_exp,
                 inclusive=inclusive,
-                profile=profile,
+                profile=correlations,
                 full=full,
                 need_observables=need_observables,
             )
@@ -1057,7 +1057,6 @@ class Fitter:
         self,
         fun,
         correlations=False,
-        profile=False,
         inclusive=True,
         full=True,
         need_observables=True,
@@ -1065,7 +1064,6 @@ class Fitter:
         return self._expvariations(
             fun,
             correlations=correlations,
-            profile=profile,
             inclusive=inclusive,
             full=full,
             need_observables=need_observables,
@@ -1109,7 +1107,6 @@ class Fitter:
                 fun,
                 correlations=correlated_variations,
                 inclusive=inclusive,
-                profile=profile,
                 need_observables=model.need_observables,
             )
         else:
