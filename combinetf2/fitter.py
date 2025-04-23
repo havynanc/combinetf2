@@ -767,8 +767,8 @@ class Fitter:
                 )
 
             impacts = tf.reshape(impacts, [*expvar.shape, impacts.shape[-1]])
-            impacts_grouped_syst = tf.reshape(
-                impacts_grouped_syst, [*expvar.shape, impacts_grouped_syst.shape[-1]]
+            impacts_grouped = tf.reshape(
+                impacts_grouped, [*expvar.shape, impacts_grouped.shape[-1]]
             )
         else:
             impacts = None
