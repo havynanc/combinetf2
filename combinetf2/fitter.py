@@ -1191,8 +1191,8 @@ class Fitter:
 
         if self.binByBinStat:
             if self.binByBinStatType == "gamma":
-                kstat = self.kstat[: self.indata.nbins]
-                beta0 = self.beta0[: self.indata.nbins]
+                kstat = self.kstat
+                beta0 = self.beta0
                 lsaturated += tf.reduce_sum(
                     -kstat * beta0 * tf.math.log(beta0) + kstat * beta0
                 )
