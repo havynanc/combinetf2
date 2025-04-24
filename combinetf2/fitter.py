@@ -705,6 +705,15 @@ class Fitter:
                 # d2lcdx2 is diagonal so we can use gradient instead of jacobian
                 d2lcdx2_diag = t2.gradient(dlcdx, self.x)
 
+            # protect against inconsistency
+            # FIXME this should be handled more generally e.g. through modification of
+            # the constraintweights for prefit vs postfit, though special handling of the zero
+            # uncertainty case would still be needed
+            if (not profile) and self.prefitUnconstrainedNuisanceUncertainty != 0.0:
+                raise NotImplementedError(
+                    "Global impacts calculation not implemented for prefit case where prefitUnconstrainedNuisanceUncertainty != 0."
+                )
+
             # sc is the cholesky decomposition of d2lcdx2
             sc = tf.linalg.LinearOperatorDiag(
                 tf.sqrt(d2lcdx2_diag), is_self_adjoint=True
