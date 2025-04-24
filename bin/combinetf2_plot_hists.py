@@ -809,7 +809,10 @@ def make_plot(
                 va="top",
             )
 
-    plot_tools.fix_axes(ax1, ax2, fig, yscale=args.yscale, noSci=args.noSciy)
+    if ratio or diff:
+        plot_tools.fix_axes(ax1, ax2, fig, yscale=args.yscale, noSci=args.noSciy)
+    else:
+        plot_tools.fix_axes(ax1, yscale=args.yscale, logy=args.logy)
 
     plot_tools.add_decor(
         ax1,
@@ -843,8 +846,6 @@ def make_plot(
             custom_handlers=["stacked"],
             padding_loc=args.lowerLegPadding,
         )
-    else:
-        ax2 = None
 
     to_join = [fittype, args.postfix, *axes_names, suffix]
     outfile = "_".join(filter(lambda x: x, to_join))

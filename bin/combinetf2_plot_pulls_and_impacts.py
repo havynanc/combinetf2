@@ -887,7 +887,10 @@ def make_plots(
     outfile = os.path.join(outdir, outfile)
     extensions = [outfile.split(".")[-1], *args.otherExtensions]
 
-    include_ref = any(x in df.keys() for x in ["impact_ref", "absimpact_ref", "pull_ref", "constraint_ref"])
+    include_ref = any(
+        x in df.keys()
+        for x in ["impact_ref", "absimpact_ref", "pull_ref", "constraint_ref"]
+    )
 
     kwargs = dict(
         pulls=not args.noPulls and not group,
@@ -1159,7 +1162,9 @@ def main():
 
     fitresult, meta = io_tools.get_fitresult(args.inputFile, args.result, meta=True)
     if args.referenceFile is not None or args.refResult is not None:
-        referenceFile = args.referenceFile if args.referenceFile is not None else args.inputFile
+        referenceFile = (
+            args.referenceFile if args.referenceFile is not None else args.inputFile
+        )
         fitresult_ref = io_tools.get_fitresult(referenceFile, args.refResult)
     else:
         fitresult_ref = None
