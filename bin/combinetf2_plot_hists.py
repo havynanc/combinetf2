@@ -809,6 +809,8 @@ def make_plot(
                 va="top",
             )
 
+    plot_tools.fix_axes(ax1, ax2, fig, yscale=args.yscale, noSci=args.noSciy)
+
     plot_tools.add_decor(
         ax1,
         args.title,
@@ -843,8 +845,6 @@ def make_plot(
         )
     else:
         ax2 = None
-
-    plot_tools.fix_axes(ax1, ax2, fig, yscale=args.yscale, noSci=args.noSciy)
 
     to_join = [fittype, args.postfix, *axes_names, suffix]
     outfile = "_".join(filter(lambda x: x, to_join))
@@ -1204,7 +1204,9 @@ def main():
                     suffix = suffix.replace(sign, rpl)
 
                 counts = not args.unfoldedXsec  # if histograms represent counts or not
-                binwnorm = 1.0 if counts else None
+                binwnorm = (
+                    1.0 if instance_key in ["Basemodel", "Project", "Norm"] else None
+                )
 
                 opts["counts"] = counts
 
