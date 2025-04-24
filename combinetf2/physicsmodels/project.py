@@ -42,7 +42,7 @@ class Project(PhysicsModelChannel):
 
         self.transpose_idxs = [post_proj_axes_names.index(axis) for axis in axes_names]
 
-        self.has_data = not info["masked"]
+        self.has_data = not info.get("masked", False)
 
         self.channel_info = {channel: {"axes": hist_axes}}
 

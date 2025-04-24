@@ -928,10 +928,11 @@ def make_plots(
     else:
         hist_var = None
 
-    # if args.processGrouping is not None:
-    #     hist_stack, labels, colors, procs = styles.process_grouping(
-    #         args.processGrouping, hist_stack, procs
-    #     )
+    if args.processGrouping is not None:
+        hist_stack, labels, colors, procs = config.process_grouping(
+            args.processGrouping, hist_stack, procs
+        )
+
     labels = [
         l if p not in args.suppressProcsLabel else None for l, p in zip(labels, procs)
     ]
@@ -1085,6 +1086,8 @@ def make_plots(
 
 
 def get_chi2(result, no_chi2=True, fittype="postfit"):
+    chi2_key = f"chi2_prefit" if fittype == "prefit" else "chi2"
+    ndf_key = f"ndf_prefit" if fittype == "prefit" else "ndf"
     if fittype == "postfit" and result.get("postfit_profile", False) and not no_chi2:
         # use saturated likelihood test if relevant
         nllvalfull = result["nllvalfull"]
@@ -1092,8 +1095,8 @@ def get_chi2(result, no_chi2=True, fittype="postfit"):
         chi2 = 2.0 * (nllvalfull - satnllvalfull)
         ndf = result["ndfsat"]
         return chi2, ndf, True
-    elif f"chi2_{fittype}" in result and not no_chi2:
-        return result[f"chi2_{fittype}"], result[f"ndf_{fittype}"], False
+    elif chi2_key in result and not no_chi2:
+        return result[chi2_key], result[ndf_key], False
     else:
         return None, None, False
 
@@ -1129,8 +1132,6 @@ def main():
     fitresult, meta = combinetf2.io_tools.get_fitresult(
         args.infile, args.result, meta=True
     )
-
-    meta_info = meta["meta_info"]
 
     plt.rcParams["font.size"] = plt.rcParams["font.size"] * args.scaleTextSize
 
@@ -1187,6 +1188,9 @@ def main():
                     continue
                 logger.info(f"Make plot for {instance_key} in channel {channel}")
 
+                if chi2 is None:
+                    chi2, ndf, saturated_chi2 = get_chi2(result, args.noChisq, fittype)
+
                 info = channel_info.get(channel, {})
 
                 suffix = f"{channel}_{instance_key}"
@@ -1222,7 +1226,7 @@ def main():
                 )
 
     if output_tools.is_eosuser_path(args.outpath) and args.eoscp:
-        output_tools.copy_to_eos(outdir, args.outpath, args.outfolder)
+        output_tools.copy_to_eos(outdir, args.outpath)
 
 
 if __name__ == "__main__":
