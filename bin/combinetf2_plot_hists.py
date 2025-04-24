@@ -1210,7 +1210,12 @@ def main():
 
                 counts = not args.unfoldedXsec  # if histograms represent counts or not
                 binwnorm = (
-                    1.0 if instance_key in ["Basemodel", "Project", "Norm"] else None
+                    1.0
+                    if any(
+                        instance_key.startswith(x)
+                        for x in ["Basemodel", "Project", "Norm"]
+                    )
+                    else None
                 )
 
                 opts["counts"] = counts
