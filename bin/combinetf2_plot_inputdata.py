@@ -107,6 +107,11 @@ def parseArgs():
         "--varColor", type=str, nargs="*", default=[], help="Variation colors"
     )
     parser.add_argument(
+        "--oneSidedVariations",
+        action="store_true",
+        help="Plot variations one sided",
+    )
+    parser.add_argument(
         "-v",
         "--verbose",
         type=int,
@@ -457,27 +462,33 @@ def make_plot(
                 zorder=1,
                 flow="none",
             )
-            hep.histplot(
-                hdn,
-                xerr=False,
-                yerr=False,
-                histtype="step",
-                color=color,
-                linestyle="--",
-                binwnorm=binwnorm,
-                ax=ax1,
-                zorder=1,
-                flow="none",
-            )
-
-            if not args.noRatio:
+            if not args.oneSidedVariations:
                 hep.histplot(
-                    [hh.divideHists(hup, h_pred), hh.divideHists(hdn, h_pred)],
+                    hdn,
                     xerr=False,
                     yerr=False,
                     histtype="step",
                     color=color,
-                    linestyle=["-", "--"],
+                    linestyle="--",
+                    binwnorm=binwnorm,
+                    ax=ax1,
+                    zorder=1,
+                    flow="none",
+                )
+
+            if not args.noRatio:
+                h_ratios = (
+                    [hh.divideHists(hup, h_pred)]
+                    if args.oneSidedVariations
+                    else [hh.divideHists(hup, h_pred), hh.divideHists(hdn, h_pred)]
+                )
+                hep.histplot(
+                    h_ratios,
+                    xerr=False,
+                    yerr=False,
+                    histtype="step",
+                    color=color,
+                    linestyle=["-", "--"][: len(h_ratios)],
                     ax=ax2,
                     linewidth=2,
                     flow="none",
@@ -521,7 +532,7 @@ def make_plot(
                 if key == "charge":
                     label = f"charge = {'-1' if hi==0 else '+1'}"
                 else:
-                    label = plot_tools.get_axis_label(config, key, key)
+                    label = plot_tools.get_axis_label(config, key, with_unit=False)
                     if lo != None:
                         label = f"{lo} < {label}"
                     if hi != None:
@@ -602,6 +613,9 @@ def main():
         systematics.append(syst)
         colors_syst.append(color if color is not None else "black")
         labels_syst.append(label if label is not None else syst_labels.get(syst, syst))
+
+    if args.oneSidedVariations:
+        labels_syst = [l.replace(r"\pm", "+") for l in labels_syst]
 
     outdir = output_tools.make_plot_dir(args.outpath, eoscp=args.eoscp)
 
@@ -734,7 +748,7 @@ def main():
             )
 
     if output_tools.is_eosuser_path(args.outpath) and args.eoscp:
-        output_tools.copy_to_eos(outdir, args.outpath, args.outfolder)
+        output_tools.copy_to_eos(outdir, args.outpath)
 
 
 if __name__ == "__main__":
