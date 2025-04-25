@@ -562,7 +562,7 @@ def make_plot(
             flow="none",
         )
 
-    if args.ylim is None and args.unfoldedXsec:
+    if args.ylim is None and binwnorm is None:
         max_y = np.max(h_inclusive.values() + h_inclusive.variances() ** 0.5)
         min_y = np.min(h_inclusive.values() - h_inclusive.variances() ** 0.5)
 
