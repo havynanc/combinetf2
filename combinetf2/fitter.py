@@ -989,7 +989,11 @@ class Fitter:
                         cbeta = (
                             sbeta * (nexp_profile - self.nobs) - nexp_profile * beta0
                         )
-                        beta = 0.5 * (-bbeta + tf.sqrt(bbeta**2 - 4.0 * cbeta)) / abeta
+                        beta = (
+                            0.5
+                            * (-bbeta + tf.sqrt(bbeta**2 - 4.0 * abeta * cbeta))
+                            / abeta
+                        )
                         beta = tf.where(varbeta == 0.0, beta0, beta)
 
                 if self.indata.nbinsmasked:
