@@ -989,7 +989,11 @@ class Fitter:
                         cbeta = (
                             sbeta * (nexp_profile - self.nobs) - nexp_profile * beta0
                         )
-                        beta = 0.5 * (-bbeta + tf.sqrt(bbeta**2 - 4.0 * cbeta)) / abeta
+                        beta = (
+                            0.5
+                            * (-bbeta + tf.sqrt(bbeta**2 - 4.0 * abeta * cbeta))
+                            / abeta
+                        )
                         beta = tf.where(varbeta == 0.0, beta0, beta)
 
                 if self.indata.nbinsmasked:
@@ -1370,6 +1374,18 @@ class Fitter:
         hess = t2.jacobian(grad, self.x)
 
         return val, valfull, grad, hess
+
+    @tf.function
+    def loss_val_grad_hess_beta(self, profile=True):
+        with tf.GradientTape() as t2:
+            t2.watch(self.ubeta)
+            with tf.GradientTape() as t1:
+                t1.watch(self.ubeta)
+                val = self._compute_loss(profile=profile)
+            grad = t1.gradient(val, self.ubeta)
+        hess = t2.jacobian(grad, self.ubeta)
+
+        return val, grad, hess
 
     def minimize(self):
 
