@@ -999,7 +999,6 @@ def make_plots(
                 a.name: (
                     (a.edges[i], a.edges[i + 1])
                     if isinstance(a, (hist.axis.Regular, hist.axis.Variable))
-                    and a.name in ts
                     else a.edges[i]
                 )
                 for a, i in zip(selection_axes, bins)

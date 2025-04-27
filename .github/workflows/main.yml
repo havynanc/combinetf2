@@ -137,7 +137,7 @@ jobs:
           python tests/make_tensor.py -o $COMBINETF2_OUTDIR/ --sparse --postfix sparse
 
       - name: debug input
-        run: debug_inutdata.py $COMBINETF2_OUTDIR//test_tensor.hdf5
+        run: debug_inputdata.py $COMBINETF2_OUTDIR//test_tensor.hdf5
 
       - name: plot input
         run: >-
@@ -169,7 +169,8 @@ jobs:
         run: >- 
           combinetf2_fit.py $COMBINETF2_OUTDIR/test_tensor.hdf5 -o $COMBINETF2_OUTDIR/
           -t 0 --doImpacts --globalImpacts
-          --saveHists --saveHistsPerProcess --computeHistErrors --computeHistCov --computeHistImpacts --computeVariations
+          --saveHists --saveHistsPerProcess --computeHistErrors --computeHistErrorsPerProcess
+          --computeHistCov --computeHistImpacts --computeVariations
           -m Project ch1 a 
           -m Project ch1 b 
           -m Project ch0_masked 
@@ -184,7 +185,8 @@ jobs:
         run: >- 
           combinetf2_fit.py $COMBINETF2_OUTDIR/test_tensor_sparse.hdf5 -o $COMBINETF2_OUTDIR/ --postfix sparse
           -t -0 --noBinByBinStat --doImpacts --globalImpacts --computeVariations
-          --saveHists --saveHistsPerProcess --computeHistErrors -m Project ch1 a -m Project ch1 b 
+          --saveHists --saveHistsPerProcess --computeHistErrors --computeHistErrorsPerProcess
+          -m Project ch1 a -m Project ch1 b 
 
       - name: pseudodata fit
         run: >- 
@@ -195,13 +197,15 @@ jobs:
         run: >- 
           combinetf2_fit.py $COMBINETF2_OUTDIR/test_tensor.hdf5 -o $COMBINETF2_OUTDIR/ --postfix chi2
           -t 0 --chisqFit --externalCovariance --doImpacts --globalImpacts 
-          --saveHists --saveHistsPerProcess --computeHistErrors -m Project ch1 a -m Project ch1 b 
+          --saveHists --saveHistsPerProcess --computeHistErrors --computeHistErrorsPerProcess
+          -m Project ch1 a -m Project ch1 b 
 
       - name: linearized solution
         run: >- 
           combinetf2_fit.py $COMBINETF2_OUTDIR/test_tensor_symmetric.hdf5 -o $COMBINETF2_OUTDIR/ --postfix linearized
           -t 0 --chisqFit --doImpacts --globalImpacts --binByBinStatType normal --allowNegativePOI
-          --saveHists --saveHistsPerProcess --computeHistErrors --computeHistImpacts --computeHistCov -m Project ch1 a -m Project ch1 b 
+          --saveHists --saveHistsPerProcess --computeHistErrors --computeHistErrorsPerProcess
+          --computeHistImpacts --computeHistCov -m Project ch1 a -m Project ch1 b 
 
 
   plotting:
