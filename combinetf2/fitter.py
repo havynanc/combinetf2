@@ -1371,6 +1371,18 @@ class Fitter:
 
         return val, valfull, grad, hess
 
+    @tf.function
+    def loss_val_grad_hess_beta(self, profile=True):
+        with tf.GradientTape() as t2:
+            t2.watch(self.ubeta)
+            with tf.GradientTape() as t1:
+                t1.watch(self.ubeta)
+                val = self._compute_loss(profile=profile)
+            grad = t1.gradient(val, self.ubeta)
+        hess = t2.jacobian(grad, self.ubeta)
+
+        return val, grad, hess
+
     def minimize(self):
 
         if self.is_linear:
