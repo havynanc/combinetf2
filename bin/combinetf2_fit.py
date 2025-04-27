@@ -181,7 +181,13 @@ def make_parser():
         "--computeHistErrors",
         default=False,
         action="store_true",
-        help="propagate uncertainties to prefit and postfit histograms",
+        help="propagate uncertainties to inclusive prefit and postfit histograms",
+    )
+    parser.add_argument(
+        "--computeHistErrorsPerProcess",
+        default=False,
+        action="store_true",
+        help="propagate uncertainties to prefit and postfit histograms for each process",
     )
     parser.add_argument(
         "--computeHistCov",
@@ -338,7 +344,7 @@ def save_hists(args, models, fitter, ws, prefit=True, profile=False):
             exp, aux = fitter.expected_events(
                 model,
                 inclusive=False,
-                compute_variance=args.computeHistErrors,
+                compute_variance=args.computeHistErrorsPerProcess,
                 profile=profile,
             )
 
