@@ -431,6 +431,15 @@ def fit(args, fitter, ws, dofit=True):
 
         del cov
 
+        if fitter.binByBinStat and fitter.diagnostics:
+            # This is the estimated distance to minimum with respect to variations of
+            # the implicit binByBinStat nuisances beta at fixed parameter values.
+            # It should be near-zero by construction as long as the analytic profiling is
+            # correct
+            _, gradbeta, hessbeta = fitter.loss_val_grad_hess_beta()
+            edmvalbeta, covbeta = edmval_cov(gradbeta, hessbeta)
+            logger.info(f"edmvalbeta: {edmvalbeta}")
+
         if args.doImpacts:
             ws.add_impacts_hists(*fitter.impacts_parms(hess))
 
