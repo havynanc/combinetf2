@@ -350,6 +350,7 @@ class Workspace:
 
         for channel, info in model.channel_info.items():
             axes = info["axes"]
+
             opts = dict(
                 start=info.get("start", None),
                 stop=info.get("stop", None),
@@ -358,7 +359,7 @@ class Workspace:
                 channel=channel,
             )
 
-            hist_axes = axes.copy()
+            hist_axes = [a for a in axes]
 
             if len(hist_axes) == 0:
                 hist_axes = [

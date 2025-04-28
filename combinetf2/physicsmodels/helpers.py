@@ -1,7 +1,12 @@
 import importlib
 import re
 
+import hist
+import numpy as np
 import tensorflow as tf
+from wums import boostHistHelpers as hh
+
+from combinetf2 import tfhelpers
 
 # dictionary with class name and the corresponding filename where it is defined
 baseline_models = {
@@ -10,6 +15,8 @@ baseline_models = {
     "Normalize": "project",
     "Ratio": "ratio",
     "Normratio": "ratio",
+    "AngularCoefficients": "angular_coefficients",
+    "LamTung": "angular_coefficients",
 }
 
 
@@ -41,25 +48,37 @@ def instance_from_class(class_name, *args, **kwargs):
 
 def parse_axis_selection(selection_str):
     """
-    Parse a sting specifying the axis selections in a dict where keys are axes and values the selections
-    The input string is expected to have the format <axis_name_0>:<slice_0>,<axis_name_1>:<slice_1>,...
-       i.e. a comma separated list of axis names and selections separated by ":", the selections can be indices or slice objects e.g. 'slice(0,2,2)'
-       a special case is None:None for whch 'None' is returned, indicating no selection
+    Parse a string specifying the axis selections in a dict where keys are axes and values the selections
+    The input string is expected to have the format <axis_name_0>:<selection_0>,<axis_name_1>:<selection_1>,...
+       i.e. a comma separated list of axis names and selections separated by ":", the selections can be indices, slice objects e.g. 'slice(0,2,2)', or special objects:
+       - 'sum' to sum all bins of an axis
+       - 'rebin()' to rebin an axis with new edges
+       - 'None:None' for whch 'None' is returned, indicating no selection
     """
-    if selection_str == "None:None":
-        return None
-    else:
-        sel = {}
+    sel = {}
+    sum_axes = []
+    rebin_axes = {}
+    if selection_str != "None:None":
         for s in re.split(r",(?![^()]*\))", selection_str):
             k, v = s.split(":")
             if "slice" in v:
                 sl = slice(
                     *[int(x) if x != "None" else None for x in v[6:-1].split(",")]
                 )
+            elif v == "sum":
+                sum_axes.append(k)
+                sl = slice(None)
+            elif v.startswith("rebin"):
+                arr = np.array(v[6:-1].split(","), dtype=np.float32).tolist()
+                rebin_axes[k] = arr
+                sl = slice(None)
+            elif v == "None":
+                sl = slice(None)
             else:
-                sl = slice(int(v), int(v) + 1) if v != "None" else slice(None)
+                sl = slice(int(v), int(v) + 1)
             sel[k] = sl
-        return sel
+
+    return sel, rebin_axes, sum_axes
 
 
 class Term:
@@ -69,6 +88,8 @@ class Term:
         channel,
         processes=[],
         selections={},
+        rebin_axes={},
+        sum_axes=[],
     ):
         info = indata.channel_info[channel]
 
@@ -97,7 +118,7 @@ class Term:
         if selections is not None:
             if any(k not in channel_axes_names for k in selections.keys()):
                 raise RuntimeError(
-                    f"Not all selection axis found in channel. Selection axes: {selections.keys()}, Channel axes: {channel_axes_names}"
+                    f"Not all selection axes found in channel. Selection axes: {selections.keys()}, Channel axes: {channel_axes_names}"
                 )
             self.selections = tuple(
                 [
@@ -105,13 +126,45 @@ class Term:
                     for i, n in enumerate(channel_axes_names)
                 ]
             )
-            channel_axes = [c for c in channel_axes if c.name not in selections.keys()]
             self.selection_idxs = [
                 i for i, n in enumerate(channel_axes_names) if n in selections.keys()
             ]
         else:
             self.selections = None
             self.selection_idxs = None
+
+        # make dummy histogram to perform rebinning
+        h = hist.Hist(*channel_axes)
+        if self.selections:
+            h = h[selections]
+
+        self.segment_ids = {}
+        if rebin_axes:
+            hNew = hh.rebinHistMultiAx(h, rebin_axes.keys(), rebin_axes.values())
+
+            for n in rebin_axes.keys():
+                old_edges = h.axes[n].edges
+                new_edges = hNew.axes[n].edges
+                segment_ids = np.zeros_like(old_edges[:-1])
+                segment = -1
+                for idx, v in enumerate(old_edges[:-1]):
+                    if v in new_edges:
+                        segment += 1
+                    segment_ids[idx] = segment
+
+                if new_edges[-1] != old_edges[-1]:
+                    segment_ids[segment_ids == segment] = -1
+
+                self.segment_ids = {
+                    hNew.axes.name.index(n): tf.constant(segment_ids, dtype=tf.int64)
+                }
+                self.num_segments = {hNew.axes.name.index(n): int(max(segment_ids) + 1)}
+
+            h = hNew
+
+        channel_axes = [a for a in h.axes if a.name not in sum_axes]
+
+        self.sum_idxs = [i for i, n in enumerate(h.axes.name) if n in sum_axes]
 
         self.channel_axes = channel_axes
 
@@ -127,7 +180,15 @@ class Term:
 
         if self.selections:
             values = values[self.selections]
-            values = tf.reduce_sum(values, axis=self.selection_idxs)
+
+        if len(self.segment_ids):
+            for i, s in self.segment_ids.items():
+                values = tfhelpers.segment_sum_along_axis(
+                    values, s, i, num_segments=self.num_segments[i]
+                )
+
+        if len(self.sum_idxs):
+            values = tf.reduce_sum(values, axis=self.sum_idxs)
 
         if normalize:
             norm = tf.reduce_sum(values)
