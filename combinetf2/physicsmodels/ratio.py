@@ -130,20 +130,15 @@ class Ratio(PhysicsModel):
         # find axis selections
         if any(a for a in args if ":" in a):
             sel_args = [a for a in args if ":" in a]
-
-            axis_selection_num, axes_rebin_num, axes_sum_num = (
-                helpers.parse_axis_selection(sel_args[0])
-            )
-            axis_selection_den, axes_rebin_den, axes_sum_den = (
-                helpers.parse_axis_selection(sel_args[1])
-            )
         else:
-            axis_selection_num = None
-            axis_selection_den = None
-            axes_sum_num = None
-            axes_sum_den = None
-            axes_rebin_num = None
-            axes_rebin_den = None
+            sel_args = ["None:None", "None:None"]
+
+        axis_selection_num, axes_rebin_num, axes_sum_num = helpers.parse_axis_selection(
+            sel_args[0]
+        )
+        axis_selection_den, axes_rebin_den, axes_sum_den = helpers.parse_axis_selection(
+            sel_args[1]
+        )
 
         key = " ".join([cls.__name__, *args])
 
