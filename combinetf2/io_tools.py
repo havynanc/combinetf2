@@ -142,8 +142,9 @@ def get_postfit_hist_cov(fitresult, physics_model="Basemodel", channels=None):
 
         cov = cov[np.ix_(idxs, idxs)]
     else:
+        found_channels = [c for c in result["channels"].keys()]
         h_data = [
             c["hist_postfit_inclusive"].get() for k, c in result["channels"].items()
         ]
 
-    return h_data, cov
+    return h_data, cov, found_channels
