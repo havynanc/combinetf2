@@ -1,5 +1,7 @@
 import tensorflow as tf
 
+from combinetf2.physicsmodels import helpers
+
 
 class PhysicsModel:
     """
@@ -64,19 +66,74 @@ class PhysicsModel:
         return output, variances_output, cov_output
 
 
-class PhysicsModelChannel(PhysicsModel):
+class BasemodelChannel(PhysicsModel):
     """
-    Abstract physics model to process a specific channel
+    A class to output histograms without any transformation for a given channel, can be used as base class to inherit custom physics models from.
     """
 
-    def __init__(self, indata, key, channel):
-        super().__init__(indata, key)
+    def __init__(
+        self,
+        indata,
+        key,
+        channel,
+        processes=[],
+        selections={},
+        rebin_axes={},
+        sum_axes=[],
+    ):
+        self.key = key
+
+        self.term = helpers.Term(
+            indata,
+            channel,
+            processes,
+            selections,
+            rebin_axes,
+            sum_axes,
+        )
+
         channel_info = indata.channel_info[channel]
-        self.channel_info = {channel: channel_info}
 
-        self.start = channel_info["start"]
-        self.stop = channel_info["stop"]
-        self.channel_shape = [len(a) for a in channel_info["axes"]]
+        self.channel_info = {channel: {"axes": self.term.channel_axes}}
+
+        self.has_data = not channel_info["masked"]
+
+    @classmethod
+    def parse_args(cls, indata, *args):
+        """
+        parsing the input arguments into the ratio constructor, is has to be called as
+        -m BaseModelChannel <ch num>
+            <proc_0>,<proc_1>,...
+            <axis_0>:<selection_0>,<axis_1>,<selection_1>...
+
+        Processes selections are optional.
+        Axes selections are optional.
+        """
+
+        if len(args) > 1 and ":" not in args[1]:
+            procs = [p for p in args[1].split(",") if p != "None"]
+        else:
+            procs = []
+
+        # find axis selections
+        if any(a for a in args if ":" in a):
+            sel_args = [a for a in args if ":" in a][0]
+        else:
+            sel_args = "None:None"
+
+        axis_selection, axes_rebin, axes_sum = helpers.parse_axis_selection(sel_args)
+
+        key = " ".join([cls.__name__, *args])
+
+        return cls(
+            indata,
+            key,
+            args[0],
+            procs,
+            axis_selection,
+            axes_rebin,
+            axes_sum,
+        )
 
     def compute(self, params, observables):
         return observables
@@ -85,20 +142,11 @@ class PhysicsModelChannel(PhysicsModel):
         return self.compute(params, observables)
 
     def compute_flat(self, params, observables):
-        exp = tf.reshape(observables[self.start : self.stop], tuple(self.channel_shape))
-        exp = self.compute(params, exp)
-        exp = tf.reshape(exp, [-1])  # flatten again
+        exp = self.term.select(observables, inclusive=True)
         return exp
 
     def compute_flat_per_process(self, params, observables):
-        exp = tf.reshape(
-            observables[self.start : self.stop],
-            (*self.channel_shape, observables.shape[1]),
-        )
-        exp = self.compute_per_process(params, exp)
-        # flatten again
-        flat_shape = (-1, exp.shape[-1])
-        exp = tf.reshape(exp, flat_shape)
+        exp = self.term.select(observables, inclusive=False)
         return exp
 
 

@@ -11,6 +11,7 @@ from combinetf2 import tfhelpers
 # dictionary with class name and the corresponding filename where it is defined
 baseline_models = {
     "Basemodel": "physicsmodel",
+    "BasemodelChannel": "physicsmodel",
     "Project": "project",
     "Normalize": "project",
     "Ratio": "ratio",
@@ -76,6 +77,8 @@ def parse_axis_selection(selection_str):
                 sl = slice(None)
             else:
                 sl = slice(int(v), int(v) + 1)
+                # always sum/reduce this axis if only one bin is selected
+                sum_axes.append(k)
             sel[k] = sl
 
     return sel, rebin_axes, sum_axes
