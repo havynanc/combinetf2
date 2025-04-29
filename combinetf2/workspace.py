@@ -195,7 +195,6 @@ class Workspace:
                 model_key=model.key,
                 channel=channel,
             )
-
             self.add_hist(
                 "hist_data_obs",
                 axes,
@@ -332,7 +331,7 @@ class Workspace:
         cov=None,
         impacts=None,
         impacts_grouped=None,
-        process_axis=None,
+        process_axis=False,
         name=None,
         label=None,
         variations=False,
@@ -367,10 +366,11 @@ class Workspace:
                         0, 1, name="yield", overflow=False, underflow=False
                     )
                 ]
-                axes_names = ["yield"]
 
-            if process_axis is not None:
-                hist_axes.append(process_axis)
+            if process_axis:
+                hist_axes.append(
+                    hist.axis.StrCategory(info["processes"], name="processes")
+                )
 
             self.add_hist(
                 name,

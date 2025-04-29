@@ -352,7 +352,7 @@ def save_hists(args, models, fitter, ws, prefit=True, profile=False):
                 model,
                 exp,
                 var=aux[0],
-                process_axis=fitter.indata.axis_procs,
+                process_axis=True,
                 prefit=prefit,
             )
 

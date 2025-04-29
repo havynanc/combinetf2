@@ -44,7 +44,7 @@ class Project(Channelmodel):
 
         self.has_data = not info.get("masked", False)
 
-        self.channel_info = {channel: {"axes": hist_axes}}
+        self.channel_info = {channel: {"axes": hist_axes, "processes": indata.procs}}
 
     def project(self, values):
         exp = tf.reduce_sum(values, axis=self.proj_idxs)

@@ -63,9 +63,15 @@ def parse_axis_selection(selection_str):
         for s in re.split(r",(?![^()]*\))", selection_str):
             k, v = s.split(":")
             if "slice" in v:
-                sl = slice(
-                    *[int(x) if x != "None" else None for x in v[6:-1].split(",")]
-                )
+                slice_args = []
+                for x in v[6:-1].split(","):
+                    if x == "None":
+                        slice_args.append(None)
+                    elif "j" in x:
+                        slice_args.append(complex(x))
+                    else:
+                        slice_args.append(int(x))
+                sl = slice(*slice_args)
             elif v == "sum":
                 sum_axes.append(k)
                 sl = slice(None)
@@ -151,8 +157,9 @@ class Term:
                 segment_ids = np.zeros_like(old_edges[:-1])
                 segment = -1
                 for idx, v in enumerate(old_edges[:-1]):
-                    if v in new_edges:
+                    if any(np.isclose(v, x) for x in new_edges):
                         segment += 1
+
                     segment_ids[idx] = segment
 
                 if new_edges[-1] != old_edges[-1]:
@@ -174,12 +181,14 @@ class Term:
     def select(self, values, normalize=False, inclusive=True):
         values = values[self.start : self.stop]
 
-        if not inclusive:
+        if len(values.shape) == 1:
+            values = tf.reshape(values, self.exp_shape)
+        else:
             if self.proc_idxs:
                 values = tf.gather(values, indices=self.proc_idxs, axis=-1)
-            values = tf.reduce_sum(values, axis=-1)
-
-        values = tf.reshape(values, self.exp_shape)
+            values = tf.reshape(values, (*self.exp_shape, values.shape[1]))
+            if inclusive:
+                values = tf.reduce_sum(values, axis=-1)
 
         if self.selections:
             values = values[self.selections]

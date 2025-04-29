@@ -74,6 +74,8 @@ class Basemodel(PhysicsModel):
     def __init__(self, indata, key):
         super().__init__(indata, key)
         self.channel_info = indata.channel_info
+        for i, c in self.channel_info.items():
+            c["processes"] = indata.procs
 
 
 class Channelmodel(PhysicsModel):
@@ -86,16 +88,21 @@ class Channelmodel(PhysicsModel):
         indata,
         key,
         channel,
-        *args,
+        processes=[],
         **kwargs,
     ):
         super().__init__(indata, key)
 
-        self.term = helpers.Term(indata, channel, *args, **kwargs)
+        self.term = helpers.Term(indata, channel, processes, **kwargs)
 
         channel_info = indata.channel_info[channel]
 
-        self.channel_info = {channel: {"axes": self.term.channel_axes}}
+        self.channel_info = {
+            channel: {
+                "axes": self.term.channel_axes,
+                "processes": processes if len(processes) else indata.procs,
+            }
+        }
 
         self.has_data = not channel_info["masked"]
 
@@ -147,7 +154,7 @@ class Select(Channelmodel):
         """
 
         if len(args) and ":" not in args[0]:
-            procs = [p for p in args[1].split(",") if p != "None"]
+            procs = [p for p in args[0].split(",") if p != "None"]
         else:
             procs = []
 
@@ -166,9 +173,9 @@ class Select(Channelmodel):
             key,
             channel,
             procs,
-            axis_selection,
-            axes_rebin,
-            axes_sum,
+            selections=axis_selection,
+            rebin_axes=axes_rebin,
+            sum_axes=axes_sum,
         )
 
     def compute(self, params, observables):

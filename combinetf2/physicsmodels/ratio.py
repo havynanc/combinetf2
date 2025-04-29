@@ -164,10 +164,7 @@ class Ratio(PhysicsModel):
         return num / den
 
     def compute_flat_per_process(self, params, observables):
-        num = self.num.select(observables, inclusive=False)
-        den = self.den.select(observables, inclusive=False)
-
-        return num / den
+        return self.compute_flat(params, observables)
 
 
 class Normratio(Ratio):
@@ -185,12 +182,4 @@ class Normratio(Ratio):
         den = self.den.select(observables, normalize=True, inclusive=True)
         exp = num / den
         exp = tf.reshape(exp, [-1])
-        return exp
-
-    def compute_flat_per_process(self, params, observables):
-        num = self.num.select(observables, normalize=True, inclusive=False)
-        den = self.den.select(observables, normalize=True, inclusive=False)
-        exp = num / den
-        flat_shape = (-1, exp.shape[-1])
-        exp = tf.reshape(exp, flat_shape)
         return exp
