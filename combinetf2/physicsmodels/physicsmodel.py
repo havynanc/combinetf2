@@ -66,7 +66,61 @@ class PhysicsModel:
         return output, variances_output, cov_output
 
 
-class BasemodelChannel(PhysicsModel):
+class Basemodel(PhysicsModel):
+    """
+    A class to output histograms without any transformation, can be used as base class to inherit custom physics models from.
+    """
+
+    def __init__(self, indata, key):
+        super().__init__(indata, key)
+        self.channel_info = indata.channel_info
+
+
+class Channelmodel(PhysicsModel):
+    """
+    Abstract physics model to process a specific channel
+    """
+
+    def __init__(
+        self,
+        indata,
+        key,
+        channel,
+        *args,
+        **kwargs,
+    ):
+        super().__init__(indata, key)
+
+        self.term = helpers.Term(indata, channel, *args, **kwargs)
+
+        channel_info = indata.channel_info[channel]
+
+        self.channel_info = {channel: {"axes": self.term.channel_axes}}
+
+        self.has_data = not channel_info["masked"]
+
+    def compute(self, params, observables):
+        return observables
+
+    def compute_per_process(self, params, observables):
+        return self.compute(params, observables)
+
+    def compute_flat(self, params, observables):
+        exp = self.term.select(observables, inclusive=True)
+        exp = self.compute(params, exp)
+        exp = tf.reshape(exp, [-1])  # flatten again
+        return exp
+
+    def compute_flat_per_process(self, params, observables):
+        exp = self.term.select(observables, inclusive=False)
+        exp = self.compute_per_process(params, exp)
+        # flatten again
+        flat_shape = (-1, exp.shape[-1])
+        exp = tf.reshape(exp, flat_shape)
+        return exp
+
+
+class Select(Channelmodel):
     """
     A class to output histograms without any transformation for a given channel, can be used as base class to inherit custom physics models from.
     """
@@ -75,31 +129,13 @@ class BasemodelChannel(PhysicsModel):
         self,
         indata,
         key,
-        channel,
-        processes=[],
-        selections={},
-        rebin_axes={},
-        sum_axes=[],
+        *args,
+        **kwargs,
     ):
-        self.key = key
-
-        self.term = helpers.Term(
-            indata,
-            channel,
-            processes,
-            selections,
-            rebin_axes,
-            sum_axes,
-        )
-
-        channel_info = indata.channel_info[channel]
-
-        self.channel_info = {channel: {"axes": self.term.channel_axes}}
-
-        self.has_data = not channel_info["masked"]
+        super().__init__(indata, key, *args, **kwargs)
 
     @classmethod
-    def parse_args(cls, indata, *args):
+    def parse_args(cls, indata, channel, *args):
         """
         parsing the input arguments into the ratio constructor, is has to be called as
         -m BaseModelChannel <ch num>
@@ -110,13 +146,13 @@ class BasemodelChannel(PhysicsModel):
         Axes selections are optional.
         """
 
-        if len(args) > 1 and ":" not in args[1]:
+        if len(args) and ":" not in args[0]:
             procs = [p for p in args[1].split(",") if p != "None"]
         else:
             procs = []
 
         # find axis selections
-        if any(a for a in args if ":" in a):
+        if any(":" in a for a in args):
             sel_args = [a for a in args if ":" in a][0]
         else:
             sel_args = "None:None"
@@ -128,7 +164,7 @@ class BasemodelChannel(PhysicsModel):
         return cls(
             indata,
             key,
-            args[0],
+            channel,
             procs,
             axis_selection,
             axes_rebin,
@@ -140,21 +176,3 @@ class BasemodelChannel(PhysicsModel):
 
     def compute_per_process(self, params, observables):
         return self.compute(params, observables)
-
-    def compute_flat(self, params, observables):
-        exp = self.term.select(observables, inclusive=True)
-        return exp
-
-    def compute_flat_per_process(self, params, observables):
-        exp = self.term.select(observables, inclusive=False)
-        return exp
-
-
-class Basemodel(PhysicsModel):
-    """
-    A class to output histograms without any transformation, can be used as base class to inherit custom physics models from.
-    """
-
-    def __init__(self, indata, key):
-        super().__init__(indata, key)
-        self.channel_info = indata.channel_info

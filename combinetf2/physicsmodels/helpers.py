@@ -11,7 +11,7 @@ from combinetf2 import tfhelpers
 # dictionary with class name and the corresponding filename where it is defined
 baseline_models = {
     "Basemodel": "physicsmodel",
-    "BasemodelChannel": "physicsmodel",
+    "Select": "physicsmodel",
     "Project": "project",
     "Normalize": "project",
     "Ratio": "ratio",

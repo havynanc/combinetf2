@@ -172,7 +172,7 @@ jobs:
           --saveHists --saveHistsPerProcess --computeHistErrors --computeHistErrorsPerProcess
           --computeHistCov --computeHistImpacts --computeVariations
           -m Basemodel
-          -m BasemodelChannel ch0 x:rebin(-5,-2,2,5)
+          -m Select ch0 'x:rebin(-5,-2,2,5)'
           -m Project ch1 a 
           -m Project ch1 b 
           -m Project ch0_masked 

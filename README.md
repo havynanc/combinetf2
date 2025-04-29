@@ -113,10 +113,12 @@ Physics models are used to perform transformation on the parameters and observab
 Baseline models are defined in `combinetf2/physicsmodels/` and can be called in `combinetf2_fit` with the `--PhysicsModel` or `-m` option e.g. `-m Project ch1 a -m Project ch1 b`. 
 The first argument is the physics model name followed by arguments passed into the physics model.
 Available physics models are
- * "project": To project histograms to lower dimensions, respecting the covariance matrix across bins.
- * "normalize": To normalize histograms to their sum (and project them) e.g. to compute normalized differential cross sections.
- * "ratio": To compute the ratio between channels, processes, or histogram bins.
- * "normratio": To compute the ratio of normalized histograms.
+ * "Basemodel": Process histograms of all all bins in all channels.
+ * "Select": To select histograms of a channel, and perform a selection of processes and bins, supporting rebinning.
+ * "Project": To project histograms to lower dimensions, respecting the covariance matrix across bins.
+ * "Normalize": To normalize histograms to their sum (and project them) e.g. to compute normalized differential cross sections.
+ * "Ratio": To compute the ratio between channels, processes, or histogram bins.
+ * "Normratio": To compute the ratio of normalized histograms.
 Custom physics models can be used to make the desired transformation.
 They can be specified with the full path to the custom model e.g. '-m custom_modesl.MyCustomModel'. 
 The path must be accessable from your `$PYTHONPATH` variable and an `__ini__.py` file must be in the directory.

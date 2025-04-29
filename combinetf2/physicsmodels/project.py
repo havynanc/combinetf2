@@ -1,9 +1,9 @@
 import tensorflow as tf
 
-from combinetf2.physicsmodels.physicsmodel import BasemodelChannel
+from combinetf2.physicsmodels.physicsmodel import Channelmodel
 
 
-class Project(BasemodelChannel):
+class Project(Channelmodel):
     """
     A class to project a histogram to lower dimensions.
     The normalization is done to the integral of all processes or data.
