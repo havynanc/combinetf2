@@ -319,6 +319,11 @@ def parseArgs():
     parser.add_argument(
         "--unfoldedXsec", action="store_true", help="Plot unfolded cross sections"
     )
+    parser.add_argument(
+        "--noBinWidthNorm",
+        action="store_true",
+        help="Do not normalize bin yields by bin width",
+    )
 
     args = parser.parse_args()
 
@@ -974,13 +979,19 @@ def make_plots(
         ]
         other_axes = [a for a in axes if a not in selection_axes]
 
+        ts = getattr(config, "translate_selection", {})
+
         for bins in itertools.product(*selection_bins):
             idxs = {a.name: i for a, i in zip(selection_axes, bins)}
+            # next two dictionaries are built to print the bin values in the plot
+            # if the axis name is not in the configuration dictionary, just use the bin index
+            # (might print the two bin edges, but usually the bin index is enough)
             idxs_centers = {
                 a.name: (
                     a.centers[i]
                     if isinstance(a, (hist.axis.Regular, hist.axis.Variable))
-                    else a.edges[i]
+                    and a.name in ts
+                    else a.edges[i] if a.name in ts else i
                 )
                 for a, i in zip(selection_axes, bins)
             }
@@ -1013,12 +1024,13 @@ def make_plots(
                 hdown = None
                 hup = None
 
-            ts = getattr(config, "translate_selection", {})
-
             selection = []
             for a in selection_axes:
                 n = a.name
-                sel = ts.get(n, lambda x: f"{n}={x}")
+                if n in ts:
+                    sel = ts.get(n, lambda x: f"{n}={x}")
+                else:
+                    sel = lambda x: f"{n} bin = {int(x)}"
 
                 nparams = len(inspect.signature(sel).parameters)
 
@@ -1215,6 +1227,7 @@ def main():
                         instance_key.startswith(x)
                         for x in ["Basemodel", "Project", "Norm"]
                     )
+                    and not args.noBinWidthNorm
                     else None
                 )
 
