@@ -104,13 +104,13 @@ def get_pulls_and_constraints(fitresult, prefit=False, asym=False):
     return labels, pulls, constraints
 
 
-def get_postfit_hist_cov(fitresult, channels=None):
+def get_postfit_hist_cov(fitresult, physics_model="Basemodel", channels=None):
     """
     Return postfit histogram and covariance matrix from selected channels (all if channel is None)
     """
     print(f"Load postfit histogram and covariance matrix")
 
-    result = fitresult["physics_models"]["Basemodel"]
+    result = fitresult["physics_models"][physics_model]
 
     cov = result["hist_postfit_inclusive_cov"].get().values()
     if channels is not None:
