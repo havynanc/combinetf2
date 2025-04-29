@@ -15,7 +15,6 @@ Or with optional dependencies to use the plotting scripts
 pip install combinetf2[plotting]
 ```
 
-
 ### Get the code
 
 If you want to have more control or want to develop CombineTF2 you can check it our as (sub) module.
@@ -67,6 +66,7 @@ Setting up environment variables and python path (to be done every time before r
 source setup.sh
 ```
 
+
 ## Making the input tensor
 An example can be found in ```tests/make_tensor.py -o test_tensor.hdf5```. 
 
@@ -110,10 +110,11 @@ Plotting the histograms that are actually used in the fit, supporting adding of 
 combinetf2_plor_inputdata.py test_tensor.hdf5 -o results/fitresult.hdf5
 ```
 
+
 ## Run the fit
 For example:
 ```bash
-combinetf2_fit test_tensor.hdf5 -o results/fitresult.hdf5 -t 0 --doImpacts --globalImpacts --binByBinStat --saveHists --computeHistErrors
+combinetf2_fit test_tensor.hdf5 -o results/fitresult.hdf5 -t 0 --doImpacts --globalImpacts --saveHists --computeHistErrors
 ```
 
 ### Bin-by-bin statistical uncertainties
@@ -124,19 +125,19 @@ Physics models are used to perform transformation on the parameters and observab
 Baseline models are defined in `combinetf2/physicsmodels/` and can be called in `combinetf2_fit` with the `--PhysicsModel` or `-m` option e.g. `-m Select ch0 -m Project ch1 b`. 
 The first argument is the physics model name followed by arguments passed into the physics model.
 Available physics models are
- * "Basemodel": Compute histograms in all bins and all channels.
- * "Select": To select histograms of a channel, and perform a selection of processes and bins, supporting rebinning.
- * "Project": To project histograms to lower dimensions, respecting the covariance matrix across bins.
- * "Normalize": To normalize histograms to their sum (and project them) e.g. to compute normalized differential cross sections.
- * "Ratio": To compute the ratio between channels, processes, or histogram bins.
- * "Normratio": To compute the ratio of normalized histograms.
+ * `Basemodel`: Compute histograms in all bins and all channels.
+ * `Select`: To select histograms of a channel, and perform a selection of processes and bins, supporting rebinning.
+ * `Project`: To project histograms to lower dimensions, respecting the covariance matrix across bins.
+ * `Normalize`: To normalize histograms to their sum (and project them) e.g. to compute normalized differential cross sections.
+ * `Ratio`: To compute the ratio between channels, processes, or histogram bins.
+ * `Normratio`: To compute the ratio of normalized histograms.
 
 Models can be specified in the comand line and can feature different parsing syntax. 
-A convension is set up for parsing process and axes selections. The command line string is expected to have a specific format. For selecting processes a comma separated list, e.g. <process_0>,<process_1>...
+A convension is set up for parsing process and axes selections (e.g. in the `Select` and `Ratio` models). For selecting processes a comma separated list, e.g. <process_0>,<process_1>...
 and for axes selecitons <axis_name_0>:<selection_0>,<axis_name_1>:<selection_1>,... i.e. a comma separated list of axis names and selections separated by ":". 
 Selections can be 
 - integers for bin indices, 
-- `slice()' objects e.g. `slice(0j,2,2)` where `j` can be used to index by complex number, meaing indexing the bin by its axis value,
+- `slice()` objects e.g. `slice(0j,2,2)` where `j` can be used to index by complex number, meaing indexing the bin by its axis value,
 - `sum` to sum all bins of an axis,
 - `rebin()` to rebin an axis with new edges,
 - `None:None` for whch `None` is returned, indicating no selection
@@ -146,12 +147,19 @@ Custom physics models can be used to make the desired transformation.
 They can be specified with the full path to the custom model e.g. `-m custom_models.MyCustomModel`. 
 The path must be accessable from your `$PYTHONPATH` variable and an `__ini__.py` file must be in the directory.
 
+
 ## Fit diagnostics
 
-Nuisance parameter impacts:
+Parameter values and their uncertainties:
+```bash
+combinetf2_print_pulls_and_constraints.py results/fitresult.hdf5
+```
+
+Uncertainty breakdown for parameter of interest, sometimes referred to nuisance parameter impacts:
 ```bash
 combinetf2_print_impacts results/fitresult.hdf5
 ```
+
 
 ## Contributing to the code
 
