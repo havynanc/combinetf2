@@ -99,6 +99,17 @@ The input tensor can also be generated from the input used for the [Combine tool
 This script is mainly intented for user that have these inputs already and want's to perform some cross checks.
 Only basic functionality is supported and for complex models the conversion can take long, it is thus recommended to directly produce the input tensor using the provided interface as explained above. 
 
+### Diagnostics
+Scripts for diagnosing the input tensor are available:
+Running some checks for empty bins etc.
+```bash
+debug_inputdata.py test_tensor.hdf5
+```
+Plotting the histograms that are actually used in the fit, supporting adding of systematic variations in the plot:
+```bash
+combinetf2_plor_inputdata.py test_tensor.hdf5 -o results/fitresult.hdf5
+```
+
 ## Run the fit
 For example:
 ```bash
@@ -106,21 +117,33 @@ combinetf2_fit test_tensor.hdf5 -o results/fitresult.hdf5 -t 0 --doImpacts --glo
 ```
 
 ### Bin-by-bin statistical uncertainties
-Bin-by-bin statistical uncertainties on the templates can be added at runtime using the `--binByBinStat` option.  The Barlow-Beeston lite method is used to add implicit nuisance parameters for each template bin.  By default this is implemented using a gamma distribution for the probability density, but Gaussian uncertainties can also be used with `--binByBinStatType normal`.
+Bin-by-bin statistical uncertainties on the templates are added by default and can be disabled at runtime using the `--noBinByBinStat` option. The Barlow-Beeston lite method is used to add implicit nuisance parameters for each template bin.  By default this is implemented using a gamma distribution for the probability density, but Gaussian uncertainties can also be used with `--binByBinStatType normal`.
 
 ### Physics models
 Physics models are used to perform transformation on the parameters and observables (the histogram bins in the (masked) channels). 
-Baseline models are defined in `combinetf2/physicsmodels/` and can be called in `combinetf2_fit` with the `--PhysicsModel` or `-m` option e.g. `-m Project ch1 a -m Project ch1 b`. 
+Baseline models are defined in `combinetf2/physicsmodels/` and can be called in `combinetf2_fit` with the `--PhysicsModel` or `-m` option e.g. `-m Select ch0 -m Project ch1 b`. 
 The first argument is the physics model name followed by arguments passed into the physics model.
 Available physics models are
- * "Basemodel": Process histograms of all all bins in all channels.
+ * "Basemodel": Compute histograms in all bins and all channels.
  * "Select": To select histograms of a channel, and perform a selection of processes and bins, supporting rebinning.
  * "Project": To project histograms to lower dimensions, respecting the covariance matrix across bins.
  * "Normalize": To normalize histograms to their sum (and project them) e.g. to compute normalized differential cross sections.
  * "Ratio": To compute the ratio between channels, processes, or histogram bins.
  * "Normratio": To compute the ratio of normalized histograms.
+
+Models can be specified in the comand line and can feature different parsing syntax. 
+A convension is set up for parsing process and axes selections. The command line string is expected to have a specific format. For selecting processes a comma separated list, e.g. <process_0>,<process_1>...
+and for axes selecitons <axis_name_0>:<selection_0>,<axis_name_1>:<selection_1>,... i.e. a comma separated list of axis names and selections separated by ":". 
+Selections can be 
+- integers for bin indices, 
+- `slice()' objects e.g. `slice(0j,2,2)` where `j` can be used to index by complex number, meaing indexing the bin by its axis value,
+- `sum` to sum all bins of an axis,
+- `rebin()` to rebin an axis with new edges,
+- `None:None` for whch `None` is returned, indicating no selection
+Multiple selection per axis can be specified, e.g. `x:slice(2,8),x:sum`.
+
 Custom physics models can be used to make the desired transformation.
-They can be specified with the full path to the custom model e.g. '-m custom_modesl.MyCustomModel'. 
+They can be specified with the full path to the custom model e.g. `-m custom_models.MyCustomModel`. 
 The path must be accessable from your `$PYTHONPATH` variable and an `__ini__.py` file must be in the directory.
 
 ## Fit diagnostics

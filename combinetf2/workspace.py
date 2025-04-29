@@ -33,12 +33,12 @@ def getImpactsAxesGrouped(indata, bin_by_bin_stat=False):
 
 
 def get_name_label_expected_hists(
-    name=None, label=None, prefit=False, variations=False, process_axis=None
+    name=None, label=None, prefit=False, variations=False, process_axis=False
 ):
     if name is None:
         name = "hist"
         name += "_prefit" if prefit else "_postfit"
-        if process_axis is None:
+        if process_axis is False:
             name += "_inclusive"
         if variations:
             name += "_variations"
@@ -46,7 +46,7 @@ def get_name_label_expected_hists(
     if label is None:
         label = "expected number of events, "
         label = f"prefit {label}" if prefit else f"postfit {label}"
-        if process_axis is None:
+        if process_axis is False:
             label += "for all processes combined, "
         if variations:
             label += "with variations, "
