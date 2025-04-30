@@ -627,8 +627,15 @@ class Fitter:
             expected, dexpdx = compute_derivatives(dvars)
             pdexpdbeta = None
 
-        cov_dexpdx = tf.matmul(self.cov, dexpdx, transpose_b=True)
-        expcov = dexpdx @ cov_dexpdx
+        if compute_cov or (compute_global_impacts and self.binByBinStat):
+            cov_dexpdx = tf.matmul(self.cov, dexpdx, transpose_b=True)
+
+        if compute_cov:
+            expcov = dexpdx @ cov_dexpdx
+        else:
+            # matrix free calculation
+            expvar_flat = tf.einsum("ij,jk,ik->i", dexpdx, self.cov, dexpdx)
+            expcov = None
 
         if pdexpdbeta is not None:
             with tf.GradientTape(watch_accessed_variables=False) as t2:
@@ -660,9 +667,15 @@ class Fitter:
                 )
 
             pd2ldbeta2_pdexpdbeta = pd2ldbeta2.solve(pdexpdbeta, adjoint_arg=True)
-            expcov += pdexpdbeta @ pd2ldbeta2_pdexpdbeta
 
-        expvar_flat = tf.linalg.diag_part(expcov)
+            if compute_cov:
+                expcov += pdexpdbeta @ pd2ldbeta2_pdexpdbeta
+            else:
+                expvar_flat += tf.einsum("ik,ki->i", pdexpdbeta, pd2ldbeta2_pdexpdbeta)
+
+        if compute_cov:
+            expvar_flat = tf.linalg.diag_part(expcov)
+
         expvar = tf.reshape(expvar_flat, tf.shape(expected))
 
         if compute_global_impacts:
