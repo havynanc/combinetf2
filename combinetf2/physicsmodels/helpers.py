@@ -77,7 +77,7 @@ def parse_axis_selection(selection_str):
             elif v == "sum":
                 sum_axes.append(k)
             elif v.startswith("rebin"):
-                arr = np.array(v[6:-1].split(","), dtype=np.float32).tolist()
+                arr = np.fromstring(v[6:-1], sep=",", dtype=np.float32)
                 rebin_axes[k] = arr
             elif v == "None":
                 sl = slice(None)
@@ -161,29 +161,24 @@ class Term:
                     h = h[{k: slice(s.start, s.stop, hist.rebin(s.step))}]
 
         self.segment_ids = {}
-        if rebin_axes:
-            hNew = hh.rebinHistMultiAx(h, rebin_axes.keys(), rebin_axes.values())
+        self.num_segments = {}
+        for n, new_edges in rebin_axes.items():
+            old_edges = h.axes[n].edges
+            h = hh.rebinHist(h, n, new_edges)
+            segment_ids = np.zeros_like(old_edges[:-1])
+            segment = -1
+            for idx, v in enumerate(old_edges[:-1]):
+                if any(np.isclose(v, x) for x in new_edges):
+                    segment += 1
 
-            for n in rebin_axes.keys():
-                old_edges = h.axes[n].edges
-                new_edges = hNew.axes[n].edges
-                segment_ids = np.zeros_like(old_edges[:-1])
-                segment = -1
-                for idx, v in enumerate(old_edges[:-1]):
-                    if any(np.isclose(v, x) for x in new_edges):
-                        segment += 1
+                segment_ids[idx] = segment
 
-                    segment_ids[idx] = segment
+            if not np.isclose(new_edges[-1], old_edges[-1]):
+                segment_ids[segment_ids == segment] = -1
 
-                if new_edges[-1] != old_edges[-1]:
-                    segment_ids[segment_ids == segment] = -1
-
-                self.segment_ids = {
-                    hNew.axes.name.index(n): tf.constant(segment_ids, dtype=tf.int64)
-                }
-                self.num_segments = {hNew.axes.name.index(n): int(max(segment_ids) + 1)}
-
-            h = hNew
+            key = h.axes.name.index(n)
+            self.segment_ids[key] = tf.constant(segment_ids, dtype=tf.int64)
+            self.num_segments[key] = int(max(segment_ids) + 1)
 
         channel_axes = [a for a in h.axes if a.name not in sum_axes]
 
