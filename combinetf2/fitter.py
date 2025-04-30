@@ -632,7 +632,7 @@ class Fitter:
             expcov = dexpdx @ cov_dexpdx
         else:
             # matrix free calculation
-            expvar_flat = tf.einsum("im,mn,in->i", dexpdx, self.cov, dexpdx)
+            expvar_flat = tf.einsum("ij,jk,ik->i", dexpdx, self.cov, dexpdx)
             expcov = None
 
         if pdexpdbeta is not None:
@@ -669,7 +669,7 @@ class Fitter:
             if compute_cov:
                 expcov += pdexpdbeta @ pd2ldbeta2_pdexpdbeta
             else:
-                expvar_flat += tf.einsum("ip,ip->i", pdexpdbeta, pd2ldbeta2_pdexpdbeta)
+                expvar_flat += tf.einsum("ik,ki->i", pdexpdbeta, pd2ldbeta2_pdexpdbeta)
 
         if compute_cov:
             expvar_flat = tf.linalg.diag_part(expcov)
