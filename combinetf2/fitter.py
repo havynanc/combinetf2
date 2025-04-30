@@ -627,8 +627,10 @@ class Fitter:
             expected, dexpdx = compute_derivatives(dvars)
             pdexpdbeta = None
 
-        if compute_cov:
+        if compute_cov or (compute_global_impacts and self.binByBinStat):
             cov_dexpdx = tf.matmul(self.cov, dexpdx, transpose_b=True)
+
+        if compute_cov:
             expcov = dexpdx @ cov_dexpdx
         else:
             # matrix free calculation
