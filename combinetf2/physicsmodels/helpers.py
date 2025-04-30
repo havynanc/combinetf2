@@ -154,7 +154,11 @@ class Term:
         # make dummy histogram to perform rebinning
         h = hist.Hist(*channel_axes)
         if self.selections:
-            h = h[selections]
+            for k, s in selections.items():
+                if s.step is None:
+                    h = h[{k: s}]
+                else:
+                    h = h[{k: slice(s.start, s.stop, hist.rebin(s.step))}]
 
         self.segment_ids = {}
         if rebin_axes:
