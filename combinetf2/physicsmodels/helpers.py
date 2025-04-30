@@ -60,7 +60,9 @@ def parse_axis_selection(selection_str):
     sum_axes = []
     rebin_axes = {}
     if selection_str != "None:None":
-        for s in re.split(r",(?![^()]*\))", selection_str):
+        selections = re.split(r",(?![^()]*\))", selection_str)
+        for s in selections:
+            sl = None
             k, v = s.split(":")
             if "slice" in v:
                 slice_args = []
@@ -74,18 +76,25 @@ def parse_axis_selection(selection_str):
                 sl = slice(*slice_args)
             elif v == "sum":
                 sum_axes.append(k)
-                sl = slice(None)
             elif v.startswith("rebin"):
                 arr = np.array(v[6:-1].split(","), dtype=np.float32).tolist()
                 rebin_axes[k] = arr
-                sl = slice(None)
             elif v == "None":
                 sl = slice(None)
             else:
-                sl = slice(int(v), int(v) + 1)
+                if "j" in v:
+                    x = complex(v)
+                else:
+                    x = int(v)
+                sl = slice(x, x + 1)
                 # always sum/reduce this axis if only one bin is selected
                 sum_axes.append(k)
-            sel[k] = sl
+            if sl is not None:
+                sel[k] = sl
+
+        for s in selections:
+            if k not in sel.keys():
+                sel[k] = slice(None)
 
     return sel, rebin_axes, sum_axes
 
