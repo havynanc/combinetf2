@@ -170,13 +170,14 @@ class TensorWriter:
 
         if hasattr(h, "axes"):
             axes = [a for a in h.axes]
+            channel_axes = self.channels[channel]["axes"]
 
-            if axes != self.channels[channel]["axes"]:
+            if not all(np.allclose(a, axes[i]) for i, a in enumerate(channel_axes)):
                 raise RuntimeError(
                     f"""
-                    Histogram axes different from channel axes of channel {channel}
-                    \nHistogram axes: {axes}
-                    \nChannel axes: {self.channels[channel]["axes"]}
+                    Histogram axes different have different edges from channel axes of channel {channel}
+                    \nHistogram axes: {[a.edges for a in axes]}
+                    \nChannel axes: {[a.edges for a in channel_axes]}
                     """
                 )
         else:

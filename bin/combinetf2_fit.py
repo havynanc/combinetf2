@@ -248,7 +248,7 @@ def make_parser():
         "--physicsModel",
         nargs="+",
         action="append",
-        default=[["Basemodel"]],
+        default=[],
         help="""
         add physics model to perform transformations on observables for the prefit and postfit histograms, 
         specifying the model defined in combinetf2/physicsmodels/ followed by arguments passed in the model __init__, 
@@ -352,7 +352,7 @@ def save_hists(args, models, fitter, ws, prefit=True, profile=False):
                 model,
                 exp,
                 var=aux[0],
-                process_axis=fitter.indata.axis_procs,
+                process_axis=True,
                 prefit=prefit,
             )
 
@@ -549,6 +549,9 @@ def main():
     ifitter = fitter.Fitter(indata, args)
 
     # physics models for observables and transformations
+    if len(args.physicsModel) == 0:
+        # if no model is explicitly added, fall back to Basemodel
+        args.physicsModel = [["Basemodel"]]
     models = []
     for margs in args.physicsModel:
         model = ph.instance_from_class(margs[0], indata, *margs[1:])

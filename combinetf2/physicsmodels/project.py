@@ -1,9 +1,9 @@
 import tensorflow as tf
 
-from combinetf2.physicsmodels.physicsmodel import PhysicsModelChannel
+from combinetf2.physicsmodels.physicsmodel import Channelmodel
 
 
-class Project(PhysicsModelChannel):
+class Project(Channelmodel):
     """
     A class to project a histogram to lower dimensions.
     The normalization is done to the integral of all processes or data.
@@ -44,7 +44,7 @@ class Project(PhysicsModelChannel):
 
         self.has_data = not info.get("masked", False)
 
-        self.channel_info = {channel: {"axes": hist_axes}}
+        self.channel_info = {channel: {"axes": hist_axes, "processes": indata.procs}}
 
     def project(self, values):
         exp = tf.reduce_sum(values, axis=self.proj_idxs)

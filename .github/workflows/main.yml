@@ -171,14 +171,16 @@ jobs:
           -t 0 --doImpacts --globalImpacts
           --saveHists --saveHistsPerProcess --computeHistErrors --computeHistErrorsPerProcess
           --computeHistCov --computeHistImpacts --computeVariations
+          -m Basemodel
+          -m Select ch0 'x:rebin(-5,-2,2,5)'
           -m Project ch1 a 
           -m Project ch1 b 
           -m Project ch0_masked 
           -m Normalize ch0 x
           -m Ratio ch0 ch0 sig sig,bkg
-          -m Ratio ch0 ch1 'None:None' 'b:slice(0,2)'
-          -m Ratio ch0 ch1 'x:slice(None,None,2)' 'a:slice(None),b:slice(None)'
-          -m Normratio ch1 ch1 sig sig,bkg 'b:slice(None)' 'b:2'
+          -m Ratio ch0 ch1 'None:None' 'b:slice(0,2),b:sum'
+          -m Ratio ch0 ch1 'x:slice(None,None,2),x:sum' 'a:sum,b:sum'
+          -m Normratio ch1 ch1 sig sig,bkg 'b:sum' 'b:2'
           -m tests.param_model.Param 'slope_signal' 1 0
 
       - name: sparse tensor fit 
