@@ -110,6 +110,10 @@ def get_postfit_hist_cov(fitresult, physics_model="Basemodel", channels=None):
     """
     print(f"Load postfit histogram and covariance matrix")
 
+    if physics_model not in fitresult["physics_models"].keys():
+        raise IOError(
+            f"{physics_model} not found in fitresults, available models are {fitresult["physics_models"].keys()}"
+        )
     result = fitresult["physics_models"][physics_model]
 
     cov = result["hist_postfit_inclusive_cov"].get().values()
