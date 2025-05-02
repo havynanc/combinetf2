@@ -247,7 +247,11 @@ def parseArgs():
         help="Invert the order of the axes when plotting",
     )
     parser.add_argument(
-        "--noChisq", action="store_true", help="skip printing chisq on plot"
+        "--chisq",
+        type=str,
+        default="automatic",
+        choices=["automatic", "saturated", "linear", " ", "none", None],
+        help="Type of chi2 to print on plot (saturated from fit likelihood. linear from observables, or none) 'automatic' means pick saturated for basemodel and otherwise linear",
     )
     parser.add_argument(
         "--dataName", type=str, default="Data", help="Data name for plot labeling"
@@ -407,10 +411,6 @@ def make_plot(
     histtype_data = "errorbar"
     histtype_mc = "fill" if not args.unfoldedXsec else "errorbar"
 
-    # if any(x in axes_names for x in ["ptVgen", "absYVgen", "helicity"]):
-    #     histtype_data = "step"
-    #     histtype_mc = "errorbar"
-
     if len(h_inclusive.axes) > 1:
         if args.invertAxes:
             logger.info("invert eta order")
@@ -519,6 +519,40 @@ def make_plot(
             binwnorm=binwnorm,
             ax=ax1,
             zorder=1,
+            flow="none",
+        )
+
+    linestyles = [
+        "--",
+        ":",
+        "-.",
+    ]
+    linewidth = 2
+    if hup is not None:
+        hep.histplot(
+            hup,
+            histtype="step",
+            color=varColors,
+            linestyle=linestyles[: len(hup)],
+            yerr=False,
+            linewidth=linewidth,
+            label=varLabels,
+            ax=ax1,
+            flow="none",
+        )
+    if (
+        hdown is not None
+        and any(h is not None for h in hdown)
+        and len(args.varOneSided) == 0
+    ):
+        hep.histplot(
+            hdown,
+            histtype="step",
+            color=varColors,
+            linestyle=linestyles[: len(hdown)],
+            yerr=False,
+            linewidth=linewidth,
+            ax=ax1,
             flow="none",
         )
 
@@ -725,7 +759,7 @@ def make_plot(
                     label=label_unc,
                 )
 
-        if hup is not None:
+        if hup is not None and any(h is not None for h in hup):
             linewidth = 2
             scaleVariation = [
                 args.scaleVariation[i] if i < len(args.scaleVariation) else 1
@@ -747,21 +781,26 @@ def make_plot(
                         hdiff = hh.scaleHist(hdiff, scaleVariation[i])
                         hd = hh.addHists(hdiff, h_inclusive)
 
+                if diff:
+                    op = lambda h, hI=h_inclusive: hh.addHists(h, hI, scale2=-1)
+                else:
+                    op = lambda h, hI=h_inclusive: hh.divideHists(
+                        h, hI, cutoff=0.01, rel_unc=True
+                    )
+
                 if varOneSided[i]:
-                    hvars = hh.divideHists(hu, h_inclusive, cutoff=0.01, rel_unc=True)
-                    linestyle = "-"
+                    hvars = op(hu)
                 else:
                     hvars = [
-                        hh.divideHists(hu, h_inclusive, cutoff=0.01, rel_unc=True),
-                        hh.divideHists(hd, h_inclusive, cutoff=0.01, rel_unc=True),
+                        op(hu),
+                        op(hd),
                     ]
-                    linestyle = ["-", "--"]
 
                 hep.histplot(
                     hvars,
                     histtype="step",
                     color=varColors[i],
-                    linestyle=linestyle,
+                    linestyle=linestyles[i],
                     yerr=False,
                     linewidth=linewidth,
                     label=varLabels[i] if varOneSided[i] else None,
@@ -787,7 +826,7 @@ def make_plot(
         text_pieces.extend(selection)
 
     if chi2[0] is not None and data:
-        p_val = int(round(scipy.stats.chi2.sf(chi2[0], chi2[1]) * 100))
+        p_val = int(np.round(scipy.stats.chi2.sf(chi2[0], chi2[1]) * 100))
         if saturated_chi2:
             chi2_name = r"$\mathit{\chi}_{\mathrm{sat.}}^2/\mathit{ndf}$"
         else:
@@ -798,7 +837,7 @@ def make_plot(
         #     rf"$= {round(chi2[0],1)}/{chi2[1]}\ (\mathit{{p}}={p_val}\%)$",
         # ]
         chi2_text = [
-            rf"{chi2_name} = ${round(chi2[0],1)}/{chi2[1]}$",
+            rf"{chi2_name} = ${np.round(chi2[0],1)}/{chi2[1]}$",
             rf"$(\mathit{{p}}={p_val}\%)$",
         ]
 
@@ -1017,12 +1056,22 @@ def make_plots(
             else:
                 h_data_stat = None
 
-            if hist_var is not None:
-                hdown = [h[idxs] for h in hists_down]
-                hup = [h[idxs] for h in hists_up]
+            if hists_up is not None:
+                hup = [
+                    (
+                        h[{k.replace("Sig", ""): v for k, v in idxs.items()}]
+                        if h is not None
+                        else None
+                    )
+                    for h in hists_up
+                ]
+            else:
+                hup = None
+
+            if hists_down is not None:
+                hdown = [h[idxs] if h is not None else None for h in hists_down]
             else:
                 hdown = None
-                hup = None
 
             selection = []
             for a in selection_axes:
@@ -1099,19 +1148,22 @@ def make_plots(
 
 
 def get_chi2(result, no_chi2=True, fittype="postfit"):
+    if no_chi2:
+        return None, None, False
+
     chi2_key = f"chi2_prefit" if fittype == "prefit" else "chi2"
     ndf_key = f"ndf_prefit" if fittype == "prefit" else "ndf"
-    if fittype == "postfit" and result.get("postfit_profile", False) and not no_chi2:
+    if fittype == "postfit" and result.get("postfit_profile", False):
         # use saturated likelihood test if relevant
         nllvalfull = result["nllvalfull"]
         satnllvalfull = result["satnllvalfull"]
         chi2 = 2.0 * (nllvalfull - satnllvalfull)
         ndf = result["ndfsat"]
         return chi2, ndf, True
-    elif chi2_key in result and not no_chi2:
+    elif chi2_key in result:
         return result[chi2_key], result[ndf_key], False
     else:
-        return None, None, False
+        raise RuntimeError(f"Result has no chi2, key {chi2_key} not found.")
 
 
 def main():
@@ -1194,15 +1246,21 @@ def main():
 
             instance = results[instance_key]
 
-            chi2, ndf, saturated_chi2 = get_chi2(instance, args.noChisq, fittype)
+            chi2, ndf, saturated_chi2 = get_chi2(
+                (
+                    fitresult
+                    if (instance_key == "Basemodel" and args.chisq != "linear")
+                    or args.chisq == "saturated"
+                    else instance
+                ),
+                args.chisq in [" ", "none", None],
+                fittype,
+            )
 
             for channel, result in instance["channels"].items():
                 if args.channels is not None and channel not in args.channels:
                     continue
                 logger.info(f"Make plot for {instance_key} in channel {channel}")
-
-                if chi2 is None:
-                    chi2, ndf, saturated_chi2 = get_chi2(result, args.noChisq, fittype)
 
                 info = channel_info.get(channel, {})
 
