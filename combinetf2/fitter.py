@@ -578,39 +578,44 @@ class Fitter:
 
         res_cov = pdresdx @ cov_dresdx
 
-        with tf.GradientTape(watch_accessed_variables=False) as t2:
-            t2.watch(self.ubeta)
-            with tf.GradientTape(watch_accessed_variables=False) as t1:
-                t1.watch(self.ubeta)
-                if profile:
-                    val = self._compute_loss(profile=profile)
-                else:
-                    # TODO this principle can probably be generalized to other parts of the code
-                    # to further reduce special cases
+        if pdresdbeta is not None:
+            with tf.GradientTape(watch_accessed_variables=False) as t2:
+                t2.watch(self.ubeta)
+                with tf.GradientTape(watch_accessed_variables=False) as t1:
+                    t1.watch(self.ubeta)
+                    if profile:
+                        val = self._compute_loss(profile=profile)
+                    else:
+                        # TODO this principle can probably be generalized to other parts of the code
+                        # to further reduce special cases
 
-                    # if not profiling, likelihood doesn't include the data contribution
-                    lc = self._compute_lc()
-                    _1, _2, beta = self._compute_yields_with_beta(
-                        profile=True, compute_norm=False, full=False
-                    )
-                    lbeta, _ = self._compute_lbeta(beta, profile=True)
-                    val = lc + lbeta
-            pdldbeta = t1.gradient(val, self.ubeta)
-        if self.externalCovariance:
-            pd2ldbeta2_matrix = t2.jacobian(pdldbeta, self.ubeta)
-            pd2ldbeta2 = tf.linalg.LinearOperatorFullMatrix(
-                pd2ldbeta2_matrix, is_self_adjoint=True
-            )
-        else:
-            # pd2ldbeta2 is diagonal, so we can use gradient instead of jacobian
-            pd2ldbeta2_diag = t2.gradient(pdldbeta, self.ubeta)
-            pd2ldbeta2 = tf.linalg.LinearOperatorDiag(
-                pd2ldbeta2_diag, is_self_adjoint=True
-            )
+                        # if not profiling, likelihood doesn't include the data contribution
+                        lc = self._compute_lc()
+                        if self.binByBinStat:
+                            _1, _2, beta = self._compute_yields_with_beta(
+                                profile=True, compute_norm=False, full=False
+                            )
+                            lbeta, _ = self._compute_lbeta(beta, profile=True)
+                            val = lc + lbeta
+                        else:
+                            val = lc
 
-        pd2ldbeta2_pdresdbeta = pd2ldbeta2.solve(pdresdbeta, adjoint_arg=True)
+                pdldbeta = t1.gradient(val, self.ubeta)
+            if self.externalCovariance:
+                pd2ldbeta2_matrix = t2.jacobian(pdldbeta, self.ubeta)
+                pd2ldbeta2 = tf.linalg.LinearOperatorFullMatrix(
+                    pd2ldbeta2_matrix, is_self_adjoint=True
+                )
+            else:
+                # pd2ldbeta2 is diagonal, so we can use gradient instead of jacobian
+                pd2ldbeta2_diag = t2.gradient(pdldbeta, self.ubeta)
+                pd2ldbeta2 = tf.linalg.LinearOperatorDiag(
+                    pd2ldbeta2_diag, is_self_adjoint=True
+                )
 
-        res_cov += pdresdbeta @ pd2ldbeta2_pdresdbeta
+            pd2ldbeta2_pdresdbeta = pd2ldbeta2.solve(pdresdbeta, adjoint_arg=True)
+
+            res_cov += pdresdbeta @ pd2ldbeta2_pdresdbeta
 
         # data stat part
         if profile:
@@ -769,11 +774,14 @@ class Fitter:
 
                         # if not profiling, likelihood doesn't include the data contribution
                         lc = self._compute_lc()
-                        _1, _2, beta = self._compute_yields_with_beta(
-                            profile=True, compute_norm=False, full=False
-                        )
-                        lbeta, _ = self._compute_lbeta(beta, profile=True)
-                        val = lc + lbeta
+                        if self.binByBinStat:
+                            _1, _2, beta = self._compute_yields_with_beta(
+                                profile=True, compute_norm=False, full=False
+                            )
+                            lbeta, _ = self._compute_lbeta(beta, profile=True)
+                            val = lc + lbeta
+                        else:
+                            val = lc
                 pdldbeta = t1.gradient(val, self.ubeta)
             if self.externalCovariance:
                 pd2ldbeta2_matrix = t2.jacobian(pdldbeta, self.ubeta)
@@ -1353,11 +1361,6 @@ class Fitter:
                         transpose_a=True,
                     )
                 )
-                # print(f"Residuals = {tf.reduce_sum(residual)}")
-                # print(f"log(L) = {ln}")
-                # if ln < 7.57:
-                #     import pdb
-                #     pdb.set_trace()
             else:
                 # stop_gradient needed in denominator here because it should be considered
                 # constant when evaluating global impacts from observed data
