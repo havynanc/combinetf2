@@ -476,7 +476,7 @@ class Fitter:
                     _1, _2, beta = self._compute_yields_with_beta(
                         profile=True, compute_norm=False, full=False
                     )
-                    lbeta, _ = self._compute_lbeta(beta, profile=True)
+                    lbeta, _ = self._compute_lbeta(beta)
                 pdlbetadbeta = t1.gradient(lbeta, self.ubeta)
                 dlcdx = t1.gradient(lc, self.x)
                 dbetadx = t1.jacobian(beta, self.x)
@@ -556,7 +556,7 @@ class Fitter:
                         _1, _2, beta = self._compute_yields_with_beta(
                             profile=True, compute_norm=False, full=False
                         )
-                        lbeta, _ = self._compute_lbeta(beta, profile=True)
+                        lbeta, _ = self._compute_lbeta(beta)
                         val = lc + lbeta
                     else:
                         val = lc
@@ -798,7 +798,7 @@ class Fitter:
                         _1, _2, beta = self._compute_yields_with_beta(
                             profile=True, compute_norm=False, full=False
                         )
-                        lbeta, _ = self._compute_lbeta(beta, profile=True)
+                        lbeta, _ = self._compute_lbeta(beta)
                     pdlbetadbeta = t1.gradient(lbeta, self.ubeta)
                     dlcdx = t1.gradient(lc, self.x)
                     dbetadx = t1.jacobian(beta, self.x)
@@ -1286,7 +1286,7 @@ class Fitter:
         )
         return lc
 
-    def _compute_lbeta(self, beta, profile=True):
+    def _compute_lbeta(self, beta):
         if self.binByBinStat:
             beta0 = self.beta0
             if self.binByBinStatType == "gamma":
@@ -1355,7 +1355,7 @@ class Fitter:
 
         lc = lcfull = self._compute_lc()
 
-        lbeta, lbetafull = self._compute_lbeta(beta, profile)
+        lbeta, lbetafull = self._compute_lbeta(beta)
 
         return ln, lc, lbeta, lnfull, lcfull, lbetafull, beta
 

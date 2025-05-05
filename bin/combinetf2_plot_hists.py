@@ -304,6 +304,13 @@ def parseArgs():
         help="Only plot one sided variation (1) or two default two-sided (0)",
     )
     parser.add_argument(
+        "--showVariations",
+        type=str,
+        default="lower",
+        choices=["upper", "lower", "both"],
+        help="Plot the variations in the upper, lower panels, or both",
+    )
+    parser.add_argument(
         "--scaleVariation",
         nargs="*",
         type=float,
@@ -522,39 +529,37 @@ def make_plot(
             flow="none",
         )
 
-    linestyles = [
-        "--",
-        ":",
-        "-.",
-    ]
-    linewidth = 2
-    if hup is not None:
-        hep.histplot(
-            hup,
-            histtype="step",
-            color=varColors,
-            linestyle=linestyles[: len(hup)],
-            yerr=False,
-            linewidth=linewidth,
-            label=varLabels,
-            ax=ax1,
-            flow="none",
-        )
-    if (
-        hdown is not None
-        and any(h is not None for h in hdown)
-        and len(args.varOneSided) == 0
-    ):
-        hep.histplot(
-            hdown,
-            histtype="step",
-            color=varColors,
-            linestyle=linestyles[: len(hdown)],
-            yerr=False,
-            linewidth=linewidth,
-            ax=ax1,
-            flow="none",
-        )
+    if args.showVariations in ["upper", "both"]:
+        linewidth = 2
+        if hup is not None:
+            hep.histplot(
+                hup,
+                histtype="step",
+                color=varColors,
+                linestyle="-",
+                yerr=False,
+                linewidth=linewidth,
+                label=varLabels,
+                binwnorm=binwnorm,
+                ax=ax1,
+                flow="none",
+            )
+        if (
+            hdown is not None
+            and any(h is not None for h in hdown)
+            and len(args.varOneSided) == 0
+        ):
+            hep.histplot(
+                hdown,
+                histtype="step",
+                color=varColors,
+                linestyle="--",
+                yerr=False,
+                linewidth=linewidth,
+                binwnorm=binwnorm,
+                ax=ax1,
+                flow="none",
+            )
 
     if data:
         hep.histplot(
@@ -759,7 +764,11 @@ def make_plot(
                     label=label_unc,
                 )
 
-        if hup is not None and any(h is not None for h in hup):
+        if (
+            args.showVariations in ["lower", "both"]
+            and hup is not None
+            and any(h is not None for h in hup)
+        ):
             linewidth = 2
             scaleVariation = [
                 args.scaleVariation[i] if i < len(args.scaleVariation) else 1
@@ -769,6 +778,7 @@ def make_plot(
                 args.varOneSided[i] if i < len(args.varOneSided) else 0
                 for i in range(len(varNames))
             ]
+
             for i, (hu, hd) in enumerate(zip(hup, hdown)):
 
                 if scaleVariation[i] != 1:
@@ -790,17 +800,19 @@ def make_plot(
 
                 if varOneSided[i]:
                     hvars = op(hu)
+                    linestyles = "-"
                 else:
                     hvars = [
                         op(hu),
                         op(hd),
                     ]
+                    linestyles = ["-", "--"]
 
                 hep.histplot(
                     hvars,
                     histtype="step",
                     color=varColors[i],
-                    linestyle=linestyles[i],
+                    linestyle=linestyles,
                     yerr=False,
                     linewidth=linewidth,
                     label=varLabels[i] if varOneSided[i] else None,
@@ -1148,22 +1160,19 @@ def make_plots(
 
 
 def get_chi2(result, no_chi2=True, fittype="postfit"):
-    if no_chi2:
-        return None, None, False
-
     chi2_key = f"chi2_prefit" if fittype == "prefit" else "chi2"
     ndf_key = f"ndf_prefit" if fittype == "prefit" else "ndf"
-    if fittype == "postfit" and result.get("postfit_profile", False):
+    if not no_chi2 and fittype == "postfit" and result.get("postfit_profile", False):
         # use saturated likelihood test if relevant
         nllvalfull = result["nllvalfull"]
         satnllvalfull = result["satnllvalfull"]
         chi2 = 2.0 * (nllvalfull - satnllvalfull)
         ndf = result["ndfsat"]
         return chi2, ndf, True
-    elif chi2_key in result:
+    elif not no_chi2 and chi2_key in result:
         return result[chi2_key], result[ndf_key], False
     else:
-        raise RuntimeError(f"Result has no chi2, key {chi2_key} not found.")
+        return None, None, False
 
 
 def main():
