@@ -553,7 +553,7 @@ class Fitter:
                     fun,
                     inclusive=True,
                     profile=profile,
-                    full=True,
+                    full=False,
                     need_observables=True,
                 )
                 observed = fun(None, self.nobs)
@@ -649,9 +649,18 @@ class Fitter:
                 res_cov += obscov
 
         residuals = tf.reshape(residuals, (-1, 1))
-        chi_square_value = tf.transpose(residuals) @ tf.linalg.solve(res_cov, residuals)
-
         ndf = tf.size(residuals) - ndf_reduction
+
+        if ndf_reduction > 0:
+            # covariance matrix is in general non invertible with ndf < n
+            # compute chi2 using pseudo inverse
+            chi_square_value = (
+                tf.transpose(residuals) @ tf.linalg.pinv(res_cov) @ residuals
+            )
+        else:
+            chi_square_value = tf.transpose(residuals) @ tf.linalg.solve(
+                res_cov, residuals
+            )
 
         return tf.squeeze(chi_square_value), ndf
 
@@ -810,6 +819,7 @@ class Fitter:
                     t2.watch([self.x, self.ubeta])
                     with tf.GradientTape(persistent=True) as t1:
                         t1.watch([self.x, self.ubeta])
+                        lc = self._compute_lc()
                         _1, _2, beta = self._compute_yields_with_beta(
                             profile=True, compute_norm=False, full=False
                         )
