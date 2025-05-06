@@ -1258,8 +1258,11 @@ def main():
             chi2, ndf, saturated_chi2 = get_chi2(
                 (
                     fitresult
-                    if (instance_key == "Basemodel" and args.chisq != "linear")
-                    or args.chisq == "saturated"
+                    if fittype == "postfit"
+                    and (
+                        (instance_key == "Basemodel" and args.chisq != "linear")
+                        or args.chisq == "saturated"
+                    )
                     else instance
                 ),
                 args.chisq in [" ", "none", None],
