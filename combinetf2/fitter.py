@@ -388,7 +388,7 @@ class Fitter:
                     tf.random.normal(
                         shape=[],
                         mean=self.beta0,
-                        stddev=tf.sqrt(self.varbeta),
+                        stddev=tf.sqrt(self.indata.sumw2),
                         dtype=self.beta.dtype,
                     )
                 )
@@ -545,7 +545,7 @@ class Fitter:
             with tf.GradientTape(watch_accessed_variables=False) as t1:
                 t1.watch([self.ubeta])
                 if profile:
-                    val = self._compute_loss(profile=profile)
+                    val = self._compute_loss(profile=True)
                 else:
                     # TODO this principle can probably be generalized to other parts of the code
                     # to further reduce special cases
@@ -554,7 +554,7 @@ class Fitter:
                     lc = self._compute_lc()
                     if self.binByBinStat:
                         _1, _2, beta = self._compute_yields_with_beta(
-                            profile=True, compute_norm=False, full=False
+                            profile=False, compute_norm=False, full=False
                         )
                         lbeta, _ = self._compute_lbeta(beta)
                         val = lc + lbeta
@@ -574,6 +574,24 @@ class Fitter:
             )
         return pd2ldbeta2
 
+    def _dxdvars(self):
+        with tf.GradientTape() as t2:
+            t2.watch([self.theta0, self.nobs, self.ubeta])
+            with tf.GradientTape() as t1:
+                t1.watch([self.theta0, self.nobs, self.ubeta])
+                val = self._compute_loss()
+            grad = t1.gradient(val, self.x)
+        pd2ldxdtheta0, pd2ldxdnobs, pd2ldxdubeta = t2.jacobian(
+            grad, [self.theta0, self.nobs, self.ubeta], unconnected_gradients="zero"
+        )
+
+        # cov is inverse hesse, thus cov ~ d2xd2l
+        dxdtheta0 = -self.cov @ pd2ldxdtheta0
+        dxdnobs = -self.cov @ pd2ldxdnobs
+        dxdubeta = -self.cov @ pd2ldxdubeta
+
+        return dxdtheta0, dxdnobs, dxdubeta
+
     def _chi2(
         self,
         fun,
@@ -581,76 +599,54 @@ class Fitter:
         profile=False,
     ):
 
-        def compute_derivatives(dvars):
-            with tf.GradientTape(watch_accessed_variables=False) as t:
-                t.watch(dvars)
-                expected = self._compute_expected(
-                    fun,
-                    inclusive=True,
-                    profile=profile,
-                    full=False,
-                    need_observables=True,
-                )
-                observed = fun(None, self.nobs)
-                residuals = expected - observed
-
-                residuals_flat = tf.reshape(residuals, (-1,))
-            jacs = t.jacobian(
-                residuals_flat,
-                dvars,
+        with tf.GradientTape() as t:
+            t.watch([self.theta0, self.nobs, self.ubeta])
+            expected = self._compute_expected(
+                fun,
+                inclusive=True,
+                profile=profile,
+                full=False,
+                need_observables=True,
             )
-            return residuals, *jacs
+            observed = fun(None, self.nobs)
+            residuals = expected - observed
+
+            residuals_flat = tf.reshape(residuals, (-1,))
+        pdresdx, pdresdtheta0, pdresdnobs, pdresdubeta = t.jacobian(
+            residuals_flat,
+            [self.x, self.theta0, self.nobs, self.beta0],
+            unconnected_gradients="zero",
+        )
+
+        if profile:
+            # apply chain rule to take into account correlations with the fit parameters
+            dxdtheta0, dxdnobs, dxdubeta = self._dxdvars()
+
+            dresdtheta0 = pdresdtheta0 + pdresdx @ dxdtheta0
+            dresdnobs = pdresdnobs + pdresdx @ dxdnobs
+            dresdubeta = pdresdubeta + pdresdx @ dxdubeta
+
+            var_theta0 = tf.where(
+                self.indata.constraintweights == 0.0,
+                tf.zeros_like(self.indata.constraintweights),
+                tf.math.reciprocal(self.indata.constraintweights),
+            )
+
+            res_cov = dresdtheta0 @ (var_theta0[:, None] * tf.transpose(dresdtheta0))
+        else:
+            # full dependency in partial derivatives
+            dresdnobs = pdresdnobs
+            dresdubeta = pdresdubeta
+
+            res_cov = pdresdx @ tf.matmul(self.cov, pdresdx, transpose_b=True)
+
+        res_cov_stat = dresdnobs @ (self.nobs[:, None] * tf.transpose(dresdnobs))
+        res_cov += res_cov_stat
 
         if self.binByBinStat:
-            dvars = [self.x, self.ubeta, self.nobs]
-            residuals, pdresdx, pdresdbeta, pdresdobs = compute_derivatives(dvars)
-        else:
-            dvars = [self.x, self.nobs]
-            residuals, pdresdx, pdresdobs = compute_derivatives(dvars)
-            pdresdbeta = None
-
-        cov_dresdx = tf.matmul(self.cov, pdresdx, transpose_b=True)
-
-        res_cov = pdresdx @ cov_dresdx
-
-        if pdresdbeta is not None:
-            pd2ldbeta2 = self._pd2ldbeta2(profile)
-            pd2ldbeta2_pdresdbeta = pd2ldbeta2.solve(pdresdbeta, adjoint_arg=True)
-            res_cov += pdresdbeta @ pd2ldbeta2_pdresdbeta
-
-        # data stat part
-        if profile:
-            with tf.GradientTape() as t2:
-                t2.watch(self.nobs)
-                with tf.GradientTape() as t1:
-                    t1.watch(self.nobs)
-                    val = self._compute_loss()
-                grad = t1.gradient(val, self.x, unconnected_gradients="zero")
-            pd2ldxdnobs = t2.jacobian(grad, self.nobs)
-
-            dxdnobs = -self.cov @ pd2ldxdnobs
-
-            dresdnobs = pdresdobs + pdresdx @ dxdnobs
-
-            if self.externalCovariance:
-                data_cov = tf.math.sqrt(tf.linalg.inv(self.data_cov_inv))
-                res_cov += dresdnobs @ tf.matmul(data_cov, dresdnobs, transpose_b=True)
-            else:
-                dnobs = tf.math.sqrt(self.nobs)
-                dresdnobs *= dnobs[None, :]
-                res_cov += dresdnobs @ tf.transpose(dresdnobs)
-        else:
-            # w/o profiling data uncertainty is uncorrelated
-            if self.externalCovariance:
-                data_cov_dresdobs = tf.matmul(
-                    tf.linalg.inv(self.data_cov_inv), pdresdobs, transpose_b=True
-                )
-                obscov = pdresdobs @ data_cov_dresdobs
-                res_cov += obscov
-            else:
-                varobs = self.nobs
-                obscov = pdresdobs @ (varobs[:, None] * tf.transpose(pdresdobs))
-                res_cov += obscov
+            var_ubeta = self.indata.sumw2
+            res_cov_BBB = dresdubeta @ (var_ubeta[:, None] * tf.transpose(dresdubeta))
+            res_cov += res_cov_BBB
 
         residuals = tf.reshape(residuals, (-1, 1))
         ndf = tf.size(residuals) - ndf_reduction
@@ -796,7 +792,7 @@ class Fitter:
                         t1.watch([self.x, self.ubeta])
                         lc = self._compute_lc()
                         _1, _2, beta = self._compute_yields_with_beta(
-                            profile=True, compute_norm=False, full=False
+                            profile=profile, compute_norm=False, full=False
                         )
                         lbeta, _ = self._compute_lbeta(beta)
                     pdlbetadbeta = t1.gradient(lbeta, self.ubeta)
@@ -1110,7 +1106,7 @@ class Fitter:
             else:
                 beta = self.beta
 
-            # multiply with dummy tensor to allow convenient differentiation by beta even when profiling
+            # Add dummy tensor to allow convenient differentiation by beta even when profiling
             beta = beta + self.ubeta
 
             betasel = beta[: nexp.shape[0]]

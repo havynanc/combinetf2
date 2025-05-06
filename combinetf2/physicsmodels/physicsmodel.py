@@ -58,8 +58,10 @@ class PhysicsModel:
             cov_output = (jacobian * data) @ tf.transpose(jacobian)
         else:
             # General case with full covariance matrix
-            data_cov = tf.linalg.inv(data_cov_inv)
-            cov_output = jacobian @ data_cov @ tf.transpose(jacobian)
+            # the following is equivalent to, but faster than: cov_output = jacobian @ tf.linalg.inv(data_cov_inv) @ tf.transpose(jacobian)
+            cov_output = jacobian @ tf.linalg.solve(
+                data_cov_inv, tf.transpose(jacobian)
+            )
 
         variances_output = tf.linalg.diag_part(cov_output)
 
