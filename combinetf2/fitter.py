@@ -1,3 +1,5 @@
+import hashlib
+
 import numpy as np
 import scipy
 import tensorflow as tf
@@ -26,6 +28,7 @@ class Fitter:
         self.binByBinStat = not options.noBinByBinStat
         self.systgroupsfull = self.indata.systgroups.tolist()
         self.systgroupsfull.append("stat")
+        self.do_blinding = False
         if self.binByBinStat:
             self.systgroupsfull.append("binByBinStat")
 
@@ -178,6 +181,37 @@ class Fitter:
             and self.indata.systematic_type == "normal"
             and ((not self.binByBinStat) or self.binByBinStatType == "normal")
         )
+
+    def get_blinding_offsets(
+        self,
+    ):
+        # random blinding with seed taken based on string of parameter name
+
+        # backup and restore the initial random generator state
+        state = np.random.get_state()
+
+        def deterministic_random_from_string(s):
+            # Hash the string
+            hash = hashlib.sha256(s).hexdigest()
+            # Convert first 8 hex digits (32 bits) to int
+            seed = int(hash[:8], 16)
+
+            np.random.seed(seed)
+            value = np.random.normal(loc=0.0, scale=1.0)
+            return value
+
+        x_offsets = np.zeros(self.indata.nsyst + self.npoi, dtype=np.float64)
+        for i in range(self.npoi):
+            value = deterministic_random_from_string(self.indata.procs[i])
+            x_offsets[i] = value
+
+        for i in self.indata.noigroupidxs:
+            value = deterministic_random_from_string(self.indata.noigroups[i])
+            x_offsets[i + self.npoi] = value
+
+        np.random.set_state(state)
+
+        return tf.constant(x_offsets, dtype=self.indata.dtype)
 
     def _default_beta0(self):
         if self.binByBinStatType == "gamma":
@@ -841,8 +875,12 @@ class Fitter:
     def _compute_yields_noBBB(self, compute_norm=False, full=True):
         # compute_norm: compute yields for each process, otherwise inclusive
         # full: compute yields inclduing masked channels
-        xpoi = self.x[: self.npoi]
-        theta = self.x[self.npoi :]
+        x = self.x
+        if self.do_blinding:
+            x_offset = self.get_blinding_offsets()
+            x = x + x_offset
+        xpoi = x[: self.npoi]
+        theta = x[self.npoi :]
 
         if self.allowNegativePOI:
             poi = xpoi
@@ -1401,6 +1439,10 @@ class Fitter:
         return val, grad, hess
 
     def minimize(self):
+        if self.do_blinding:
+            # set the starting values of the fit as if we were not blinding
+            x_offset = self.get_blinding_offsets()
+            self.x.assign_add(-x_offset)
 
         if self.is_linear:
             logger.info(
