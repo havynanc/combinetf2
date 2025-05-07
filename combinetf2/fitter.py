@@ -207,8 +207,9 @@ class Fitter:
 
         self.unblind_parameters = unblind_parameters
 
-    def get_blinding_offsets(
+    def apply_blinding_offsets(
         self,
+        x,
     ):
         # random blinding with seed taken based on string of parameter name
 
@@ -233,22 +234,27 @@ class Fitter:
             value = rng.normal(loc=mean, scale=std)
             return value
 
-        x_offsets = np.zeros(self.indata.nsyst + self.npoi, dtype=np.float64)
+        x_mult = np.ones(self.indata.nsyst + self.npoi, dtype=np.float64)
+        x_add = np.zeros_like(x_mult)
+
         for i in range(self.npoi):
             param = self.indata.procs[i]
             if param in self.unblind_parameters:
                 continue
             value = deterministic_random_from_string(param)
-            x_offsets[i] = np.exp(value) - 1
+            x_mult[i] = np.exp(value)
 
         for i in self.indata.noigroupidxs:
             param = self.indata.noigroups[i]
             if param in self.unblind_parameters:
                 continue
             value = deterministic_random_from_string(param)
-            x_offsets[i + self.npoi] = value
+            x_add[i + self.npoi] = value
 
-        return tf.constant(x_offsets, dtype=self.indata.dtype)
+        x = x * tf.constant(x_mult, dtype=self.indata.dtype)
+        x = x + tf.constant(x_add, dtype=self.indata.dtype)
+
+        return x
 
     def _default_beta0(self):
         if self.binByBinStatType == "gamma":
@@ -914,8 +920,7 @@ class Fitter:
         # full: compute yields inclduing masked channels
         x = self.x
         if self.blind:
-            x_offset = self.get_blinding_offsets()
-            x = x + x_offset
+            x = self.apply_blinding_offsets(x)
         xpoi = x[: self.npoi]
         theta = x[self.npoi :]
 
