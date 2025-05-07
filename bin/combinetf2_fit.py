@@ -289,8 +289,10 @@ def make_parser():
     )
     parser.add_argument(
         "--unblind",
-        action="store_true",
-        help="Unblind parameters of interest",
+        type=str,
+        default=[],
+        nargs="*",
+        help="Specify list of parameters or regex (leading by 'r:') to unblind matching parameters of interest. E.g. 'r:.*' to unblind all.",
     )
 
     return parser.parse_args()
@@ -597,7 +599,7 @@ def main():
         fit_time = []
         for ifit in fits:
             ifitter.defaultassign()
-            ifitter.do_blinding = False
+            ifitter.set_blinding(False)
 
             group = "results"
             if ifit == -1:
@@ -626,7 +628,7 @@ def main():
                 save_hists(args, models, ifitter, ws, prefit=True)
             prefit_time.append(time.time())
 
-            ifitter.do_blinding = ifit == 0 and not args.unblind
+            ifitter.set_blinding(ifit == 0, args.unblind)
             fit(args, ifitter, ws, dofit=ifit >= 0)
             fit_time.append(time.time())
 

@@ -1,4 +1,5 @@
 import hashlib
+import re
 
 import numpy as np
 import scipy
@@ -28,7 +29,7 @@ class Fitter:
         self.binByBinStat = not options.noBinByBinStat
         self.systgroupsfull = self.indata.systgroups.tolist()
         self.systgroupsfull.append("stat")
-        self.do_blinding = False
+        self.blind = False
         if self.binByBinStat:
             self.systgroupsfull.append("binByBinStat")
 
@@ -182,6 +183,30 @@ class Fitter:
             and ((not self.binByBinStat) or self.binByBinStatType == "normal")
         )
 
+    def set_blinding(self, blind=True, unblind_parameter_expressions=[]):
+        self.blind = blind
+
+        def compile_patterns(patterns):
+            compiled = []
+            for p in patterns:
+                if p.startswith("r:"):
+                    # Treat as regex, remove prefix
+                    compiled.append(re.compile(p[2:]))
+                else:
+                    # Treat as exact string match
+                    compiled.append(re.compile(rf"^{re.escape(p)}$"))
+            return compiled
+
+        # Find parameters that match any regex
+        compiled_regexes = compile_patterns(unblind_parameter_expressions)
+        unblind_parameters = [
+            s
+            for s in [*self.indata.procs, *self.indata.noigroups]
+            if any(regex.search(s.decode()) for regex in compiled_regexes)
+        ]
+
+        self.unblind_parameters = unblind_parameters
+
     def get_blinding_offsets(
         self,
     ):
@@ -197,16 +222,22 @@ class Fitter:
             seed = int(hash[:8], 16)
 
             np.random.seed(seed)
-            value = np.random.normal(loc=0.0, scale=1.0)
+            value = np.random.normal(loc=0.0, scale=5.0)
             return value
 
         x_offsets = np.zeros(self.indata.nsyst + self.npoi, dtype=np.float64)
         for i in range(self.npoi):
-            value = deterministic_random_from_string(self.indata.procs[i])
+            param = self.indata.procs[i]
+            if param in self.unblind_parameters:
+                continue
+            value = deterministic_random_from_string(param)
             x_offsets[i] = value
 
         for i in self.indata.noigroupidxs:
-            value = deterministic_random_from_string(self.indata.noigroups[i])
+            param = self.indata.noigroups[i]
+            if param in self.unblind_parameters:
+                continue
+            value = deterministic_random_from_string(param)
             x_offsets[i + self.npoi] = value
 
         np.random.set_state(state)
@@ -876,7 +907,7 @@ class Fitter:
         # compute_norm: compute yields for each process, otherwise inclusive
         # full: compute yields inclduing masked channels
         x = self.x
-        if self.do_blinding:
+        if self.blind:
             x_offset = self.get_blinding_offsets()
             x = x + x_offset
         xpoi = x[: self.npoi]
@@ -1439,7 +1470,7 @@ class Fitter:
         return val, grad, hess
 
     def minimize(self):
-        if self.do_blinding:
+        if self.blind:
             # set the starting values of the fit as if we were not blinding
             x_offset = self.get_blinding_offsets()
             self.x.assign_add(-x_offset)
