@@ -212,17 +212,25 @@ class Fitter:
     ):
         # random blinding with seed taken based on string of parameter name
 
-        # backup and restore the initial random generator state
-        state = np.random.get_state()
+        # check if dataset is an integer (i.e. if it is real data or not) and use this to choose the random seed
+        is_dataobs_int = np.sum(
+            np.equal(self.indata.data_obs, np.floor(self.indata.data_obs))
+        )
 
-        def deterministic_random_from_string(s):
+        def deterministic_random_from_string(s, mean=0.0, std=5.0):
+            if isinstance(s, str):
+                s = s.encode("utf-8")
+
+            if is_dataobs_int:
+                s += b"_data"
+
             # Hash the string
             hash = hashlib.sha256(s).hexdigest()
-            # Convert first 8 hex digits (32 bits) to int
-            seed = int(hash[:8], 16)
 
-            np.random.seed(seed)
-            value = np.random.normal(loc=0.0, scale=5.0)
+            seed_seq = np.random.SeedSequence(int(hash, 16))
+            rng = np.random.default_rng(seed_seq)
+
+            value = rng.normal(loc=mean, scale=std)
             return value
 
         x_offsets = np.zeros(self.indata.nsyst + self.npoi, dtype=np.float64)
@@ -231,7 +239,7 @@ class Fitter:
             if param in self.unblind_parameters:
                 continue
             value = deterministic_random_from_string(param)
-            x_offsets[i] = value
+            x_offsets[i] = np.exp(value) - 1
 
         for i in self.indata.noigroupidxs:
             param = self.indata.noigroups[i]
@@ -239,8 +247,6 @@ class Fitter:
                 continue
             value = deterministic_random_from_string(param)
             x_offsets[i + self.npoi] = value
-
-        np.random.set_state(state)
 
         return tf.constant(x_offsets, dtype=self.indata.dtype)
 
@@ -1470,11 +1476,6 @@ class Fitter:
         return val, grad, hess
 
     def minimize(self):
-        if self.blind:
-            # set the starting values of the fit as if we were not blinding
-            x_offset = self.get_blinding_offsets()
-            self.x.assign_add(-x_offset)
-
         if self.is_linear:
             logger.info(
                 "Likelihood is purely quadratic, solving by Cholesky decomposition instead of iterative fit"
