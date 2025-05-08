@@ -184,7 +184,10 @@ class Fitter:
         )
 
     def set_blinding(self, blind=True, unblind_parameter_expressions=[]):
-        self.blind = blind
+        self._blind = blind
+
+        if blind is False:
+            return
 
         def compile_patterns(patterns):
             compiled = []
@@ -205,82 +208,64 @@ class Fitter:
             if any(regex.search(s.decode()) for regex in compiled_regexes)
         ]
 
-        self.unblind_parameters = unblind_parameters
-
-    def deterministic_random_from_string(self, s, mean=0.0, std=5.0):
-        # random value with seed taken based on string of parameter name
-        if isinstance(s, str):
-            s = s.encode("utf-8")
-
         # check if dataset is an integer (i.e. if it is real data or not) and use this to choose the random seed
         is_dataobs_int = np.sum(
             np.equal(self.indata.data_obs, np.floor(self.indata.data_obs))
         )
 
-        if is_dataobs_int:
-            s += b"_data"
+        def deterministic_random_from_string(s, mean=0.0, std=5.0):
+            # random value with seed taken based on string of parameter name
+            if isinstance(s, str):
+                s = s.encode("utf-8")
 
-        # Hash the string
-        hash = hashlib.sha256(s).hexdigest()
+            if is_dataobs_int:
+                s += b"_data"
 
-        seed_seq = np.random.SeedSequence(int(hash, 16))
-        rng = np.random.default_rng(seed_seq)
+            # Hash the string
+            hash = hashlib.sha256(s).hexdigest()
 
-        value = rng.normal(loc=mean, scale=std)
-        return value
+            seed_seq = np.random.SeedSequence(int(hash, 16))
+            rng = np.random.default_rng(seed_seq)
 
-    def apply_blinding_offsets_theta(
-        self,
-        theta,
-    ):
+            value = rng.normal(loc=mean, scale=std)
+            return value
+
         # multiply offset to nois
-        x_add = np.zeros(self.indata.nsyst, dtype=np.float64)
+        offsets = np.zeros(self.indata.nsyst, dtype=np.float64)
         for i in self.indata.noigroupidxs:
             param = self.indata.noigroups[i]
-            if param in self.unblind_parameters:
+            if param in unblind_parameters:
                 continue
             logger.debug(f"Blind parameter {param}")
-            value = self.deterministic_random_from_string(param)
-            x_add[i] = value
-        theta = theta + tf.constant(x_add, dtype=self.indata.dtype)
+            value = deterministic_random_from_string(param)
+            offsets[i] = value
+        self.__blinding_offsets_theta = tf.constant(offsets, dtype=self.indata.dtype)
 
-        return theta
-
-    def apply_blinding_offsets_poi(
-        self,
-        poi,
-    ):
         # add offset to pois
-        x_mult = np.ones(self.npoi, dtype=np.float64)
+        offsets = np.ones(self.npoi, dtype=np.float64)
         for i in range(self.npoi):
             param = self.indata.procs[i]
-            if param in self.unblind_parameters:
+            if param in unblind_parameters:
                 continue
             logger.debug(f"Blind signal strength modifier for {param}")
-            value = self.deterministic_random_from_string(param)
-            x_mult[i] = np.exp(value)
-        poi = poi * tf.constant(x_mult, dtype=self.indata.dtype)
+            value = deterministic_random_from_string(param)
+            offsets[i] = np.exp(value)
+        self.__blinding_offsets_poi = tf.constant(offsets, dtype=self.indata.dtype)
 
-        return poi
-
-    def get_blinded_theta(
-        self,
-    ):
+    def get_blinded_theta(self):
         theta = self.x[self.npoi :]
         if self.blind:
-            theta = self.apply_blinding_offsets_theta(theta)
+            theta = theta + self.__blinding_offsets_theta
         return theta
 
-    def get_blinded_poi(
-        self,
-    ):
+    def get_blinded_poi(self):
         xpoi = self.x[: self.npoi]
         if self.allowNegativePOI:
             poi = xpoi
         else:
             poi = tf.square(xpoi)
         if self.blind:
-            poi = self.apply_blinding_offsets_poi(poi)
+            poi = poi * self.__blinding_offsets_poi
         return poi
 
     def _default_beta0(self):
