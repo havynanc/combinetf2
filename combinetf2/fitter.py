@@ -1148,9 +1148,7 @@ class Fitter:
             var_beta0 = pd2ldbeta2 / pd2lbetadbetadbeta0**2
 
             if self.binByBinStatType == "gamma":
-                var_beta0 = tf.where(
-                    self.betamask, tf.constant(0.0, dtype=var_beta0.dtype), var_beta0
-                )
+                var_beta0 = tf.where(self.betamask, tf.zeros_like(var_beta0), var_beta0)
 
             res_cov_BBB = dresdbeta0 @ (var_beta0[:, None] * tf.transpose(dresdbeta0))
             res_cov += res_cov_BBB
