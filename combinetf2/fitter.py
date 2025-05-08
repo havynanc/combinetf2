@@ -29,7 +29,7 @@ class Fitter:
         self.binByBinStat = not options.noBinByBinStat
         self.systgroupsfull = self.indata.systgroups.tolist()
         self.systgroupsfull.append("stat")
-        self.blind = False
+        self._blind = False
         if self.binByBinStat:
             self.systgroupsfull.append("binByBinStat")
 
@@ -254,7 +254,7 @@ class Fitter:
 
     def get_blinded_theta(self):
         theta = self.x[self.npoi :]
-        if self.blind:
+        if self._blind:
             theta = theta + self.__blinding_offsets_theta
         return theta
 
@@ -264,7 +264,7 @@ class Fitter:
             poi = xpoi
         else:
             poi = tf.square(xpoi)
-        if self.blind:
+        if self._blind:
             poi = poi * self.__blinding_offsets_poi
         return poi
 
