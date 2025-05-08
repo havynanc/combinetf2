@@ -42,7 +42,10 @@ class PhysicsModel:
 
     # generic version which should not need to be overridden
     @tf.function
-    def get_data(self, data, data_cov_inv=None):
+    def get_data(self, *args, **kwargs):
+        return self._get_data(*args, **kwargs)
+
+    def _get_data(self, data, data_cov_inv=None):
         with tf.GradientTape() as t:
             t.watch(data)
             output = self.compute_flat(None, data)
