@@ -263,7 +263,7 @@ class Fitter:
 
         return poi
 
-    def get_theta(
+    def get_blinded_theta(
         self,
     ):
         theta = self.x[self.npoi :]
@@ -271,7 +271,7 @@ class Fitter:
             theta = self.apply_blinding_offsets_theta(theta)
         return theta
 
-    def get_poi(
+    def get_blinded_poi(
         self,
     ):
         xpoi = self.x[: self.npoi]
@@ -945,8 +945,8 @@ class Fitter:
     def _compute_yields_noBBB(self, compute_norm=False, full=True):
         # compute_norm: compute yields for each process, otherwise inclusive
         # full: compute yields inclduing masked channels
-        poi = self.get_poi()
-        theta = self.get_theta()
+        poi = self.get_blinded_poi()
+        theta = self.get_blinded_theta()
 
         rnorm = tf.concat(
             [poi, tf.ones([self.indata.nproc - poi.shape[0]], dtype=self.indata.dtype)],
@@ -1337,7 +1337,7 @@ class Fitter:
         return l
 
     def _compute_nll_components(self, profile=True):
-        theta = self.get_theta()
+        theta = self.x[self.npoi :]
 
         nexpfullcentral, _, beta = self._compute_yields_with_beta(
             profile=profile,
