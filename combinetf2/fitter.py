@@ -207,54 +207,81 @@ class Fitter:
 
         self.unblind_parameters = unblind_parameters
 
-    def apply_blinding_offsets(
-        self,
-        x,
-    ):
-        # random blinding with seed taken based on string of parameter name
+    def deterministic_random_from_string(self, s, mean=0.0, std=5.0):
+        # random value with seed taken based on string of parameter name
+        if isinstance(s, str):
+            s = s.encode("utf-8")
 
         # check if dataset is an integer (i.e. if it is real data or not) and use this to choose the random seed
         is_dataobs_int = np.sum(
             np.equal(self.indata.data_obs, np.floor(self.indata.data_obs))
         )
 
-        def deterministic_random_from_string(s, mean=0.0, std=5.0):
-            if isinstance(s, str):
-                s = s.encode("utf-8")
+        if is_dataobs_int:
+            s += b"_data"
 
-            if is_dataobs_int:
-                s += b"_data"
+        # Hash the string
+        hash = hashlib.sha256(s).hexdigest()
 
-            # Hash the string
-            hash = hashlib.sha256(s).hexdigest()
+        seed_seq = np.random.SeedSequence(int(hash, 16))
+        rng = np.random.default_rng(seed_seq)
 
-            seed_seq = np.random.SeedSequence(int(hash, 16))
-            rng = np.random.default_rng(seed_seq)
+        value = rng.normal(loc=mean, scale=std)
+        return value
 
-            value = rng.normal(loc=mean, scale=std)
-            return value
-
-        x_mult = np.ones(self.indata.nsyst + self.npoi, dtype=np.float64)
-        x_add = np.zeros_like(x_mult)
-
-        for i in range(self.npoi):
-            param = self.indata.procs[i]
-            if param in self.unblind_parameters:
-                continue
-            value = deterministic_random_from_string(param)
-            x_mult[i] = np.exp(value)
-
+    def apply_blinding_offsets_theta(
+        self,
+        theta,
+    ):
+        # multiply offset to nois
+        x_add = np.zeros(self.indata.nsyst, dtype=np.float64)
         for i in self.indata.noigroupidxs:
             param = self.indata.noigroups[i]
             if param in self.unblind_parameters:
                 continue
-            value = deterministic_random_from_string(param)
-            x_add[i + self.npoi] = value
+            logger.debug(f"Blind parameter {param}")
+            value = self.deterministic_random_from_string(param)
+            x_add[i] = value
+        theta = theta + tf.constant(x_add, dtype=self.indata.dtype)
 
-        x = x * tf.constant(x_mult, dtype=self.indata.dtype)
-        x = x + tf.constant(x_add, dtype=self.indata.dtype)
+        return theta
 
-        return x
+    def apply_blinding_offsets_poi(
+        self,
+        poi,
+    ):
+        # add offset to pois
+        x_mult = np.ones(self.npoi, dtype=np.float64)
+        for i in range(self.npoi):
+            param = self.indata.procs[i]
+            if param in self.unblind_parameters:
+                continue
+            logger.debug(f"Blind signal strength modifier for {param}")
+            value = self.deterministic_random_from_string(param)
+            x_mult[i] = np.exp(value)
+        poi = poi * tf.constant(x_mult, dtype=self.indata.dtype)
+
+        return poi
+
+    def get_theta(
+        self,
+    ):
+        theta = self.x[self.npoi :]
+        if self.blind:
+            theta = self.apply_blinding_offsets_theta(theta)
+        return theta
+
+    def get_poi(
+        self,
+    ):
+        xpoi = self.x[: self.npoi]
+        if self.allowNegativePOI:
+            poi = xpoi
+        else:
+            poi = tf.square(xpoi)
+        if self.blind:
+            poi = self.apply_blinding_offsets_poi(poi)
+        return poi
 
     def _default_beta0(self):
         if self.binByBinStatType == "gamma":
@@ -918,16 +945,8 @@ class Fitter:
     def _compute_yields_noBBB(self, compute_norm=False, full=True):
         # compute_norm: compute yields for each process, otherwise inclusive
         # full: compute yields inclduing masked channels
-        x = self.x
-        if self.blind:
-            x = self.apply_blinding_offsets(x)
-        xpoi = x[: self.npoi]
-        theta = x[self.npoi :]
-
-        if self.allowNegativePOI:
-            poi = xpoi
-        else:
-            poi = tf.square(xpoi)
+        poi = self.get_poi()
+        theta = self.get_theta()
 
         rnorm = tf.concat(
             [poi, tf.ones([self.indata.nproc - poi.shape[0]], dtype=self.indata.dtype)],
@@ -1318,7 +1337,7 @@ class Fitter:
         return l
 
     def _compute_nll_components(self, profile=True):
-        theta = self.x[self.npoi :]
+        theta = self.get_theta()
 
         nexpfullcentral, _, beta = self._compute_yields_with_beta(
             profile=profile,
