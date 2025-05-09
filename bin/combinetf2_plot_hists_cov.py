@@ -249,7 +249,9 @@ def main():
             model_key = " ".join(margs)
             instance_keys = [k for k in results.keys() if k.startswith(model_key)]
             if len(instance_keys) == 0:
-                raise ValueError(f"No model found under {model_key}")
+                raise ValueError(
+                    f"No model found under {model_key}, available models are {results.keys()}"
+                )
 
         for instance_key in instance_keys:
             instance = results[instance_key]

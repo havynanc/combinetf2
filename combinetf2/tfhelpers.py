@@ -95,9 +95,9 @@ def edmval(grad, hess):
 
 def cond_number(hess):
     if is_on_gpu(hess):
-        tf.linalg.cond(hess)
+        return tf.linalg.cond(hess)
     else:
-        scipy_cond_number(hess.__array__())
+        return scipy_cond_number(hess.__array__())
 
 
 def segment_sum_along_axis(x, segment_ids, idx, num_segments):
