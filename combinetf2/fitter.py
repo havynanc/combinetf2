@@ -233,13 +233,13 @@ class Fitter:
         # multiply offset to nois
         offsets = np.zeros(self.indata.nsyst, dtype=np.float64)
         for i in self.indata.noigroupidxs:
-            param = self.indata.noigroups[i]
+            param = self.indata.systs[i]
             if param in unblind_parameters:
                 continue
             logger.debug(f"Blind parameter {param}")
             value = deterministic_random_from_string(param)
             offsets[i] = value
-        self.__blinding_offsets_theta = tf.constant(offsets, dtype=self.indata.dtype)
+        self._blinding_offsets_theta = tf.constant(offsets, dtype=self.indata.dtype)
 
         # add offset to pois
         offsets = np.ones(self.npoi, dtype=np.float64)
@@ -250,12 +250,12 @@ class Fitter:
             logger.debug(f"Blind signal strength modifier for {param}")
             value = deterministic_random_from_string(param)
             offsets[i] = np.exp(value)
-        self.__blinding_offsets_poi = tf.constant(offsets, dtype=self.indata.dtype)
+        self._blinding_offsets_poi = tf.constant(offsets, dtype=self.indata.dtype)
 
     def get_blinded_theta(self):
         theta = self.x[self.npoi :]
         if self._blind:
-            theta = theta + self.__blinding_offsets_theta
+            theta = theta + self._blinding_offsets_theta
         return theta
 
     def get_blinded_poi(self):
@@ -265,7 +265,7 @@ class Fitter:
         else:
             poi = tf.square(xpoi)
         if self._blind:
-            poi = poi * self.__blinding_offsets_poi
+            poi = poi * self._blinding_offsets_poi
         return poi
 
     def _default_beta0(self):
