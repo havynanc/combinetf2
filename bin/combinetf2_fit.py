@@ -599,7 +599,7 @@ def main():
         fit_time = []
         for ifit in fits:
             ifitter.defaultassign()
-            ifitter.set_blinding(False)
+            ifitter.set_blinding_offsets(False)
 
             group = "results"
             if ifit == -1:
@@ -628,7 +628,7 @@ def main():
                 save_hists(args, models, ifitter, ws, prefit=True)
             prefit_time.append(time.time())
 
-            ifitter.set_blinding(ifit == 0, args.unblind)
+            ifitter.set_blinding_offsets(ifit == 0)
             fit(args, ifitter, ws, dofit=ifit >= 0)
             fit_time.append(time.time())
 

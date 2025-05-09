@@ -29,7 +29,6 @@ class Fitter:
         self.binByBinStat = not options.noBinByBinStat
         self.systgroupsfull = self.indata.systgroups.tolist()
         self.systgroupsfull.append("stat")
-        self._blind = False
         if self.binByBinStat:
             self.systgroupsfull.append("binByBinStat")
 
@@ -86,6 +85,19 @@ class Fitter:
             poidefault = tf.zeros([], dtype=self.indata.dtype)
         else:
             raise Exception("unsupported POIMode")
+
+        self._blinding_offsets_poi = tf.Variable(
+            tf.ones([self.npoi], dtype=self.indata.dtype),
+            trainable=False,
+            name="offset_poi",
+        )
+        self._blinding_offsets_theta = tf.Variable(
+            tf.zeros([self.indata.nsyst], dtype=self.indata.dtype),
+            trainable=False,
+            name="offset_theta",
+        )
+        if 0 in options.toys:
+            self.init_blinding_values(options.unblind)
 
         self.parms = np.concatenate([self.pois, self.indata.systs])
 
@@ -182,12 +194,7 @@ class Fitter:
             and ((not self.binByBinStat) or self.binByBinStatType == "normal")
         )
 
-    def set_blinding(self, blind=True, unblind_parameter_expressions=[]):
-        self._blind = blind
-
-        if blind is False:
-            return
-
+    def init_blinding_values(self, unblind_parameter_expressions=[]):
         def compile_patterns(patterns):
             compiled = []
             for p in patterns:
@@ -230,31 +237,38 @@ class Fitter:
             return value
 
         # multiply offset to nois
-        offsets = np.zeros(self.indata.nsyst, dtype=np.float64)
+        self._blinding_values_theta = np.zeros(self.indata.nsyst, dtype=np.float64)
         for i in self.indata.noigroupidxs:
             param = self.indata.systs[i]
             if param in unblind_parameters:
                 continue
             logger.debug(f"Blind parameter {param}")
             value = deterministic_random_from_string(param)
-            offsets[i] = value
-        self._blinding_offsets_theta = tf.constant(offsets, dtype=self.indata.dtype)
+            self._blinding_values_theta[i] = value
 
         # add offset to pois
-        offsets = np.ones(self.npoi, dtype=np.float64)
+        self._blinding_values_poi = np.ones(self.npoi, dtype=np.float64)
         for i in range(self.npoi):
-            param = self.indata.procs[i]
+            param = self.indata.signals[i]
             if param in unblind_parameters:
                 continue
             logger.debug(f"Blind signal strength modifier for {param}")
             value = deterministic_random_from_string(param)
-            offsets[i] = np.exp(value)
-        self._blinding_offsets_poi = tf.constant(offsets, dtype=self.indata.dtype)
+            self._blinding_values_poi[i] = np.exp(value)
+
+    def set_blinding_offsets(self, blind=True):
+        if blind:
+            self._blinding_offsets_poi.assign(self._blinding_values_poi)
+            self._blinding_offsets_theta.assign(self._blinding_values_theta)
+        else:
+            self._blinding_offsets_poi.assign(np.ones(self.npoi, dtype=np.float64))
+            self._blinding_offsets_theta.assign(
+                np.zeros(self.indata.nsyst, dtype=np.float64)
+            )
 
     def get_blinded_theta(self):
         theta = self.x[self.npoi :]
-        if self._blind:
-            theta = theta + self._blinding_offsets_theta
+        theta = theta + self._blinding_offsets_theta
         return theta
 
     def get_blinded_poi(self):
@@ -263,8 +277,7 @@ class Fitter:
             poi = xpoi
         else:
             poi = tf.square(xpoi)
-        if self._blind:
-            poi = poi * self._blinding_offsets_poi
+        poi = poi * self._blinding_offsets_poi
         return poi
 
     def _default_beta0(self):
@@ -1389,7 +1402,7 @@ class Fitter:
 
     def _compute_lc(self):
         # constraints
-        theta = self.x[self.npoi :]
+        theta = self.get_blinded_theta()
         lc = tf.reduce_sum(
             self.indata.constraintweights * 0.5 * tf.square(theta - self.theta0)
         )
