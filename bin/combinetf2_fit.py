@@ -599,7 +599,6 @@ def main():
         fit_time = []
         for ifit in fits:
             ifitter.defaultassign()
-            ifitter.set_blinding_offsets(False)
 
             group = "results"
             if ifit == -1:

@@ -335,6 +335,7 @@ class Fitter:
             self.beta0defaultassign()
             self.betadefaultassign()
         self.xdefaultassign()
+        self.set_blinding_offsets(False)
 
     def bayesassign(self):
         # FIXME use theta0 as the mean and constraintweight to scale the width
