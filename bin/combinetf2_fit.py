@@ -292,7 +292,7 @@ def make_parser():
         type=str,
         default=[],
         nargs="*",
-        help="Specify list of parameters or regex (leading by 'r:') to unblind matching parameters of interest. E.g. 'r:.*' to unblind all.",
+        help="Specify list of parameters to unblind matching parameters of interest, allows shell-style wildcards. E.g. 'param' to unblind param or '*' to unblind all.",
     )
 
     return parser.parse_args()
