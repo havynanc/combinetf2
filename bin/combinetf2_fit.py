@@ -556,8 +556,8 @@ def main():
     ifitter = fitter.Fitter(indata, args)
 
     # physics models for observables and transformations
-    if len(args.physicsModel) == 0:
-        # if no model is explicitly added, fall back to Basemodel
+    if len(args.physicsModel) == 0 and args.saveHists:
+        # if no model is explicitly added and --saveHists is specified, fall back to Basemodel
         args.physicsModel = [["Basemodel"]]
     models = []
     for margs in args.physicsModel:
