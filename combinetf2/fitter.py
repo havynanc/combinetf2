@@ -1,5 +1,5 @@
-import fnmatch
 import hashlib
+import re
 
 import numpy as np
 import scipy
@@ -196,13 +196,14 @@ class Fitter:
 
     def init_blinding_values(self, unblind_parameter_expressions=[]):
         # Find parameters that match any regex
+        compiled_expressions = [
+            re.compile(expr) for expr in unblind_parameter_expressions
+        ]
+
         unblind_parameters = [
             s
             for s in [*self.indata.signals, *self.indata.noigroups]
-            if any(
-                fnmatch.fnmatch(s.decode(), expr)
-                for expr in unblind_parameter_expressions
-            )
+            if any(regex.match(s.decode()) for regex in compiled_expressions)
         ]
 
         # check if dataset is an integer (i.e. if it is real data or not) and use this to choose the random seed

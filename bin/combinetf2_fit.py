@@ -298,7 +298,7 @@ def make_parser():
         type=str,
         default=[],
         nargs="*",
-        help="Specify list of parameters to unblind matching parameters of interest, allows shell-style wildcards. E.g. 'param' to unblind param or '*' to unblind all.",
+        help="Specify list of regex to unblind matching parameters of interest. E.g. use '^signal$' to unblind a parameter named signal or '.*' to unblind all.",
     )
 
     return parser.parse_args()
