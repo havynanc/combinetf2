@@ -468,8 +468,18 @@ def readFitInfoFromFile(
         else:
             pulls, pulls_prefit, constraints, constraints_prefit, impacts, labels = out
             if normalize:
-                idx = np.argwhere(labels == poi)
-                impacts /= impacts[idx].flatten()
+                imp, lab = io_tools.read_impacts_poi(
+                    fitresult,
+                    poi,
+                    True,
+                    pulls=False,
+                    asym=asym,
+                    global_impacts=global_impacts,
+                    add_total=True,
+                )
+
+                idx = np.argwhere(lab == "Total")
+                impacts /= imp[idx].flatten()
 
         if stat > 0 and "stat" in labels:
             idx = np.argwhere(labels == "stat")
