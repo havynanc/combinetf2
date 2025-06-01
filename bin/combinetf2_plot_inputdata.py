@@ -74,7 +74,7 @@ def parseArgs():
         "--normToData", action="store_true", help="Normalize MC to data", default=False
     )
     parser.add_argument(
-        "--pseuodata",
+        "--pseudodata",
         type=str,
         default=None,
         help="Pseuododata name to plot instead of data.",
@@ -600,7 +600,7 @@ def main():
     global logger
     logger = logging.setup_logger(__file__, args.verbose, args.noColorLogger)
 
-    indata = inputdata.FitInputData(args.infile, pseudodata=args.pseuodata)
+    indata = inputdata.FitInputData(args.infile, pseudodata=args.pseudodata)
 
     debug = debugdata.FitDebugData(indata)
 
