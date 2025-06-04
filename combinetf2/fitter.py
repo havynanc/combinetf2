@@ -1046,11 +1046,6 @@ class Fitter:
             elif self.indata.systematic_type == "normal":
                 normcentral = norm * ernorm + logsnorm
                 nexpcentral = tf.reduce_sum(normcentral, axis=-1)
-                nexpcentral = tf.where(
-                    nexpcentral <= 0,
-                    tf.constant(np.finfo(np.float64).eps, dtype=nexpcentral.dtype),
-                    nexpcentral,
-                )
 
         return nexpcentral, normcentral
 
