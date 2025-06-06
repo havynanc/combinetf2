@@ -429,7 +429,10 @@ def fit(args, fitter, ws, dofit=True):
         # compute the covariance matrix and estimated distance to minimum
 
         val, grad, hess = fitter.loss_val_grad_hess()
-
+        print('val and grad and hess')
+        print(val)
+        print(grad)
+        print(hess)
         edmval, cov = edmval_cov(grad, hess)
 
         logger.info(f"edmval: {edmval}")

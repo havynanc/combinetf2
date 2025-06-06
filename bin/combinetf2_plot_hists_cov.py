@@ -238,10 +238,11 @@ def main():
     plt.rcParams["font.size"] = plt.rcParams["font.size"] * args.scaleTextSize
 
     channel_info = meta["meta_info_input"]["channel_info"]
-
+    
     hist_cov_key = f"hist_{'prefit' if args.prefit else 'postfit'}_inclusive_cov"
 
     results = fitresult["physics_models"]
+    print(results['Basemodel']['channels']['ch0'].keys())
     for margs in args.physicsModel:
         if margs == []:
             instance_keys = results.keys()

@@ -31,6 +31,7 @@ class PhysicsModel:
     #    observables are the provided histograms inclusive in processes: nbins
     #    params are the fit parameters
     def compute_flat(self, params, observables=None):
+        print(observables)
         return observables
 
     # function to compute the transformation of the physics model, has to be differentiable.
@@ -49,7 +50,12 @@ class PhysicsModel:
         with tf.GradientTape() as t:
             t.watch(data)
             output = self.compute_flat(None, data)
-
+        print("data dtype:", data.dtype)
+        print("data shape:", data.shape)
+        print("data max:", tf.reduce_max(data))
+        print("data min:", tf.reduce_min(data))
+        print("output shape:", output.shape)
+        print("output dtype:", output.dtype)
         jacobian = t.jacobian(output, data)
 
         # Ensure the Jacobian has at least 2 dimensions (expand in case output is a scalar)
