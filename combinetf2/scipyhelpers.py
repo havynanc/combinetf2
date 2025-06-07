@@ -4,6 +4,11 @@ import scipy
 
 # as scipy.linalg.cho_factor but with the other half of the matrix zeroed for downstream use
 def cho_factor_clean(a, lower=False, overwrite_a=False, check_finite=True):
+    print('cho_factor_clean')
+    print(a.shape)
+    print(np.any(np.isnan(a)))
+    print(np.any(np.isinf(a)))
+    print(a)
     c = scipy.linalg.cholesky(
         a, lower=lower, overwrite_a=overwrite_a, check_finite=check_finite
     )

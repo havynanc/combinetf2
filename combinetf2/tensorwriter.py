@@ -855,6 +855,8 @@ class TensorWriter:
                 if self.add_bin_by_bin_stat_to_data_cov
                 else self.data_covariance
             )
+            print(np.where(np.diagonal(full_cov) == 0.)[0])
+            #print(np.diagonal(full_cov)[np.where(np.diagonal(full_cov) == 0.)[0][0]])
             full_cov_inv = np.linalg.inv(full_cov)
 
             nbytes += h5pyutils.writeFlatInChunks(

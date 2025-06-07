@@ -437,7 +437,10 @@ def fit(args, fitter, ws, dofit=True):
         if not args.noHessian:
 
             val, grad, hess = fitter.loss_val_grad_hess()
-
+            print('val and grad and hess')
+            print(val)
+            print(grad)
+            print(hess)
             edmval, cov = edmval_cov(grad, hess)
 
             logger.info(f"edmval: {edmval}")

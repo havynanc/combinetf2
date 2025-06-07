@@ -1244,6 +1244,7 @@ def main():
         else:
             model_key = " ".join(margs)
             instance_keys = [k for k in results.keys() if k.startswith(model_key)]
+            print(instance_keys)
             if len(instance_keys) == 0:
                 raise ValueError(f"No model found under {model_key}")
 
